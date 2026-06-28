@@ -1,0 +1,24 @@
+{
+  "name": "sdv-monorepo-apps",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "format": "turbo format",
+    "typecheck": "turbo typecheck"
+  },
+  "devDependencies": {
+    "@workspace/eslint-config": "workspace:*",
+    "@workspace/typescript-config": "workspace:*",
+    "prettier": "^3.9.0",
+    "prettier-plugin-tailwindcss": "^0.8.0",
+    "turbo": "^2.10.0",
+    "typescript": "^6.0.3"
+  },
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@workspace/convex",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "convex dev",
+    "deploy": "convex deploy",
+    "codegen": "convex codegen"
+  },
+  "dependencies": {
+    "convex": "^1.42.0"
+  },
+  "devDependencies": {
+    "@workspace/eslint-config": "workspace:*",
+    "@workspace/typescript-config": "workspace:*",
+    "eslint": "^10.6.0",
+    "typescript": "^6.0.3"
+  }
+}
