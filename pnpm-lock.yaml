@@ -8,12 +8,18 @@ importers:
 
   .:
     devDependencies:
+      '@workspace/backend':
+        specifier: workspace:*
+        version: link:packages/backend
       '@workspace/eslint-config':
         specifier: workspace:*
         version: link:packages/eslint-config
       '@workspace/typescript-config':
         specifier: workspace:*
         version: link:packages/typescript-config
+      '@workspace/ui':
+        specifier: workspace:*
+        version: link:packages/ui
       prettier:
         specifier: ^3.9.4
         version: 3.9.4
@@ -73,24 +79,11 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
-  packages/convex:
+  packages/backend:
     dependencies:
       convex:
         specifier: ^1.42.1
         version: 1.42.1(react@19.2.4)
-    devDependencies:
-      '@workspace/eslint-config':
-        specifier: workspace:*
-        version: link:../eslint-config
-      '@workspace/typescript-config':
-        specifier: workspace:*
-        version: link:../typescript-config
-      eslint:
-        specifier: ^10.6.0
-        version: 10.6.0(jiti@2.7.0)
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
 
   packages/eslint-config:
     devDependencies:
