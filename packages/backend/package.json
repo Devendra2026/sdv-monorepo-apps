@@ -8,7 +8,8 @@
     "dev": "convex dev",
     "deploy": "convex deploy",
     "codegen": "convex codegen",
-    "typecheck": "tsc --noEmit -p convex/tsconfig.json"
+    "typecheck": "tsc --noEmit -p convex/tsconfig.json",
+    "convex:backup": "node ./scripts/backup-convex.mjs"
   },
   "exports": {
     "./convex/*": "./convex/*"
