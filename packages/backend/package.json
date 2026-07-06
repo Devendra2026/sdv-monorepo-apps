@@ -6,10 +6,20 @@
   "private": true,
   "scripts": {
     "dev": "convex dev",
-    "deploy": "convex deploy"
-
+    "deploy": "convex deploy",
+    "codegen": "convex codegen",
+    "typecheck": "tsc --noEmit -p convex/tsconfig.json"
+  },
+  "exports": {
+    "./convex/*": "./convex/*"
   },
   "dependencies": {
-    "convex": "^1.42.1"
+    "convex": "^1.42.1",
+    "svix": "^1.82.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@workspace/typescript-config": "workspace:*",
+    "typescript": "^6.0.3"
   }
 }

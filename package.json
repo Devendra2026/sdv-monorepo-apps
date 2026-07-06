@@ -10,16 +10,16 @@
     "typecheck": "turbo typecheck"
   },
   "devDependencies": {
+    "@workspace/backend": "workspace:*",
     "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
-    "@workspace/backend": "workspace:*",
     "@workspace/ui": "workspace:*",
     "prettier": "^3.9.4",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "turbo": "^2.10.3",
     "typescript": "^6.0.3"
   },
-  "packageManager": "pnpm@11.9.0",
+  "packageManager": "pnpm@11.10.0",
   "engines": {
     "node": ">=20"
   }

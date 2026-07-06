@@ -1,0 +1,16 @@
+{
+  "plugins": {
+    "context7-plugin": {
+      "enabled": true
+    },
+    "convex": {
+      "enabled": true
+    },
+    "superpowers": {
+      "enabled": true
+    },
+    "clerk": {
+      "enabled": true
+    }
+  }
+}
