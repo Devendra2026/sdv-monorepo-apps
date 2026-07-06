@@ -1,5 +1,5 @@
 import type { Doc } from "../_generated/dataModel";
-import { GPS_CAPTURE_MAX_AGE_SUBMIT_MS } from "../gpsAccuracy";
+import { GPS_CAPTURE_MAX_AGE_SUBMIT_MS } from "./gpsAccuracy";
 
 type GpsCapture = NonNullable<Doc<"surveys">["gps"]>;
 

@@ -1,6 +1,6 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { isNewPropertyIdFormat } from "../propertyId";
+import { isNewPropertyIdFormat } from "./propertyId";
 
 /** Derive pre-unit Property ID from the new format for legacy index lookups. */
 export function legacyPropertyIdFromNew(propertyId: string): string | undefined {

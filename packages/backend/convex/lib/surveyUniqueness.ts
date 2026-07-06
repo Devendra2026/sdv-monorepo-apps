@@ -1,7 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import { clientError } from "../helpers";
-import { normalizeParcelKey, padUnitNo, resolvePropertyId } from "../propertyId";
+import { clientError } from "../shared/helpers";
+import { normalizeParcelKey, padUnitNo, resolvePropertyId } from "./propertyId";
 
 function wardNumbersMatch(rowWard: string, filterWard: string): boolean {
   if (rowWard === filterWard) return true;

@@ -1,5 +1,5 @@
 import type { Doc, Id } from "../_generated/dataModel";
-import { compareWardThenParcel } from "../propertyId";
+import { compareWardThenParcel } from "./propertyId";
 
 export type QcWardAggregate = {
   wardNo: string;

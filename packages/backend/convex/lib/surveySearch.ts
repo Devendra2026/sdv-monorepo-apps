@@ -1,5 +1,5 @@
 import type { Doc, Id } from "../_generated/dataModel";
-import { padParcelNo, padWardNo, resolvePropertyId } from "../propertyId";
+import { padParcelNo, padWardNo, resolvePropertyId } from "./propertyId";
 
 type SearchableSurvey = Pick<
   Doc<"surveys">,

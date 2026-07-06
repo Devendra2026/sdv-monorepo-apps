@@ -1,0 +1,173 @@
+import { v } from "convex/values"
+import { gpsCapture, qcStatus, sanitationType, surveyOwnerEntry, surveyStatus, waterSource } from "../schema"
+/* ────────────────────────── shared input validator ────────────────────────── */
+
+/** Partial payload for in-progress saves — only `localId` + `municipalityId` are required. */
+export const draftSurveyInput = {
+  /** Server row id — required when a supervisor/admin edits someone else's survey. */
+  id: v.optional(v.id("surveys")),
+  localId: v.string(),
+  municipalityId: v.id("municipalities"),
+  clientUpdatedAt: v.number(),
+  wardNo: v.optional(v.string()),
+  sectorNo: v.optional(v.string()),
+  oldPropertyNo: v.optional(v.string()),
+  propertyId: v.optional(v.string()),
+  parcelNo: v.optional(v.string()),
+  unitNo: v.optional(v.string()),
+  constructedYear: v.optional(v.number()),
+  isSlum: v.optional(v.boolean()),
+  respondentName: v.optional(v.string()),
+  relationship: v.optional(v.string()),
+  owners: v.optional(v.array(surveyOwnerEntry)),
+  familySize: v.optional(v.number()),
+  mobileNo: v.optional(v.string()),
+  altMobileNo: v.optional(v.string()),
+  houseNo: v.optional(v.string()),
+  locality: v.optional(v.string()),
+  colonyName: v.optional(v.string()),
+  pinCode: v.optional(v.string()),
+  city: v.optional(v.string()),
+  street: v.optional(v.string()),
+  assessmentYear: v.optional(v.string()),
+  ownershipType: v.optional(v.string()),
+  propertyType: v.optional(v.string()),
+  propertyUse: v.optional(v.string()),
+  situation: v.optional(v.string()),
+  roadType: v.optional(v.string()),
+  taxRateZone: v.optional(v.string()),
+  plotSqft: v.optional(v.number()),
+  plinthSqft: v.optional(v.number()),
+  municipalWaterConnection: v.optional(v.boolean()),
+  waterSource: v.optional(waterSource),
+  sanitationType: v.optional(sanitationType),
+  municipalWasteCollection: v.optional(v.boolean()),
+  electricityNo: v.optional(v.string()),
+  gps: v.optional(gpsCapture),
+}
+
+export const surveyInput = {
+  id: v.optional(v.id("surveys")),
+  localId: v.string(),
+  municipalityId: v.id("municipalities"),
+  wardNo: v.string(),
+
+  sectorNo: v.optional(v.string()),
+  oldPropertyNo: v.optional(v.string()),
+  propertyId: v.optional(v.string()),
+  parcelNo: v.string(),
+  unitNo: v.string(),
+  constructedYear: v.optional(v.number()),
+  isSlum: v.boolean(),
+
+  respondentName: v.optional(v.string()),
+  relationship: v.optional(v.string()),
+  owners: v.optional(v.array(surveyOwnerEntry)),
+  familySize: v.optional(v.number()),
+  mobileNo: v.string(),
+  altMobileNo: v.optional(v.string()),
+
+  houseNo: v.optional(v.string()),
+  locality: v.string(),
+  colonyName: v.optional(v.string()),
+  pinCode: v.string(),
+  city: v.optional(v.string()),
+  /** @deprecated — mapped to colonyName on upsert */
+  street: v.optional(v.string()),
+
+  assessmentYear: v.string(),
+  ownershipType: v.string(),
+  propertyType: v.string(),
+  propertyUse: v.string(),
+  situation: v.string(),
+  roadType: v.string(),
+  taxRateZone: v.string(),
+  plotSqft: v.number(),
+  plinthSqft: v.number(),
+
+  municipalWaterConnection: v.boolean(),
+  waterSource,
+  sanitationType,
+  municipalWasteCollection: v.boolean(),
+  electricityNo: v.optional(v.string()),
+
+  gps: v.optional(gpsCapture),
+  clientUpdatedAt: v.number(),
+}
+
+export const surveySortBy = v.union(v.literal("propertyId"), v.literal("updated"))
+
+export const listFilterArgs = {
+  status: v.optional(surveyStatus),
+  qcStatus: v.optional(qcStatus),
+  qcStatuses: v.optional(v.array(qcStatus)),
+  wardNo: v.optional(v.string()),
+  districtId: v.optional(v.id("districts")),
+  municipalityId: v.optional(v.id("municipalities")),
+  surveyorId: v.optional(v.id("users")),
+  fromMs: v.optional(v.number()),
+  toMs: v.optional(v.number()),
+  nowMs: v.number(),
+  searchTerm: v.optional(v.string()),
+  sortBy: v.optional(surveySortBy),
+}
+
+export const surveyWardStatsEntryShape = {
+  wardNo: v.string(),
+  municipalityId: v.id("municipalities"),
+  city: v.string(),
+  total: v.number(),
+  drafts: v.number(),
+  submitted: v.number(),
+  qcApproved: v.number(),
+  activeSurveyorCount: v.number(),
+  activeSurveyorNames: v.array(v.string()),
+}
+
+export const surveyCommandCenterStatsShape = {
+  total: v.number(),
+  drafts: v.number(),
+  submitted: v.number(),
+  submittedToday: v.number(),
+  qcApproved: v.number(),
+  qcPending: v.number(),
+  qcRejected: v.number(),
+  surveyCompletionPct: v.number(),
+  wardStats: v.array(v.object(surveyWardStatsEntryShape)),
+}
+
+export const DRAFT_SURVEY_DEFAULTS = {
+  wardNo: "",
+  parcelNo: "",
+  unitNo: "",
+  mobileNo: "",
+  locality: "",
+  colonyName: "",
+  city: "",
+  pinCode: "",
+  assessmentYear: "",
+  ownershipType: "",
+  propertyType: "",
+  propertyUse: "",
+  situation: "",
+  roadType: "",
+  taxRateZone: "",
+  plotSqft: 0,
+  plinthSqft: 0,
+  isSlum: false,
+  municipalWaterConnection: false,
+  waterSource: "government_tap" as const,
+  sanitationType: "sewer_system" as const,
+  municipalWasteCollection: false,
+}
+
+export const submitFloorRow = v.object({
+  clientFloorId: v.string(),
+  position: v.number(),
+  floorName: v.string(),
+  usageFactor: v.optional(v.string()),
+  usageType: v.string(),
+  constructionType: v.string(),
+  isOccupied: v.boolean(),
+  areaSqft: v.number(),
+})

@@ -22,7 +22,7 @@ export const photoSlot = v.union(v.literal("front"), v.literal("inside"), v.lite
 /** ULB body types shown in admin setup and survey start. */
 export const ulbBodyType = v.union(v.literal("municipal_council"), v.literal("town_panchayat"))
 
-import { sanitationType, waterSource } from "./serviceMasters"
+import { sanitationType, waterSource } from "./lib/masters/serviceMasters"
 
 export { sanitationType, waterSource }
 

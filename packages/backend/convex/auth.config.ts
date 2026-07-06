@@ -10,7 +10,7 @@
  * never set on a deployment (common cause of "Convex + Clerk not linked").
  */
 
-import { CLERK_JWT_ISSUER_DOMAIN } from "./clerk";
+import { CLERK_JWT_ISSUER_DOMAIN } from "./config/clerk";
 
 /** Deployment env wins at push time; `clerk.ts` is the repo fallback. */
 const issuerDomain = process.env.CLERK_JWT_ISSUER_DOMAIN?.trim() || CLERK_JWT_ISSUER_DOMAIN;

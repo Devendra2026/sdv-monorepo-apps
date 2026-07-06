@@ -1,8 +1,8 @@
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "../_generated/server"
-import { fieldSurveyAccess } from "../fieldAccess"
-import { canReadWard } from "../helpers"
-import { resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from "../tenancy"
+import { fieldSurveyAccess } from "../shared/fieldAccess"
+import { canReadWard } from "../shared/helpers"
+import { resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from "../shared/tenancy"
 import {
   computeDailyTrendFromSlice,
   computeDashboardCountsFromSlice,

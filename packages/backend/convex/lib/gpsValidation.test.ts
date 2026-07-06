@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GPS_CAPTURE_MAX_AGE_SUBMIT_MS, GPS_DEV_PREVIEW_PROVIDER } from "../gpsAccuracy";
+import { GPS_CAPTURE_MAX_AGE_SUBMIT_MS, GPS_DEV_PREVIEW_PROVIDER } from "./gpsAccuracy";
 import { validateGps } from "./gpsValidation";
 
 const now = Date.now();
