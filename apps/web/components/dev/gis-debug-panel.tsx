@@ -1,17 +1,17 @@
-"use client";
+"use client"
 
 import {
   GOOGLE_MAPS_EMBED_MODE,
   GOOGLE_MAPS_REQUIRED_APIS,
   getGoogleMapsKeyPreview,
   isGoogleMapsKeyConfigured,
-} from "@/lib/maps/google-maps-config";
-import { formatGpsDecimal } from "@/lib/surveys/gps-format";
-import { fmtDate } from "@/lib/utils";
-import type { GpsCapture } from "@/schema/surveys/index";
+} from "@/lib/maps/google-maps-config"
+import { formatGpsDecimal } from "@/lib/surveys/gps-format"
+import { fmtDate } from "@workspace/ui/lib/utils"
+import type { GpsCapture } from "@workspace/schemas"
 
 export function GisDebugPanel({ surveyId, gps }: { surveyId: string; gps?: GpsCapture }) {
-  if (process.env.NODE_ENV !== "development") return null;
+  if (process.env.NODE_ENV !== "development") return null
 
   return (
     <details className="rounded-lg border border-dashed border-amber-500/40 bg-amber-500/5 p-3 text-xs">
@@ -43,19 +43,19 @@ export function GisDebugPanel({ surveyId, gps }: { surveyId: string; gps?: GpsCa
           <>
             <div className="flex justify-between gap-4">
               <dt>Latitude</dt>
-              <dd className="tabular-nums text-foreground">{gps.latitude}</dd>
+              <dd className="text-foreground tabular-nums">{gps.latitude}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt>Longitude</dt>
-              <dd className="tabular-nums text-foreground">{gps.longitude}</dd>
+              <dd className="text-foreground tabular-nums">{gps.longitude}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt>Formatted</dt>
-              <dd className="tabular-nums text-foreground">{formatGpsDecimal(gps.latitude, gps.longitude)}</dd>
+              <dd className="text-foreground tabular-nums">{formatGpsDecimal(gps.latitude, gps.longitude)}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt>Accuracy</dt>
-              <dd className="tabular-nums text-foreground">±{gps.accuracyMeters.toFixed(1)} m</dd>
+              <dd className="text-foreground tabular-nums">±{gps.accuracyMeters.toFixed(1)} m</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt>Provider</dt>
@@ -71,5 +71,5 @@ export function GisDebugPanel({ surveyId, gps }: { surveyId: string; gps?: GpsCa
         )}
       </dl>
     </details>
-  );
+  )
 }

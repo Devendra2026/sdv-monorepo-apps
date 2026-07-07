@@ -1,39 +1,39 @@
-"use client";
+"use client"
 
-import type { MasterOption } from "@/convex/areaMasters";
-import { QC_STATUS_LABEL, SURVEY_STATUS_LABEL } from "@/lib/domain";
-import { surveyAreaMetrics } from "@/lib/survey/area";
-import { labelFromOptions } from "@/lib/survey/detail-labels";
-import { formatLatitudeDms, formatLongitudeDms } from "@/lib/surveys/gps-format";
-import { fmtDate } from "@/lib/utils";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import { QC_STATUS_LABEL, SURVEY_STATUS_LABEL } from "@/lib/domain"
+import { surveyAreaMetrics } from "@/lib/survey/area"
+import { labelFromOptions } from "@/lib/survey/detail-labels"
+import { formatLatitudeDms, formatLongitudeDms } from "@/lib/surveys/gps-format"
+import { fmtDate } from "@/lib/utils"
+import type { MasterOption } from "@workspace/convex/lib/masters/areaMasters"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 
-const NAVY: [number, number, number] = [30, 58, 95];
+const NAVY: [number, number, number] = [30, 58, 95]
 
 function header(doc: jsPDF, title: string, subtitle?: string) {
-  doc.setFillColor(...NAVY);
-  doc.rect(0, 0, doc.internal.pageSize.getWidth(), 26, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(15);
-  doc.text("Municipal Property Survey", 14, 12);
-  doc.setFontSize(10);
-  doc.text(title, 14, 20);
-  doc.setTextColor(60, 60, 60);
-  doc.setFontSize(8);
-  doc.text(`Generated ${fmtDate(Date.now())}${subtitle ? ` · ${subtitle}` : ""}`, 14, 32);
+  doc.setFillColor(...NAVY)
+  doc.rect(0, 0, doc.internal.pageSize.getWidth(), 26, "F")
+  doc.setTextColor(255, 255, 255)
+  doc.setFontSize(15)
+  doc.text("Municipal Property Survey", 14, 12)
+  doc.setFontSize(10)
+  doc.text(title, 14, 20)
+  doc.setTextColor(60, 60, 60)
+  doc.setFontSize(8)
+  doc.text(`Generated ${fmtDate(Date.now())}${subtitle ? ` · ${subtitle}` : ""}`, 14, 32)
 }
 
 function save(doc: jsPDF, name: string) {
-  doc.save(`${name}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  doc.save(`${name}_${new Date().toISOString().slice(0, 10)}.pdf`)
 }
 
 /** Full single-survey report (used from the survey detail page). */
 export function generateSurveyReportPdf(survey: any) {
-  const doc = new jsPDF();
-  header(doc, `Survey Report — ${survey.propertyId || survey.parcelNo}`, `${survey.city} · Ward ${survey.wardNo}`);
+  const doc = new jsPDF()
+  header(doc, `Survey Report — ${survey.propertyId || survey.parcelNo}`, `${survey.city} · Ward ${survey.wardNo}`)
 
-  const field = (l: string, v: any) => [l, v == null || v === "" ? "—" : String(v)];
+  const field = (l: string, v: any) => [l, v == null || v === "" ? "—" : String(v)]
 
   autoTable(doc, {
     startY: 38,
@@ -52,7 +52,7 @@ export function generateSurveyReportPdf(survey: any) {
     theme: "striped",
     headStyles: { fillColor: NAVY },
     styles: { fontSize: 9 },
-  });
+  })
 
   autoTable(doc, {
     head: [["Owner & Address", ""]],
@@ -70,7 +70,7 @@ export function generateSurveyReportPdf(survey: any) {
     theme: "striped",
     headStyles: { fillColor: NAVY },
     styles: { fontSize: 9 },
-  });
+  })
 
   autoTable(doc, {
     head: [["Taxation & Services", ""]],
@@ -92,7 +92,7 @@ export function generateSurveyReportPdf(survey: any) {
     theme: "striped",
     headStyles: { fillColor: NAVY },
     styles: { fontSize: 9 },
-  });
+  })
 
   if (survey.floors?.length) {
     autoTable(doc, {
@@ -106,50 +106,50 @@ export function generateSurveyReportPdf(survey: any) {
       ]),
       headStyles: { fillColor: NAVY },
       styles: { fontSize: 9 },
-    });
+    })
   }
 
-  save(doc, `survey_${survey.parcelNo || survey._id}`);
+  save(doc, `survey_${survey.parcelNo || survey._id}`)
 }
 
 type QcFinalReportMasters = {
-  propertyUses?: MasterOption[];
-  propertyUseSubcategories?: Record<string, MasterOption[]>;
-  roadTypes?: MasterOption[];
-  taxRateZones?: MasterOption[];
-  floors?: MasterOption[];
-  usageTypes?: MasterOption[];
-  usageFactors?: MasterOption[];
-  constructionTypes?: MasterOption[];
-};
+  propertyUses?: MasterOption[]
+  propertyUseSubcategories?: Record<string, MasterOption[]>
+  roadTypes?: MasterOption[]
+  taxRateZones?: MasterOption[]
+  floors?: MasterOption[]
+  usageTypes?: MasterOption[]
+  usageFactors?: MasterOption[]
+  constructionTypes?: MasterOption[]
+}
 
 export type QcFinalReportOptions = {
-  masters?: QcFinalReportMasters;
-};
+  masters?: QcFinalReportMasters
+}
 
 function fmtLabel(options: MasterOption[] | undefined, value: string | undefined) {
-  return labelFromOptions(options, value);
+  return labelFromOptions(options, value)
 }
 
 /** QC final report — verified property assessment for one survey. */
 export function generateQcFinalReportPdf(survey: any, options: QcFinalReportOptions = {}) {
-  const { masters } = options;
-  const doc = new jsPDF();
-  const propertyId = survey.propertyId || survey.parcelNo;
-  const ownerName = survey.respondentName || survey.owners?.[0]?.name || "—";
+  const { masters } = options
+  const doc = new jsPDF()
+  const propertyId = survey.propertyId || survey.parcelNo
+  const ownerName = survey.respondentName || survey.owners?.[0]?.name || "—"
   const areas = surveyAreaMetrics({
     plotSqft: survey.plotSqft ?? 0,
     plinthSqft: survey.plinthSqft ?? 0,
     floors: survey.floors ?? [],
-  });
-  const propertyTypeOptions = survey.propertyUse ? masters?.propertyUseSubcategories?.[survey.propertyUse] : undefined;
-  const qcStatusLabel = QC_STATUS_LABEL[survey.qcStatus as keyof typeof QC_STATUS_LABEL] ?? survey.qcStatus;
+  })
+  const propertyTypeOptions = survey.propertyUse ? masters?.propertyUseSubcategories?.[survey.propertyUse] : undefined
+  const qcStatusLabel = QC_STATUS_LABEL[survey.qcStatus as keyof typeof QC_STATUS_LABEL] ?? survey.qcStatus
 
   header(
     doc,
     `QC Final Report — ${propertyId}`,
-    `Comprehensive verification for ${survey.city ?? "—"} · Ward ${survey.wardNo ?? "—"}`,
-  );
+    `Comprehensive verification for ${survey.city ?? "—"} · Ward ${survey.wardNo ?? "—"}`
+  )
 
   autoTable(doc, {
     startY: 38,
@@ -172,7 +172,7 @@ export function generateQcFinalReportPdf(survey: any, options: QcFinalReportOpti
     theme: "striped",
     headStyles: { fillColor: NAVY },
     styles: { fontSize: 9 },
-  });
+  })
 
   if (survey.floors?.length) {
     autoTable(doc, {
@@ -188,7 +188,7 @@ export function generateQcFinalReportPdf(survey: any, options: QcFinalReportOpti
       headStyles: { fillColor: NAVY },
       footStyles: { fillColor: [240, 244, 248], textColor: [30, 58, 95], fontStyle: "bold" },
       styles: { fontSize: 9 },
-    });
+    })
   }
 
   autoTable(doc, {
@@ -206,7 +206,7 @@ export function generateQcFinalReportPdf(survey: any, options: QcFinalReportOpti
     theme: "striped",
     headStyles: { fillColor: NAVY },
     styles: { fontSize: 9 },
-  });
+  })
 
   if (survey.gps) {
     autoTable(doc, {
@@ -220,51 +220,51 @@ export function generateQcFinalReportPdf(survey: any, options: QcFinalReportOpti
       theme: "striped",
       headStyles: { fillColor: NAVY },
       styles: { fontSize: 9 },
-    });
+    })
   }
 
-  const certY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 12 : 220;
-  doc.setFontSize(10);
-  doc.setTextColor(30, 58, 95);
-  doc.text("Certification", 14, certY);
-  doc.setFontSize(9);
-  doc.setTextColor(60, 60, 60);
-  doc.text(`Certified on: ${fmtDate(Date.now())}`, 14, certY + 8);
-  doc.text("Document integrity: Verified", 14, certY + 15);
+  const certY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 12 : 220
+  doc.setFontSize(10)
+  doc.setTextColor(30, 58, 95)
+  doc.text("Certification", 14, certY)
+  doc.setFontSize(9)
+  doc.setTextColor(60, 60, 60)
+  doc.text(`Certified on: ${fmtDate(Date.now())}`, 14, certY + 8)
+  doc.text("Document integrity: Verified", 14, certY + 15)
 
-  save(doc, `qc_final_${survey.parcelNo || survey._id}`);
+  save(doc, `qc_final_${survey.parcelNo || survey._id}`)
 }
 
 /** @deprecated Use generateQcFinalReportPdf — remarks are no longer included. */
 export function generateQcReportPdf(survey: any, _remarks?: any[], options?: QcFinalReportOptions) {
-  generateQcFinalReportPdf(survey, options);
+  generateQcFinalReportPdf(survey, options)
 }
 
 /** Municipality summary report from the analytics breakdown. */
 export function generateMunicipalitySummaryPdf(breakdown: any) {
-  const doc = new jsPDF();
-  header(doc, "Municipality Summary Report");
-  const s = breakdown.summary;
+  const doc = new jsPDF()
+  header(doc, "Municipality Summary Report")
+  const s = breakdown.summary
   autoTable(doc, {
     startY: 38,
     head: [["Total", "Drafts", "Submitted", "Approved", "Rejected", "Today"]],
     body: [[s.total, s.drafts, s.submitted, s.approved, s.rejected, s.today]],
     headStyles: { fillColor: NAVY },
     styles: { fontSize: 9 },
-  });
+  })
   autoTable(doc, {
     head: [["ULB", "District", "Total", "Approved", "Rejected", "Submitted"]],
     body: breakdown.byUlb.map((m: any) => [m.name, m.districtName, m.total, m.approved, m.rejected, m.submitted]),
     headStyles: { fillColor: NAVY },
     styles: { fontSize: 9 },
-  });
-  save(doc, "municipality_summary");
+  })
+  save(doc, "municipality_summary")
 }
 
 /** Surveyor performance report from the analytics breakdown. */
 export function generateSurveyorPerformancePdf(breakdown: any) {
-  const doc = new jsPDF();
-  header(doc, "Surveyor Performance Report");
+  const doc = new jsPDF()
+  header(doc, "Surveyor Performance Report")
   autoTable(doc, {
     startY: 38,
     head: [["Surveyor", "ULB", "Total", "Approved", "Rejected", "Drafts", "Approval %"]],
@@ -279,6 +279,6 @@ export function generateSurveyorPerformancePdf(breakdown: any) {
     ]),
     headStyles: { fillColor: NAVY },
     styles: { fontSize: 9 },
-  });
-  save(doc, "surveyor_performance");
+  })
+  save(doc, "surveyor_performance")
 }

@@ -1,53 +1,63 @@
-"use client";
+"use client"
 
-import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card";
-import { qcActionBtn } from "@/components/qc/qc-action-styles";
-import { RoleGate } from "@/components/shared/role-gate";
-import { FloorsEditor, type FloorsEditorHandle } from "@/components/surveys/floors-editor";
-import { GpsCapturePanel } from "@/components/surveys/gps-capture";
-import { PhotoUploader } from "@/components/surveys/photo-uploader";
-import { SurveyForm, type SurveyFormHandle } from "@/components/surveys/survey-form";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useFloors } from "@/hooks/surveys/useFloors";
-import { useSurvey } from "@/hooks/surveys/useSurveys";
-import type { ConflictSurveyLinkVariant } from "@/lib/errors";
-import { plinthSqftFromFloors } from "@/lib/survey/area";
-import { firstAreaSubmitError, surveyAreaSubmitErrors } from "@/lib/survey/progress";
-import { cn } from "@/lib/utils";
-import type { SurveyListItem } from "@/schema/surveys/index";
-import { Camera, ClipboardList, Layers, MapPin, Save, Send } from "lucide-react";
-import { useCallback, useRef, useState, type MutableRefObject, type ReactNode } from "react";
-import { toast } from "sonner";
+import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card"
+import { qcActionBtn } from "@/components/qc/qc-action-styles"
+import { RoleGate } from "@/components/shared/role-gate"
+import { FloorsEditor, type FloorsEditorHandle } from "@/components/surveys/floors-editor"
+import { GpsCapturePanel } from "@/components/surveys/gps-capture"
+import { PhotoUploader } from "@/components/surveys/photo-uploader"
+import { SurveyForm, type SurveyFormHandle } from "@/components/surveys/survey-form"
+import { useFloors } from "@/hooks/surveys/useFloors"
+import { useSurvey } from "@/hooks/surveys/useSurveys"
+import type { ConflictSurveyLinkVariant } from "@/lib/errors"
+import { plinthSqftFromFloors } from "@/lib/survey/area"
+import { firstAreaSubmitError, surveyAreaSubmitErrors } from "@/lib/survey/progress"
+import { cn } from "@workspace/ui/lib/utils"
+import type { SurveyListItem } from "@workspace/schemas"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@workspace/ui/components/alert-dialog"
+import { Button } from "@workspace/ui/components/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
+import { Camera, ClipboardList, Layers, MapPin, Save, Send } from "lucide-react"
+import { useCallback, useRef, useState, type MutableRefObject, type ReactNode } from "react"
+import { toast } from "sonner"
 
 const tabTriggerClass =
-  "cursor-pointer gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 data-[state=active]:bg-brand-navy data-[state=active]:text-white data-[state=active]:shadow-premium-sm dark:data-[state=active]:bg-primary disabled:opacity-40";
+  "cursor-pointer gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 data-[state=active]:bg-brand-navy data-[state=active]:text-white data-[state=active]:shadow-premium-sm dark:data-[state=active]:bg-primary disabled:opacity-40"
 
 export type SurveySubmitArea = {
-  plotSqft?: number;
-  plinthSqft?: number;
+  plotSqft?: number
+  plinthSqft?: number
   floors?: Array<{
-    clientFloorId: string;
-    position: number;
-    floorName: string;
-    usageFactor?: string;
-    usageType: string;
-    constructionType: string;
-    isOccupied: boolean;
-    areaSqft: number;
-  }>;
-  keepClientFloorIds?: string[];
-};
+    clientFloorId: string
+    position: number
+    floorName: string
+    usageFactor?: string
+    usageType: string
+    constructionType: string
+    isOccupied: boolean
+    areaSqft: number
+  }>
+  keepClientFloorIds?: string[]
+}
 
 function LockedTab({ title, description }: { title: string; description: string }) {
   return (
     <GlassCard padding="md">
       <GlassCardHeader title={title} description={description} />
       <p className="text-sm text-muted-foreground">
-        Complete the <strong className="text-foreground">Details</strong> tab first, then return here.
+        <strong className="text-foreground">Save property details first</strong> to unlock Area, Photos, and GPS.
       </p>
     </GlassCard>
-  );
+  )
 }
 
 export function SurveyEditor({
@@ -68,106 +78,109 @@ export function SurveyEditor({
   onDirty,
   conflictLinkVariant = "surveys",
 }: {
-  localId: string;
-  surveyId?: string;
-  existing?: SurveyListItem | null;
-  locked?: boolean;
-  onSaved?: (surveyId: string) => void;
-  showSubmitBar?: boolean;
+  localId: string
+  surveyId?: string
+  existing?: SurveyListItem | null
+  locked?: boolean
+  onSaved?: (surveyId: string) => void
+  showSubmitBar?: boolean
   /** Save without submitting — used for QC corrections while survey stays in review. */
-  showSaveBar?: boolean;
-  onSubmit?: (area?: SurveySubmitArea) => void | Promise<void>;
-  submitting?: boolean;
-  submitLabel?: string;
-  saveBarLabel?: string;
-  saveBarDescription?: string;
-  saveBarSecondaryAction?: ReactNode;
+  showSaveBar?: boolean
+  onSubmit?: (area?: SurveySubmitArea) => void | Promise<void>
+  submitting?: boolean
+  submitLabel?: string
+  saveBarLabel?: string
+  saveBarDescription?: string
+  saveBarSecondaryAction?: ReactNode
   /** QC edit: expose save handler to external sticky action bar */
-  saveCorrectionsRef?: MutableRefObject<(() => Promise<boolean>) | null>;
+  saveCorrectionsRef?: MutableRefObject<(() => Promise<boolean>) | null>
   /** QC edit: notify parent when unsaved edits are made */
-  onDirty?: () => void;
-  conflictLinkVariant?: ConflictSurveyLinkVariant;
+  onDirty?: () => void
+  conflictLinkVariant?: ConflictSurveyLinkVariant
 }) {
-  const [activeTab, setActiveTab] = useState("details");
-  const [saving, setSaving] = useState(false);
-  const [floorMutating, setFloorMutating] = useState(false);
-  const loaded = useSurvey(surveyId);
-  const survey = existing ?? loaded;
-  const floors = useFloors(surveyId);
-  const canEditSections = !!surveyId && !locked;
+  const [activeTab, setActiveTab] = useState("details")
+  const [saving, setSaving] = useState(false)
+  const [submitDialogOpen, setSubmitDialogOpen] = useState(false)
+  const [floorMutating, setFloorMutating] = useState(false)
+  const loaded = useSurvey(surveyId)
+  const survey = existing ?? loaded
+  const floors = useFloors(surveyId)
+  const canEditSections = !!surveyId && !locked
 
-  const saveDetailsRef = useRef<SurveyFormHandle>(null);
-  const floorsEditorRef = useRef<FloorsEditorHandle>(null);
-  const plotSqftDraftRef = useRef(0);
+  const saveDetailsRef = useRef<SurveyFormHandle>(null)
+  const floorsEditorRef = useRef<FloorsEditorHandle>(null)
+  const plotSqftDraftRef = useRef(0)
   const onPlotSqftChange = useCallback((value: number) => {
-    plotSqftDraftRef.current = value;
-  }, []);
+    plotSqftDraftRef.current = value
+  }, [])
 
   async function persistDetailsAndArea(opts?: { validateForSubmit?: boolean }): Promise<boolean> {
-    const plotSqft = Math.max(plotSqftDraftRef.current, survey?.plotSqft ?? 0);
-    const plinthSqft = plinthSqftFromFloors(floors ?? []);
+    const plotSqft = Math.max(plotSqftDraftRef.current, survey?.plotSqft ?? 0)
+    const plinthSqft = plinthSqftFromFloors(floors ?? [])
     const areaPatch =
       plotSqft > 0
         ? {
             plotSqft,
             plinthSqft: plinthSqft > 0 ? plinthSqft : (survey?.plinthSqft ?? 0),
           }
-        : undefined;
+        : undefined
 
-    const detailsSaved = await (saveDetailsRef.current?.save(areaPatch) ?? Promise.resolve(true));
-    if (!detailsSaved) return false;
+    const detailsSaved = await (saveDetailsRef.current?.save(areaPatch) ?? Promise.resolve(true))
+    if (!detailsSaved) return false
 
-    const areaValid = await (floorsEditorRef.current?.validateArea() ?? Promise.resolve(true));
+    const areaValid = await (floorsEditorRef.current?.validateArea() ?? Promise.resolve(true))
     if (!areaValid) {
-      setActiveTab("area");
-      return false;
+      setActiveTab("area")
+      return false
     }
 
     if (opts?.validateForSubmit) {
+      const computedPlinth = plinthSqftFromFloors(floors ?? [])
       const areaErrors = surveyAreaSubmitErrors({
         plotSqft,
-        plinthSqft: survey?.plinthSqft,
+        plinthSqft: computedPlinth > 0 ? computedPlinth : (survey?.plinthSqft ?? 0),
         floors: (floors ?? []).map((f) => ({ floorName: f.floorName, areaSqft: f.areaSqft })),
-      });
-      const areaMessage = firstAreaSubmitError(areaErrors);
+      })
+      const areaMessage = firstAreaSubmitError(areaErrors)
       if (areaMessage) {
-        setActiveTab("area");
-        toast.error(areaMessage);
-        return false;
+        setActiveTab("area")
+        toast.error(areaMessage)
+        return false
       }
     }
 
-    return true;
+    return true
   }
 
-  const persistRef = useRef(persistDetailsAndArea);
-  persistRef.current = persistDetailsAndArea;
+  const persistRef = useRef(persistDetailsAndArea)
+  persistRef.current = persistDetailsAndArea
   if (saveCorrectionsRef) {
-    saveCorrectionsRef.current = () => persistRef.current();
+    saveCorrectionsRef.current = () => persistRef.current()
   }
 
   async function handleSaveCorrections() {
-    setSaving(true);
+    setSaving(true)
     try {
-      const ok = await persistDetailsAndArea();
-      if (ok) toast.success(saveBarLabel ?? "Survey saved");
+      const ok = await persistDetailsAndArea()
+      if (ok) toast.success(saveBarLabel ?? "Survey saved")
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
   }
 
   async function handleSaveAndSubmit() {
-    if (!onSubmit) return;
-    const confirmMessage = submitLabel
-      ? "Save changes and re-submit this survey for QC review?"
-      : "Submit this survey for QC review? You won't be able to edit it until it's reviewed.";
-    if (!confirm(confirmMessage)) return;
-    setSaving(true);
+    if (!onSubmit) return
+    setSubmitDialogOpen(true)
+  }
+
+  async function confirmSaveAndSubmit() {
+    if (!onSubmit) return
+    setSaving(true)
     try {
-      const ok = await persistDetailsAndArea({ validateForSubmit: true });
-      if (!ok) return;
-      const plotSqft = Math.max(plotSqftDraftRef.current, survey?.plotSqft ?? 0);
-      const floorRows = floors ?? [];
+      const ok = await persistDetailsAndArea({ validateForSubmit: true })
+      if (!ok) return
+      const plotSqft = Math.max(plotSqftDraftRef.current, survey?.plotSqft ?? 0)
+      const floorRows = floors ?? []
       await onSubmit({
         plotSqft: plotSqft > 0 ? plotSqft : undefined,
         floors: floorRows.map((f) => ({
@@ -181,13 +194,14 @@ export function SurveyEditor({
           areaSqft: f.areaSqft,
         })),
         keepClientFloorIds: floorRows.map((f) => f.clientFloorId),
-      });
+      })
+      setSubmitDialogOpen(false)
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
   }
 
-  const isWorking = submitting || saving || floorMutating;
+  const isWorking = submitting || saving || floorMutating
 
   const correctionsBar = showSaveBar && canEditSections && (
     <RoleGate capability="surveys.editDraft" fallback={null}>
@@ -222,7 +236,7 @@ export function SurveyEditor({
         </div>
       </div>
     </RoleGate>
-  );
+  )
 
   const submitBar = showSubmitBar && onSubmit && canEditSections && (
     <RoleGate capability="surveys.submit" fallback={null}>
@@ -254,7 +268,7 @@ export function SurveyEditor({
         </div>
       </GlassCard>
     </RoleGate>
-  );
+  )
 
   return (
     <div className="space-y-5">
@@ -340,6 +354,31 @@ export function SurveyEditor({
           )}
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={submitDialogOpen} onOpenChange={setSubmitDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{submitLabel ?? "Submit for QC review?"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {submitLabel
+                ? "Your changes will be saved and the survey will be sent back to QC for review."
+                : "You won't be able to edit this survey until QC completes their review."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isWorking}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isWorking}
+              onClick={(event) => {
+                event.preventDefault()
+                void confirmSaveAndSubmit()
+              }}
+            >
+              {isWorking ? "Submitting…" : "Confirm submit"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
-  );
+  )
 }

@@ -1,6 +1,6 @@
-"use client";
+"use client"
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -8,45 +8,45 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import type { Id } from "@/convex/_generated/dataModel";
-import { useSetUserAllotments, useUserAllotments } from "@/hooks/rbac/useRbac";
-import { useTenantCatalog } from "@/hooks/users/useUsers";
-import { parseConvexError } from "@/lib/errors";
-import { cn } from "@/lib/utils";
-import { Building2, Layers, MapPin, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { useSetUserAllotments, useUserAllotments } from "@/hooks/rbac/useRbac"
+import { useTenantCatalog } from "@/hooks/users/useUsers"
+import { parseConvexError } from "@/lib/errors"
+import { cn } from "@/lib/utils"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { Building2, Layers, MapPin, Plus, Trash2 } from "lucide-react"
+import { useState } from "react"
+import { toast } from "sonner"
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
 type DraftRow = {
-  id: string;
-  scope: "ulb" | "district";
-  districtId: Id<"districts"> | "";
-  municipalityId: Id<"municipalities"> | "";
-  isActive: boolean;
-};
+  id: string
+  scope: "ulb" | "district"
+  districtId: Id<"districts"> | ""
+  municipalityId: Id<"municipalities"> | ""
+  isActive: boolean
+}
 
-type AllotmentUser = { _id: Id<"users">; name: string; role: string };
+type AllotmentUser = { _id: Id<"users">; name: string; role: string }
 
 type AllotmentPayload = {
-  isActive: boolean;
-  districtId?: Id<"districts">;
-  municipalityId?: Id<"municipalities">;
-};
+  isActive: boolean
+  districtId?: Id<"districts">
+  municipalityId?: Id<"municipalities">
+}
 
 type ExistingAllotment = {
-  _id: Id<"userAllotments">;
-  districtId?: Id<"districts">;
-  municipalityId?: Id<"municipalities">;
-  isActive: boolean;
-};
+  _id: Id<"userAllotments">
+  districtId?: Id<"districts">
+  municipalityId?: Id<"municipalities">
+  isActive: boolean
+}
 
-type TenantCatalog = NonNullable<ReturnType<typeof useTenantCatalog>>;
+type TenantCatalog = NonNullable<ReturnType<typeof useTenantCatalog>>
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -57,19 +57,19 @@ function mapAllotmentsToDraftRows(existing: ExistingAllotment[]): DraftRow[] {
     districtId: a.districtId ?? ("" as const),
     municipalityId: a.municipalityId ?? ("" as const),
     isActive: a.isActive,
-  }));
+  }))
 }
 
 function buildAllotmentPayload(rows: DraftRow[]): AllotmentPayload[] {
-  const payload: AllotmentPayload[] = [];
+  const payload: AllotmentPayload[] = []
   for (const r of rows) {
     if (r.scope === "ulb" && r.municipalityId) {
-      payload.push({ isActive: r.isActive, municipalityId: r.municipalityId });
+      payload.push({ isActive: r.isActive, municipalityId: r.municipalityId })
     } else if (r.scope === "district" && r.districtId) {
-      payload.push({ isActive: r.isActive, districtId: r.districtId });
+      payload.push({ isActive: r.isActive, districtId: r.districtId })
     }
   }
-  return payload;
+  return payload
 }
 
 // ─── single allotment card ────────────────────────────────────────────────────
@@ -81,19 +81,19 @@ function AllotmentCard({
   onChange,
   onRemove,
 }: {
-  row: DraftRow;
-  idx: number;
-  catalog: TenantCatalog | undefined;
-  onChange: (idx: number, patch: Partial<DraftRow>) => void;
-  onRemove: (idx: number) => void;
+  row: DraftRow
+  idx: number
+  catalog: TenantCatalog | undefined
+  onChange: (idx: number, patch: Partial<DraftRow>) => void
+  onRemove: (idx: number) => void
 }) {
-  const district = catalog?.find((d) => d._id === row.districtId);
-  const ulbs = district?.ulbs ?? [];
-  const municipality = ulbs.find((m) => m._id === row.municipalityId);
+  const district = catalog?.find((d) => d._id === row.districtId)
+  const ulbs = district?.ulbs ?? []
+  const municipality = ulbs.find((m) => m._id === row.municipalityId)
 
   // resolved label shown in header
   const locationName =
-    row.scope === "district" ? (district?.name ?? null) : (municipality?.name ?? district?.name ?? null);
+    row.scope === "district" ? (district?.name ?? null) : (municipality?.name ?? district?.name ?? null)
 
   return (
     <div
@@ -102,21 +102,21 @@ function AllotmentCard({
         row.isActive
           ? "border-border bg-card shadow-sm"
           : "border-dashed border-muted-foreground/30 bg-muted/10 opacity-70",
-        row.scope === "ulb" ? "border-l-[3px] border-l-blue-500" : "border-l-[3px] border-l-teal-500",
+        row.scope === "ulb" ? "border-l-[3px] border-l-blue-500" : "border-l-[3px] border-l-teal-500"
       )}
     >
       {/* ── card header ── */}
       <div
         className={cn(
           "flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3",
-          row.isActive ? "bg-muted/25" : "bg-muted/10",
+          row.isActive ? "bg-muted/25" : "bg-muted/10"
         )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <span
             className={cn(
               "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
-              row.isActive ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+              row.isActive ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
             )}
           >
             {idx + 1}
@@ -148,7 +148,7 @@ function AllotmentCard({
           <span
             className={cn(
               "hidden min-w-12 text-[11px] font-medium sm:inline",
-              row.isActive ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+              row.isActive ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
             )}
           >
             {row.isActive ? "Active" : "Inactive"}
@@ -168,11 +168,11 @@ function AllotmentCard({
       <div
         className={cn(
           "grid gap-3 px-4 py-3.5",
-          row.scope === "ulb" ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 sm:grid-cols-2",
+          row.scope === "ulb" ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 sm:grid-cols-2"
         )}
       >
         <div className="space-y-1.5">
-          <Label className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Scope</Label>
+          <Label className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Scope</Label>
           <Select
             value={row.scope}
             onValueChange={(v: "ulb" | "district") => onChange(idx, { scope: v, municipalityId: "" as const })}
@@ -196,7 +196,7 @@ function AllotmentCard({
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">District</Label>
+          <Label className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">District</Label>
           <Select
             value={row.districtId}
             onValueChange={(v) =>
@@ -221,7 +221,7 @@ function AllotmentCard({
 
         {row.scope === "ulb" && (
           <div className="space-y-1.5">
-            <Label className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Municipality</Label>
+            <Label className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">Municipality</Label>
             <Select
               value={row.municipalityId}
               onValueChange={(v) => onChange(idx, { municipalityId: v as Id<"municipalities"> })}
@@ -245,7 +245,7 @@ function AllotmentCard({
         )}
       </div>
     </div>
-  );
+  )
 }
 
 // ─── form ─────────────────────────────────────────────────────────────────────
@@ -256,17 +256,17 @@ function UserAllotmentsForm({
   catalog,
   onOpenChange,
 }: {
-  user: AllotmentUser;
-  initialRows: DraftRow[];
-  catalog: TenantCatalog | undefined;
-  onOpenChange: (o: boolean) => void;
+  user: AllotmentUser
+  initialRows: DraftRow[]
+  catalog: TenantCatalog | undefined
+  onOpenChange: (o: boolean) => void
 }) {
-  const setAllotments = useSetUserAllotments();
-  const [rows, setRows] = useState(initialRows);
-  const [busy, setBusy] = useState(false);
+  const setAllotments = useSetUserAllotments()
+  const [rows, setRows] = useState(initialRows)
+  const [busy, setBusy] = useState(false)
 
   function addRow(scope: "ulb" | "district") {
-    const firstDistrict = catalog?.[0]?._id ?? ("" as const);
+    const firstDistrict = catalog?.[0]?._id ?? ("" as const)
     setRows((r) => [
       ...r,
       {
@@ -276,32 +276,32 @@ function UserAllotmentsForm({
         municipalityId: "" as const,
         isActive: true,
       },
-    ]);
+    ])
   }
 
   function updateRow(idx: number, patch: Partial<DraftRow>) {
-    setRows((all) => all.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+    setRows((all) => all.map((r, i) => (i === idx ? { ...r, ...patch } : r)))
   }
 
   function removeRow(idx: number) {
-    setRows((all) => all.filter((_, i) => i !== idx));
+    setRows((all) => all.filter((_, i) => i !== idx))
   }
 
   async function save() {
-    setBusy(true);
+    setBusy(true)
     try {
-      await setAllotments({ userId: user._id, allotments: buildAllotmentPayload(rows) });
-      toast.success("Allotments saved — effective immediately");
-      onOpenChange(false);
+      await setAllotments({ userId: user._id, allotments: buildAllotmentPayload(rows) })
+      toast.success("Allotments saved — effective immediately")
+      onOpenChange(false)
     } catch (e) {
-      toast.error(parseConvexError(e).message);
+      toast.error(parseConvexError(e).message)
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
   }
 
-  const activeCount = rows.filter((r) => r.isActive).length;
-  const inactiveCount = rows.length - activeCount;
+  const activeCount = rows.filter((r) => r.isActive).length
+  const inactiveCount = rows.length - activeCount
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -406,7 +406,7 @@ function UserAllotmentsForm({
         </div>
       </DialogFooter>
     </div>
-  );
+  )
 }
 
 // ─── dialog ───────────────────────────────────────────────────────────────────
@@ -416,18 +416,18 @@ export function UserAllotmentsDialog({
   onOpenChange,
   user,
 }: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  user: AllotmentUser | null;
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  user: AllotmentUser | null
 }) {
-  const catalog = useTenantCatalog();
-  const existing = useUserAllotments(open && user ? user._id : undefined);
+  const catalog = useTenantCatalog()
+  const existing = useUserAllotments(open && user ? user._id : undefined)
 
-  if (!user) return null;
+  if (!user) return null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex! h-[min(90vh,760px)] w-full max-w-2xl min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+      <DialogContent className="flex! h-[min(90vh,760px)] min-h-0 w-full max-w-2xl flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
         <DialogHeader className="shrink-0 space-y-1 border-b border-border px-6 py-4 pr-12">
           <DialogTitle className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
@@ -460,5 +460,5 @@ export function UserAllotmentsDialog({
         )}
       </DialogContent>
     </Dialog>
-  );
+  )
 }

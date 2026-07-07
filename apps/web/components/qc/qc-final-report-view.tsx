@@ -1,64 +1,64 @@
-"use client";
+"use client"
 
-import { ExecutiveHero } from "@/components/design-system/executive-hero";
-import { FadeIn, PageTransition } from "@/components/design-system/motion";
+import { ExecutiveHero } from "@/components/design-system/executive-hero"
+import { FadeIn, PageTransition } from "@/components/design-system/motion"
 import {
   QcReportKpiStrip,
   QcReportMainColumn,
   QcReportSidebar,
   ShieldCheck,
-} from "@/components/qc/qc-final-report-sections";
-import { Button } from "@/components/ui/button";
-import { useMasters } from "@/hooks/masters/useMasters";
-import { getQcReportDemand } from "@/lib/qc/qc-report-demand";
-import { reportDocumentTimestamp } from "@/lib/qc/report-dates";
-import { surveyAreaMetrics } from "@/lib/survey/area";
-import { labelFromOptions } from "@/lib/survey/detail-labels";
-import { buildUlbCodeMap, resolveDisplayPropertyId } from "@/lib/survey/resolve-display-property-id";
-import type { SurveyDetail } from "@/schema/surveys/index";
-import { ArrowLeft, ChevronRight, Download, FileText, Printer, Share2 } from "lucide-react";
-import Link from "next/link";
-import { toast } from "sonner";
+} from "@/components/qc/qc-final-report-sections"
+import { Button } from "@/components/ui/button"
+import { useMasters } from "@/hooks/masters/useMasters"
+import { getQcReportDemand } from "@/lib/qc/qc-report-demand"
+import { reportDocumentTimestamp } from "@/lib/qc/report-dates"
+import { surveyAreaMetrics } from "@/lib/survey/area"
+import { labelFromOptions } from "@/lib/survey/detail-labels"
+import { buildUlbCodeMap, resolveDisplayPropertyId } from "@/lib/survey/resolve-display-property-id"
+import type { SurveyDetail } from "@workspace/schemas"
+import { ArrowLeft, ChevronRight, Download, FileText, Printer, Share2 } from "lucide-react"
+import Link from "next/link"
+import { toast } from "sonner"
 
 async function shareQcReport() {
   try {
-    await navigator.clipboard.writeText(window.location.href);
-    toast.success("Report link copied to clipboard");
+    await navigator.clipboard.writeText(window.location.href)
+    toast.success("Report link copied to clipboard")
   } catch {
-    toast.error("Could not copy link");
+    toast.error("Could not copy link")
   }
 }
 
 type QcFinalReportViewProps = {
-  survey: SurveyDetail;
-  surveyId: string;
-  backHref?: string;
-};
+  survey: SurveyDetail
+  surveyId: string
+  backHref?: string
+}
 
 export function QcFinalReportView({ survey, surveyId, backHref = `/qc/${surveyId}` }: QcFinalReportViewProps) {
-  const { masters } = useMasters();
-  const ulbCodes = buildUlbCodeMap(masters?.ulbs);
-  const propertyId = resolveDisplayPropertyId(survey, ulbCodes) ?? survey.propertyId ?? survey.parcelNo;
-  const ownerName = survey.respondentName || survey.owners?.[0]?.name || "—";
+  const { masters } = useMasters()
+  const ulbCodes = buildUlbCodeMap(masters?.ulbs)
+  const propertyId = resolveDisplayPropertyId(survey, ulbCodes) ?? survey.propertyId ?? survey.parcelNo
+  const ownerName = survey.respondentName || survey.owners?.[0]?.name || "—"
   const areas = surveyAreaMetrics({
     plotSqft: survey.plotSqft,
     plinthSqft: survey.plinthSqft,
     floors: survey.floors,
-  });
-  const propertyTypeOptions = survey.propertyUse ? masters?.propertyUseSubcategories?.[survey.propertyUse] : undefined;
+  })
+  const propertyTypeOptions = survey.propertyUse ? masters?.propertyUseSubcategories?.[survey.propertyUse] : undefined
   const propertyType =
     labelFromOptions(propertyTypeOptions, survey.propertyType) ||
     labelFromOptions(masters?.propertyUses, survey.propertyUse) ||
-    "—";
-  const taxZone = labelFromOptions(masters?.taxRateZones, survey.taxRateZone);
-  const roadType = labelFromOptions(masters?.roadTypes, survey.roadType);
-  const ownershipType = labelFromOptions(masters?.ownershipTypes, survey.ownershipType);
-  const demand = getQcReportDemand(survey, survey.floors, masters ?? undefined);
-  const displayAssessableSqft = demand.assessableSqft > 0 ? demand.assessableSqft : areas.builtUpSqft;
-  const certifiedAt = reportDocumentTimestamp();
-  const assessmentYear = survey.assessmentYear || "—";
-  const frontPhoto = survey.photos?.find((p) => p.slot === "front")?.url;
-  const sidePhoto = survey.photos?.find((p) => p.slot === "side")?.url;
+    "—"
+  const taxZone = labelFromOptions(masters?.taxRateZones, survey.taxRateZone)
+  const roadType = labelFromOptions(masters?.roadTypes, survey.roadType)
+  const ownershipType = labelFromOptions(masters?.ownershipTypes, survey.ownershipType)
+  const demand = getQcReportDemand(survey, survey.floors, masters ?? undefined)
+  const displayAssessableSqft = demand.assessableSqft > 0 ? demand.assessableSqft : areas.builtUpSqft
+  const certifiedAt = reportDocumentTimestamp()
+  const assessmentYear = survey.assessmentYear || "—"
+  const frontPhoto = survey.photos?.find((p) => p.slot === "front")?.url
+  const sidePhoto = survey.photos?.find((p) => p.slot === "side")?.url
 
   const pdfOptions = {
     masters: masters
@@ -73,7 +73,7 @@ export function QcFinalReportView({ survey, surveyId, backHref = `/qc/${surveyId
           constructionTypes: masters.constructionTypes,
         }
       : undefined,
-  };
+  }
 
   return (
     <PageTransition className="qc-final-report space-y-6 lg:space-y-8">
@@ -118,8 +118,8 @@ export function QcFinalReportView({ survey, surveyId, backHref = `/qc/${surveyId
                 size="sm"
                 className="btn-brand cursor-pointer rounded-xl"
                 onClick={async () => {
-                  const { generateQcFinalReportPdf } = await import("@/components/reports/queries/pdf");
-                  generateQcFinalReportPdf(survey, pdfOptions);
+                  const { generateQcFinalReportPdf } = await import("@/components/reports/queries/pdf")
+                  generateQcFinalReportPdf(survey, pdfOptions)
                 }}
               >
                 <Download className="h-4 w-4" aria-hidden /> Download PDF
@@ -155,5 +155,5 @@ export function QcFinalReportView({ survey, surveyId, backHref = `/qc/${surveyId
         <QcReportSidebar survey={survey} surveyId={surveyId} demand={demand} certifiedAt={certifiedAt} />
       </div>
     </PageTransition>
-  );
+  )
 }

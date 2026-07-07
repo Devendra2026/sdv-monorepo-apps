@@ -1,22 +1,22 @@
-"use client";
+"use client"
 
-import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card";
-import { QcRemarksThread } from "@/components/qc/qc-remarks-thread";
-import { RoleGate } from "@/components/shared/role-gate";
-import { GpsEditPanel } from "@/components/surveys/gps-edit-panel";
-import { PropertyIdTableCell, PropertyIdTableHead } from "@/components/surveys/property-id-table";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useAuditLog } from "@/hooks/audit/useAudit";
-import { useMasters } from "@/hooks/masters/useMasters";
-import { SURVEY_STATUS_LABEL, type PhotoSlot } from "@/lib/domain";
-import { formatAreaSqMeter, surveyAreaMetrics } from "@/lib/survey/area";
-import { labelFromOptions } from "@/lib/survey/detail-labels";
-import { surveyCompletionPercent } from "@/lib/survey/progress";
-import { buildUlbCodeMap, resolveDisplayPropertyId } from "@/lib/survey/resolve-display-property-id";
-import { fmtDate } from "@/lib/utils";
-import type { QcRemarkWithAuthor } from "@/schema/qc/index";
-import type { FloorRow, OwnerEntry, SurveyDetail } from "@/schema/surveys/index";
+import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card"
+import { QcRemarksThread } from "@/components/qc/qc-remarks-thread"
+import { RoleGate } from "@/components/shared/role-gate"
+import { GpsEditPanel } from "@/components/surveys/gps-edit-panel"
+import { PropertyIdTableCell, PropertyIdTableHead } from "@/components/surveys/property-id-table"
+import { useAuditLog } from "@/hooks/audit/useAudit"
+import { useMasters } from "@/hooks/masters/useMasters"
+import { SURVEY_STATUS_LABEL, type PhotoSlot } from "@/lib/domain"
+import { formatAreaSqMeter, surveyAreaMetrics } from "@/lib/survey/area"
+import { labelFromOptions } from "@/lib/survey/detail-labels"
+import { surveyCompletionPercent } from "@/lib/survey/progress"
+import { buildUlbCodeMap, resolveDisplayPropertyId } from "@/lib/survey/resolve-display-property-id"
+import { fmtDate } from "@/lib/utils"
+import type { QcRemarkWithAuthor } from "@/schema/qc/index"
+import type { FloorRow, OwnerEntry, SurveyDetail } from "@workspace/schemas"
+import { Skeleton } from "@workspace/ui/components/skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import {
   Building2,
   Camera,
@@ -29,21 +29,21 @@ import {
   Receipt,
   Users,
   Zap,
-} from "lucide-react";
-import Image from "next/image";
+} from "lucide-react"
+import Image from "next/image"
 
 const PHOTO_LABEL: Record<"front" | "side", string> = {
   front: "Front View",
   side: "Side View",
-};
+}
 
-const DETAIL_PHOTO_SLOT_ORDER = ["front", "side"] as const satisfies readonly PhotoSlot[];
+const DETAIL_PHOTO_SLOT_ORDER = ["front", "side"] as const satisfies readonly PhotoSlot[]
 
 const AREA_METRIC_CARD_STYLES = {
   navy: "border-brand-navy/25 bg-brand-navy/6 text-brand-navy dark:border-primary/30 dark:bg-primary/10 dark:text-primary-foreground",
   muted: "border-border/60 bg-muted/40 text-foreground dark:bg-muted/20",
   success: "border-success/30 bg-success/10 text-emerald-800 dark:text-emerald-300",
-} as const;
+} as const
 
 function SectionCard({
   title,
@@ -52,40 +52,40 @@ function SectionCard({
   className,
   icon,
 }: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-  className?: string;
-  icon?: React.ReactNode;
+  title: string
+  description?: string
+  children: React.ReactNode
+  className?: string
+  icon?: React.ReactNode
 }) {
   return (
     <GlassCard padding="md" className={className}>
       <GlassCardHeader title={title} description={description} icon={icon} />
       {children}
     </GlassCard>
-  );
+  )
 }
 
 /* ─── Field card ────────────────────────────────────────────────── */
 function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
-  const empty = value == null || value === "" || value === "—";
+  const empty = value == null || value === "" || value === "—"
   return (
     <div className="rounded-xl border border-border/50 bg-card/80 px-3 py-2.5 shadow-premium-sm backdrop-blur-sm dark:bg-card/40">
-      <p className="mb-0.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">{label}</p>
+      <p className="mb-0.5 text-[10px] font-bold tracking-widest text-muted-foreground/60 uppercase">{label}</p>
       <p
-        className={`text-sm font-medium leading-snug ${empty ? "italic text-muted-foreground/40" : "text-foreground"}`}
+        className={`text-sm leading-snug font-medium ${empty ? "text-muted-foreground/40 italic" : "text-foreground"}`}
       >
         {empty ? "—" : value}
       </p>
     </div>
-  );
+  )
 }
 
 /* ─── Field grid ────────────────────────────────────────────────── */
 function FieldGrid({ children, cols = 3 }: { children: React.ReactNode; cols?: 2 | 3 | 4 }) {
   const cls =
-    cols === 2 ? "sm:grid-cols-2" : cols === 4 ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-3";
-  return <div className={`grid gap-3 ${cls}`}>{children}</div>;
+    cols === 2 ? "sm:grid-cols-2" : cols === 4 ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-3"
+  return <div className={`grid gap-3 ${cls}`}>{children}</div>
 }
 
 /* ─── Area summary grid ─────────────────────────────────────────── */
@@ -95,24 +95,24 @@ function AreaMetricCard({
   sqm,
   color,
 }: {
-  label: string;
-  sqft: number;
-  sqm: string;
-  color: keyof typeof AREA_METRIC_CARD_STYLES;
+  label: string
+  sqft: number
+  sqm: string
+  color: keyof typeof AREA_METRIC_CARD_STYLES
 }) {
   return (
     <div className={`rounded-xl border p-4 shadow-premium-sm ${AREA_METRIC_CARD_STYLES[color]}`}>
-      <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">{label}</p>
-      <p className="mt-1.5 text-xl font-black tabular-nums leading-none">
+      <p className="text-[10px] font-bold tracking-widest uppercase opacity-60">{label}</p>
+      <p className="mt-1.5 text-xl leading-none font-black tabular-nums">
         {sqft > 0 ? sqft.toLocaleString("en-IN") : "—"}
       </p>
       <p className="mt-0.5 text-xs opacity-60">{sqft > 0 ? sqm : "—"}</p>
     </div>
-  );
+  )
 }
 
 function AreaSummaryGrid({ survey }: { survey: SurveyDetail }) {
-  const areas = surveyAreaMetrics({ plotSqft: survey.plotSqft, plinthSqft: survey.plinthSqft, floors: survey.floors });
+  const areas = surveyAreaMetrics({ plotSqft: survey.plotSqft, plinthSqft: survey.plinthSqft, floors: survey.floors })
   return (
     <div className="grid gap-3 sm:grid-cols-3">
       <AreaMetricCard label="Plot Area" sqft={areas.plotSqft} sqm={formatAreaSqMeter(areas.plotSqft)} color="navy" />
@@ -129,34 +129,34 @@ function AreaSummaryGrid({ survey }: { survey: SurveyDetail }) {
         color="success"
       />
     </div>
-  );
+  )
 }
 
 /* ─── Floors table ──────────────────────────────────────────────── */
 function FloorsTable({ floors, masters }: { floors: FloorRow[]; masters: any }) {
-  const areas = surveyAreaMetrics({ plotSqft: 0, plinthSqft: 0, floors });
+  const areas = surveyAreaMetrics({ plotSqft: 0, plinthSqft: 0, floors })
   return (
     <div className="space-y-3">
       <div className="overflow-hidden rounded-xl border border-border/60">
         <Table>
           <TableHeader>
             <TableRow className="border-b border-brand-navy/10 bg-linear-to-r from-brand-navy/6 via-muted/25 to-brand-navy/4 hover:from-brand-navy/6 dark:border-primary/15 dark:from-primary/12 dark:via-muted/10 dark:to-primary/6">
-              <TableHead className="w-14 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+              <TableHead className="w-14 text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
                 S. No
               </TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+              <TableHead className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
                 Floor
               </TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+              <TableHead className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
                 Usage type
               </TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+              <TableHead className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
                 Usage factor
               </TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+              <TableHead className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
                 Construction
               </TableHead>
-              <TableHead className="text-right text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+              <TableHead className="text-right text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
                 Area
               </TableHead>
             </TableRow>
@@ -167,17 +167,17 @@ function FloorsTable({ floors, masters }: { floors: FloorRow[]; masters: any }) 
                 key={f._id}
                 className={`border-b border-border/40 last:border-b-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/20 dark:bg-muted/10"}`}
               >
-                <TableCell className="font-mono text-sm tabular-nums text-muted-foreground">{i + 1}</TableCell>
+                <TableCell className="font-mono text-sm text-muted-foreground tabular-nums">{i + 1}</TableCell>
                 <TableCell className="font-medium capitalize">
                   {labelFromOptions(masters?.floors, f.floorName)}
                 </TableCell>
-                <TableCell className="capitalize text-muted-foreground">
+                <TableCell className="text-muted-foreground capitalize">
                   {labelFromOptions(masters?.usageTypes, f.usageType) || "—"}
                 </TableCell>
-                <TableCell className="capitalize text-muted-foreground">
+                <TableCell className="text-muted-foreground capitalize">
                   {labelFromOptions(masters?.usageFactors, f.usageFactor) || "—"}
                 </TableCell>
-                <TableCell className="capitalize text-muted-foreground">
+                <TableCell className="text-muted-foreground capitalize">
                   {labelFromOptions(masters?.constructionTypes, f.constructionType)}
                 </TableCell>
                 <TableCell className="text-right font-mono font-semibold tabular-nums">
@@ -189,7 +189,7 @@ function FloorsTable({ floors, masters }: { floors: FloorRow[]; masters: any }) 
         </Table>
       </div>
       <div className="flex items-center justify-between rounded-xl border border-brand-navy/15 bg-brand-navy/5 px-4 py-2.5 dark:border-primary/20 dark:bg-primary/10">
-        <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Total Built-up Area</span>
+        <span className="text-xs font-bold tracking-[0.14em] text-muted-foreground uppercase">Total Built-up Area</span>
         <span className="font-mono text-sm font-bold text-brand-navy dark:text-primary-foreground">
           {areas.builtUpSqft > 0
             ? `${areas.builtUpSqft.toLocaleString("en-IN")} Sqft · ${formatAreaSqMeter(areas.builtUpSqft)}`
@@ -197,7 +197,7 @@ function FloorsTable({ floors, masters }: { floors: FloorRow[]; masters: any }) 
         </span>
       </div>
     </div>
-  );
+  )
 }
 
 /* ─── Audit table ───────────────────────────────────────────────── */
@@ -208,13 +208,13 @@ function AuditTable({ audit, propertyId }: { audit: any[]; propertyId?: string }
         <TableHeader>
           <TableRow className="border-b border-border/60 bg-muted/40 hover:bg-muted/40 dark:bg-muted/20">
             <PropertyIdTableHead />
-            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+            <TableHead className="text-[10px] font-bold tracking-wider text-muted-foreground/70 uppercase">
               When
             </TableHead>
-            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+            <TableHead className="text-[10px] font-bold tracking-wider text-muted-foreground/70 uppercase">
               Action
             </TableHead>
-            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+            <TableHead className="text-[10px] font-bold tracking-wider text-muted-foreground/70 uppercase">
               Actor
             </TableHead>
           </TableRow>
@@ -226,7 +226,7 @@ function AuditTable({ audit, propertyId }: { audit: any[]; propertyId?: string }
               className={`border-b border-border/40 last:border-b-0 ${i % 2 === 0 ? "" : "bg-muted/10"}`}
             >
               <PropertyIdTableCell propertyId={propertyId} />
-              <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+              <TableCell className="text-xs whitespace-nowrap text-muted-foreground">
                 {fmtDate(a._creationTime)}
               </TableCell>
               <TableCell>
@@ -240,19 +240,19 @@ function AuditTable({ audit, propertyId }: { audit: any[]; propertyId?: string }
         </TableBody>
       </Table>
     </div>
-  );
+  )
 }
 
 /* ─── Photo slots ───────────────────────────────────────────────── */
 function DetailPhotoSlots({ photos, uploaderName }: { photos: SurveyDetail["photos"]; uploaderName?: string }) {
-  const uploadedCount = DETAIL_PHOTO_SLOT_ORDER.filter((s) => photos.find((p) => p.slot === s)?.url).length;
+  const uploadedCount = DETAIL_PHOTO_SLOT_ORDER.filter((s) => photos.find((p) => p.slot === s)?.url).length
   return (
     <div className="space-y-4">
       {/* Progress bar */}
       <div className="flex items-center gap-3">
         <div className="flex-1 space-y-1">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Photos uploaded</p>
+            <p className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">Photos uploaded</p>
             <span className="text-xs font-bold text-brand-navy dark:text-primary">
               {uploadedCount}/{DETAIL_PHOTO_SLOT_ORDER.length}
             </span>
@@ -267,8 +267,8 @@ function DetailPhotoSlots({ photos, uploaderName }: { photos: SurveyDetail["phot
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         {DETAIL_PHOTO_SLOT_ORDER.map((slot) => {
-          const photo = photos.find((p) => p.slot === slot);
-          const required = slot === "front" || slot === "side";
+          const photo = photos.find((p) => p.slot === slot)
+          const required = slot === "front" || slot === "side"
           return (
             <div
               key={slot}
@@ -298,7 +298,7 @@ function DetailPhotoSlots({ photos, uploaderName }: { photos: SurveyDetail["phot
                 )}
                 {/* Required badge */}
                 {required && !photo?.url && (
-                  <div className="absolute right-2 top-2">
+                  <div className="absolute top-2 right-2">
                     <span className="rounded-full bg-warning px-2 py-0.5 text-[10px] font-bold text-amber-950 shadow-sm">
                       Required
                     </span>
@@ -306,7 +306,7 @@ function DetailPhotoSlots({ photos, uploaderName }: { photos: SurveyDetail["phot
                 )}
                 {/* Uploaded badge */}
                 {photo?.url && (
-                  <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
                     <span className="rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
                       View
                     </span>
@@ -320,11 +320,11 @@ function DetailPhotoSlots({ photos, uploaderName }: { photos: SurveyDetail["phot
                 </p>
               </div>
             </div>
-          );
+          )
         })}
       </div>
     </div>
-  );
+  )
 }
 
 /* ─── Variant config ────────────────────────────────────────────── */
@@ -339,30 +339,30 @@ const SURVEY_DETAIL_VARIANTS = {
     showQcRemarks: false,
     showStatusInBody: true,
   },
-} as const;
+} as const
 
-type SurveyDetailVariant = keyof typeof SURVEY_DETAIL_VARIANTS;
+type SurveyDetailVariant = keyof typeof SURVEY_DETAIL_VARIANTS
 
 type SurveyDetailViewCoreProps = {
-  survey: SurveyDetail;
-  surveyId: string;
-  remarks?: QcRemarkWithAuthor[];
-  variant: SurveyDetailVariant;
-};
+  survey: SurveyDetail
+  surveyId: string
+  remarks?: QcRemarkWithAuthor[]
+  variant: SurveyDetailVariant
+}
 
 function SurveyDetailViewCore({ survey, surveyId, remarks, variant }: SurveyDetailViewCoreProps) {
-  const { showProgressFooter, showQcRemarks, showStatusInBody } = SURVEY_DETAIL_VARIANTS[variant];
-  const { masters } = useMasters();
-  const audit = useAuditLog({ entity: "survey", entityId: surveyId, limit: 100 });
-  const ulbCodes = buildUlbCodeMap(masters?.ulbs);
-  const propertyId = resolveDisplayPropertyId(survey, ulbCodes) ?? survey.propertyId;
-  const owners: OwnerEntry[] = survey.owners ?? [];
-  const ulb = masters?.ulbs?.find((m: { _id: string }) => m._id === survey.municipalityId);
+  const { showProgressFooter, showQcRemarks, showStatusInBody } = SURVEY_DETAIL_VARIANTS[variant]
+  const { masters } = useMasters()
+  const audit = useAuditLog({ entity: "survey", entityId: surveyId, limit: 100 })
+  const ulbCodes = buildUlbCodeMap(masters?.ulbs)
+  const propertyId = resolveDisplayPropertyId(survey, ulbCodes) ?? survey.propertyId
+  const owners: OwnerEntry[] = survey.owners ?? []
+  const ulb = masters?.ulbs?.find((m: { _id: string }) => m._id === survey.municipalityId)
   const district = masters?.districts?.find(
-    (d: { _id: string }) => d._id === (survey as { districtId?: string }).districtId,
-  );
-  const progress = surveyCompletionPercent(survey);
-  const propertyTypeOptions = survey.propertyUse ? masters?.propertyUseSubcategories?.[survey.propertyUse] : undefined;
+    (d: { _id: string }) => d._id === (survey as { districtId?: string }).districtId
+  )
+  const progress = surveyCompletionPercent(survey)
+  const propertyTypeOptions = survey.propertyUse ? masters?.propertyUseSubcategories?.[survey.propertyUse] : undefined
 
   return (
     <div className="space-y-4">
@@ -413,16 +413,16 @@ function SurveyDetailViewCore({ survey, surveyId, remarks, variant }: SurveyDeta
               <TableHeader>
                 <TableRow className="border-b border-brand-navy/10 bg-linear-to-r from-brand-navy/6 via-muted/25 to-brand-navy/4 hover:from-brand-navy/6 dark:border-primary/15 dark:from-primary/12 dark:via-muted/10 dark:to-primary/6">
                   <PropertyIdTableHead />
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                  <TableHead className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
                     Name
                   </TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                  <TableHead className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
                     Father / Husband
                   </TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                  <TableHead className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
                     Mobile
                   </TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                  <TableHead className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
                     Alt Mobile
                   </TableHead>
                 </TableRow>
@@ -437,7 +437,7 @@ function SurveyDetailViewCore({ survey, surveyId, remarks, variant }: SurveyDeta
                     <TableCell className="font-medium">{o.name || "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{o.fatherOrHusbandName || "—"}</TableCell>
                     <TableCell className="tabular-nums">{o.mobileNo || "—"}</TableCell>
-                    <TableCell className="tabular-nums text-muted-foreground">{o.altMobileNo || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground tabular-nums">{o.altMobileNo || "—"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -523,13 +523,21 @@ function SurveyDetailViewCore({ survey, surveyId, remarks, variant }: SurveyDeta
       </SectionCard>
 
       {/* ── QC Remarks ─────────────────────────────────────────── */}
-      {showQcRemarks && (remarks === undefined || remarks.length > 0) && (
+      {showQcRemarks && (
         <SectionCard
           title="QC Remarks & Corrections"
           description="Feedback from supervisors during quality control review."
           icon={<MessageSquare className="h-4 w-4" aria-hidden />}
         >
-          <QcRemarksThread remarks={remarks} />
+          {remarks === undefined ? (
+            <Skeleton className="h-24 w-full rounded-xl" />
+          ) : remarks.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border/50 px-4 py-6 text-center text-sm text-muted-foreground">
+              No QC remarks yet
+            </p>
+          ) : (
+            <QcRemarksThread remarks={remarks} />
+          )}
         </SectionCard>
       )}
 
@@ -579,12 +587,12 @@ function SurveyDetailViewCore({ survey, surveyId, remarks, variant }: SurveyDeta
         </div>
       )}
     </div>
-  );
+  )
 }
 
 /** Read-only survey detail for QC review — no progress footer or QC remarks thread. */
 export function QcReviewDetailView({ survey, surveyId }: { survey: SurveyDetail; surveyId: string }) {
-  return <SurveyDetailViewCore survey={survey} surveyId={surveyId} variant="qc-review" />;
+  return <SurveyDetailViewCore survey={survey} surveyId={surveyId} variant="qc-review" />
 }
 
 /** Survey detail page — read-only; use `/surveys/[id]/edit` for CRUD. */
@@ -593,9 +601,9 @@ export function SurveyPageDetailView({
   surveyId,
   remarks,
 }: {
-  survey: SurveyDetail;
-  surveyId: string;
-  remarks?: QcRemarkWithAuthor[];
+  survey: SurveyDetail
+  surveyId: string
+  remarks?: QcRemarkWithAuthor[]
 }) {
-  return <SurveyDetailViewCore survey={survey} surveyId={surveyId} remarks={remarks} variant="survey-view" />;
+  return <SurveyDetailViewCore survey={survey} surveyId={surveyId} remarks={remarks} variant="survey-view" />
 }

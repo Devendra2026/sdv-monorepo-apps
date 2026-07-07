@@ -1,24 +1,24 @@
-"use client";
+"use client"
 
-import type { QcToolbarVariant } from "@/components/qc/qc-action-bar.types";
-import { qcActionBtn } from "@/components/qc/qc-action-styles";
-import { RoleGate } from "@/components/shared/role-gate";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import type { SurveyListItem } from "@/schema/surveys/index";
-import { CheckCircle2, Eye, Loader2, Pencil, RotateCcw, Save, Trash2 } from "lucide-react";
-import Link from "next/link";
+import type { QcToolbarVariant } from "@/components/qc/qc-action-bar.types"
+import { qcActionBtn } from "@/components/qc/qc-action-styles"
+import { RoleGate } from "@/components/shared/role-gate"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+import type { SurveyListItem } from "@workspace/schemas"
+import { CheckCircle2, Eye, Loader2, Pencil, RotateCcw, Save, Trash2 } from "lucide-react"
+import Link from "next/link"
 
 type QcActionBarToolbarProps = {
-  survey: Pick<SurveyListItem, "_id" | "status" | "qcStatus">;
-  variant: QcToolbarVariant;
-  isWorking: boolean;
-  saving: boolean;
-  onDeleteOpen: () => void;
-  onReopen: () => void;
-  onSave: () => void;
-  onApprove: () => void;
-};
+  survey: Pick<SurveyListItem, "_id" | "status" | "qcStatus">
+  variant: QcToolbarVariant
+  isWorking: boolean
+  saving: boolean
+  onDeleteOpen: () => void
+  onReopen: () => void
+  onSave: () => void
+  onApprove: () => void
+}
 
 export function QcActionBarToolbar({
   survey,
@@ -30,11 +30,11 @@ export function QcActionBarToolbar({
   onSave,
   onApprove,
 }: QcActionBarToolbarProps) {
-  const isApproved = variant === "approved";
-  const showEditLink = variant === "review-pending" || variant === "review-blocked";
-  const showReviewLink = variant === "edit-needs-save" || variant === "edit-ready" || variant === "edit-blocked";
-  const showSave = variant === "edit-needs-save";
-  const showDecide = variant === "review-pending" || variant === "edit-ready";
+  const isApproved = variant === "approved"
+  const showEditLink = variant === "review-pending" || variant === "review-blocked"
+  const showReviewLink = variant === "edit-needs-save" || variant === "edit-ready" || variant === "edit-blocked"
+  const showSave = variant === "edit-needs-save"
+  const showDecide = variant === "review-pending" || variant === "edit-ready"
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-wrap items-center gap-2">
@@ -128,5 +128,5 @@ export function QcActionBarToolbar({
         )}
       </div>
     </div>
-  );
+  )
 }

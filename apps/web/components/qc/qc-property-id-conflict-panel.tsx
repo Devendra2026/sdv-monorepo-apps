@@ -1,53 +1,53 @@
-"use client";
+"use client"
 
-import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card";
-import { QcPropertyUseCell } from "@/components/qc/qc-registry-cells";
-import { QcStatusBadge } from "@/components/shared/status-badge";
-import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { Id } from "@/convex/_generated/dataModel";
-import { useMasters } from "@/hooks/masters/useMasters";
-import { useDecide, usePropertyIdConflicts } from "@/hooks/qc/useQc";
-import { QC_DUPLICATE_BADGE, QC_TABLE } from "@/lib/design-system";
-import { formatRegistryParcelNo, formatRegistryWardNo } from "@/lib/survey/format-registry-parcel";
-import { buildUlbCodeMap, resolveDisplayPropertyId } from "@/lib/survey/resolve-display-property-id";
-import { resolveOwnerDisplayName } from "@/lib/survey/resolve-owner-name";
-import { cn } from "@/lib/utils";
-import { AlertTriangle, Eye, Pencil } from "lucide-react";
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { toast } from "sonner";
+import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card"
+import { QcPropertyUseCell } from "@/components/qc/qc-registry-cells"
+import { QcStatusBadge } from "@/components/shared/status-badge"
+import { Button } from "@/components/ui/button"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useMasters } from "@/hooks/masters/useMasters"
+import { useDecide, usePropertyIdConflicts } from "@/hooks/qc/useQc"
+import { QC_DUPLICATE_BADGE, QC_TABLE } from "@/lib/design-system"
+import { formatRegistryParcelNo, formatRegistryWardNo } from "@/lib/survey/format-registry-parcel"
+import { buildUlbCodeMap, resolveDisplayPropertyId } from "@/lib/survey/resolve-display-property-id"
+import { resolveOwnerDisplayName } from "@/lib/survey/resolve-owner-name"
+import { cn } from "@/lib/utils"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { AlertTriangle, Eye, Pencil } from "lucide-react"
+import Link from "next/link"
+import { useMemo, useState } from "react"
+import { toast } from "sonner"
 
 const DUPLICATE_REJECT_COMMENT =
-  "Duplicate Property ID — reject this record or correct ward, parcel, unit, or property use with the field team.";
+  "Duplicate Property ID — reject this record or correct ward, parcel, unit, or property use with the field team."
 
 export function QcPropertyIdConflictPanel({ surveyId, propertyId }: { surveyId: string; propertyId?: string }) {
-  const conflicts = usePropertyIdConflicts(surveyId);
-  const decide = useDecide();
-  const { masters } = useMasters();
-  const ulbCodes = useMemo(() => (masters ? buildUlbCodeMap(masters.ulbs) : undefined), [masters]);
-  const propertyUses = masters?.propertyUses;
-  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const conflicts = usePropertyIdConflicts(surveyId)
+  const decide = useDecide()
+  const { masters } = useMasters()
+  const ulbCodes = useMemo(() => (masters ? buildUlbCodeMap(masters.ulbs) : undefined), [masters])
+  const propertyUses = masters?.propertyUses
+  const [rejectingId, setRejectingId] = useState<string | null>(null)
 
-  if (conflicts === undefined) return null;
-  if (conflicts.length === 0) return null;
+  if (conflicts === undefined) return null
+  if (conflicts.length === 0) return null
 
   const handleRejectDuplicate = async (targetId: string) => {
-    setRejectingId(targetId);
+    setRejectingId(targetId)
     try {
       await decide({
         surveyId: targetId as Id<"surveys">,
         decision: "reject",
         comment: DUPLICATE_REJECT_COMMENT,
         taggedSections: ["property"],
-      });
-      toast.success("Record returned to surveyor for correction");
+      })
+      toast.success("Record returned to surveyor for correction")
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not reject record");
+      toast.error(err instanceof Error ? err.message : "Could not reject record")
     } finally {
-      setRejectingId(null);
+      setRejectingId(null)
     }
-  };
+  }
 
   return (
     <GlassCard padding="md" className={cn("border-red-500/35", QC_DUPLICATE_BADGE.conflictPanel)}>
@@ -124,7 +124,7 @@ export function QcPropertyIdConflictPanel({ surveyId, propertyId }: { surveyId: 
                         variant="outline"
                         className={cn(
                           "h-7 cursor-pointer rounded-full px-2.5 text-xs",
-                          QC_DUPLICATE_BADGE.rejectButton,
+                          QC_DUPLICATE_BADGE.rejectButton
                         )}
                         disabled={rejectingId === row._id}
                         onClick={() => void handleRejectDuplicate(row._id)}
@@ -140,5 +140,5 @@ export function QcPropertyIdConflictPanel({ surveyId, propertyId }: { surveyId: 
         </Table>
       </div>
     </GlassCard>
-  );
+  )
 }

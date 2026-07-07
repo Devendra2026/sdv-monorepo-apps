@@ -1,29 +1,29 @@
-"use client";
+"use client"
 
-import type { DemandNoticeData } from "@/lib/qc/demand-notice";
-import type { SurveyDetail } from "@/schema/surveys/index";
-import { Building2, Hash, Home, MapPin, Phone, User } from "lucide-react";
-import { BilingualLabel } from "./bilingual-label";
+import type { DemandNoticeData } from "@/lib/qc/demand-notice"
+import type { SurveyDetail } from "@workspace/schemas"
+import { Building2, Hash, Home, MapPin, Phone, User } from "lucide-react"
+import { BilingualLabel } from "./bilingual-label"
 
 function maskMobileNo(mobileNo: string): string {
-  const digits = mobileNo.replace(/\D/g, "");
-  if (digits.length < 4) return mobileNo || "—";
-  const visible = digits.slice(-4);
-  return `XXXXXX${visible}`;
+  const digits = mobileNo.replace(/\D/g, "")
+  if (digits.length < 4) return mobileNo || "—"
+  const visible = digits.slice(-4)
+  return `XXXXXX${visible}`
 }
 
 type SharedProps = {
-  survey: SurveyDetail;
-  propertyId: string;
-  ownerName: string;
-  fatherName: string;
-  mobileNo: string;
-  oldHouseNo: string;
-  taxZone: string;
-  address: string;
-  propertyUseLabel: string;
-  notice: DemandNoticeData;
-};
+  survey: SurveyDetail
+  propertyId: string
+  ownerName: string
+  fatherName: string
+  mobileNo: string
+  oldHouseNo: string
+  taxZone: string
+  address: string
+  propertyUseLabel: string
+  notice: DemandNoticeData
+}
 
 function DataCell({
   label,
@@ -32,17 +32,17 @@ function DataCell({
   mono,
   wide,
 }: {
-  label: string;
-  value: string;
-  icon: typeof Home;
-  mono?: boolean;
-  wide?: boolean;
+  label: string
+  value: string
+  icon: typeof Home
+  mono?: boolean
+  wide?: boolean
 }) {
   return (
     <div
-      className={`dn-field-cell rounded-md border border-slate-100 bg-slate-50/80 px-4 py-3 ${wide ? "sm:col-span-2 dn-field-wide" : ""}`}
+      className={`dn-field-cell rounded-md border border-slate-100 bg-slate-50/80 px-4 py-3 ${wide ? "dn-field-wide sm:col-span-2" : ""}`}
     >
-      <dt className="dn-label dn-field-label inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+      <dt className="dn-label dn-field-label inline-flex items-center gap-1.5 text-xs font-semibold tracking-wider text-slate-400 uppercase">
         <Icon className="h-3.5 w-3.5 text-slate-400 print:hidden" aria-hidden />
         {label}
       </dt>
@@ -52,7 +52,7 @@ function DataCell({
         {value || "—"}
       </dd>
     </div>
-  );
+  )
 }
 
 export function NoticePropertySpecs({ survey, oldHouseNo, taxZone, propertyUseLabel }: SharedProps) {
@@ -60,7 +60,7 @@ export function NoticePropertySpecs({ survey, oldHouseNo, taxZone, propertyUseLa
     <section className="dn-section demand-notice-property-section rounded-md border border-slate-200 bg-white p-4 print:p-2">
       <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
         <Hash className="h-4 w-4 text-[#4648d4]" aria-hidden />
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-700">
+        <p className="text-xs font-bold tracking-[0.14em] text-slate-700 uppercase">
           <BilingualLabel en="Property Specifications" hi="संपत्ति विनिर्देश" />
         </p>
       </div>
@@ -72,16 +72,16 @@ export function NoticePropertySpecs({ survey, oldHouseNo, taxZone, propertyUseLa
         <DataCell label="Property Use" value={propertyUseLabel || "—"} icon={Home} />
       </dl>
     </section>
-  );
+  )
 }
 
 export function NoticeOwnerProfile({ ownerName, fatherName, mobileNo, address }: SharedProps) {
-  const maskedMobile = maskMobileNo(mobileNo);
+  const maskedMobile = maskMobileNo(mobileNo)
   return (
     <section className="dn-section rounded-md border border-slate-200 bg-white p-4 print:p-2">
       <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
         <User className="h-4 w-4 text-[#4648d4]" aria-hidden />
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-700">
+        <p className="text-xs font-bold tracking-[0.14em] text-slate-700 uppercase">
           <BilingualLabel en="Owner Profile" hi="स्वामी विवरण" />
         </p>
       </div>
@@ -92,5 +92,5 @@ export function NoticeOwnerProfile({ ownerName, fatherName, mobileNo, address }:
         <DataCell label="Address" value={address || "—"} icon={MapPin} wide />
       </dl>
     </section>
-  );
+  )
 }

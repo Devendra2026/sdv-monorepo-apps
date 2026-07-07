@@ -1,22 +1,22 @@
-"use client";
+"use client"
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { parseCoordinate } from "@/lib/surveys/gps-coordinates";
-import type { GpsCapture } from "@/schema/surveys/index";
-import { Crosshair, Loader2, Save } from "lucide-react";
-import { useState } from "react";
+import { parseCoordinate } from "@/lib/surveys/gps-coordinates"
+import type { GpsCapture } from "@workspace/schemas"
+import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
+import { Label } from "@workspace/ui/components/label"
+import { Crosshair, Loader2, Save } from "lucide-react"
+import { useState } from "react"
 
 type GpsCoordinateInputsProps = {
-  initialLatitude: string;
-  initialLongitude: string;
-  gps?: GpsCapture;
-  capturing: boolean;
-  saving: boolean;
-  onCapture: () => void;
-  onSave: (lat: number | null, lng: number | null) => void;
-};
+  initialLatitude: string
+  initialLongitude: string
+  gps?: GpsCapture
+  capturing: boolean
+  saving: boolean
+  onCapture: () => void
+  onSave: (lat: number | null, lng: number | null) => void
+}
 
 export function GpsCoordinateInputs({
   initialLatitude,
@@ -27,18 +27,18 @@ export function GpsCoordinateInputs({
   onCapture,
   onSave,
 }: GpsCoordinateInputsProps) {
-  const [latInput, setLatInput] = useState(initialLatitude);
-  const [lngInput, setLngInput] = useState(initialLongitude);
+  const [latInput, setLatInput] = useState(initialLatitude)
+  const [lngInput, setLngInput] = useState(initialLongitude)
 
   function saveManual() {
-    const lat = parseCoordinate(latInput, -90, 90);
-    const lng = parseCoordinate(lngInput, -180, 180);
-    onSave(lat, lng);
+    const lat = parseCoordinate(latInput, -90, 90)
+    const lng = parseCoordinate(lngInput, -180, 180)
+    onSave(lat, lng)
   }
 
   return (
     <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-premium-sm">
-      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Edit coordinates</p>
+      <p className="mb-3 text-[10px] font-bold tracking-widest text-muted-foreground/60 uppercase">Edit coordinates</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="gps-latitude" className="text-xs font-semibold">
@@ -99,5 +99,5 @@ export function GpsCoordinateInputs({
         </Button>
       </div>
     </div>
-  );
+  )
 }

@@ -1,14 +1,14 @@
-"use client";
+"use client"
 
-import { PermissionPicker, type PermissionOption } from "@/components/rbac/permission-picker";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
-import type { Id } from "@/convex/_generated/dataModel";
-import { cn } from "@/lib/utils";
+import { PermissionPicker, type PermissionOption } from "@/components/rbac/permission-picker"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import {
   AlertTriangle,
   ArrowLeft,
@@ -23,41 +23,41 @@ import {
   ShieldCheck,
   ShieldOff,
   Sparkles,
-} from "lucide-react";
-import { useMemo, useReducer, useState } from "react";
+} from "lucide-react"
+import { useMemo, useReducer, useState } from "react"
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
 export type RoleRow = {
-  _id: Id<"roles">;
-  key: string;
-  name: string;
-  isSystem: boolean;
-  isActive: boolean;
-  permissionKeys: string[];
-  description?: string;
-};
+  _id: Id<"roles">
+  key: string
+  name: string
+  isSystem: boolean
+  isActive: boolean
+  permissionKeys: string[]
+  description?: string
+}
 
 type RolesMasterDetailProps = {
-  systemRoles: RoleRow[];
-  customRoles: RoleRow[];
-  selectedId: Id<"roles"> | null;
-  mode: "view" | "edit" | "create";
-  search: string;
-  onSearchChange: (value: string) => void;
-  roleCount: number;
-  permCount: number;
-  selectedRole: RoleRow | undefined;
-  permissionOptions: PermissionOption[];
-  permissionLabels: Map<string, string>;
-  permissionCategories: Map<string, string>;
-  onSelectRole: (id: Id<"roles">) => void;
-  onStartCreate: () => void;
-  onSetMode: (mode: "view" | "edit" | "create") => void;
-  onToggleActive: (role: RoleRow) => void;
-  onSaveEdit: (patch: { name: string; description: string; permissionKeys: string[] }) => Promise<void>;
-  onCreateRole: (data: { key: string; name: string; description: string; permissionKeys: string[] }) => Promise<void>;
-};
+  systemRoles: RoleRow[]
+  customRoles: RoleRow[]
+  selectedId: Id<"roles"> | null
+  mode: "view" | "edit" | "create"
+  search: string
+  onSearchChange: (value: string) => void
+  roleCount: number
+  permCount: number
+  selectedRole: RoleRow | undefined
+  permissionOptions: PermissionOption[]
+  permissionLabels: Map<string, string>
+  permissionCategories: Map<string, string>
+  onSelectRole: (id: Id<"roles">) => void
+  onStartCreate: () => void
+  onSetMode: (mode: "view" | "edit" | "create") => void
+  onToggleActive: (role: RoleRow) => void
+  onSaveEdit: (patch: { name: string; description: string; permissionKeys: string[] }) => Promise<void>
+  onCreateRole: (data: { key: string; name: string; description: string; permissionKeys: string[] }) => Promise<void>
+}
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -78,12 +78,12 @@ const ROLE_ACCENT: Record<string, { border: string; icon: string }> = {
     border: "border-l-amber-500",
     icon: "bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400",
   },
-};
+}
 
 const DEFAULT_ACCENT = {
   border: "border-l-slate-400",
   icon: "bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400",
-};
+}
 
 const CATEGORY_COLORS: Record<string, string> = {
   admin:
@@ -94,16 +94,16 @@ const CATEGORY_COLORS: Record<string, string> = {
     "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30",
   reports: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/30",
   users: "bg-pink-100 text-pink-700 border-pink-200 dark:bg-pink-500/20 dark:text-pink-300 dark:border-pink-500/30",
-};
+}
 
 function catColor(cat: string) {
-  return CATEGORY_COLORS[cat.toLowerCase()] ?? "bg-muted text-muted-foreground border-border";
+  return CATEGORY_COLORS[cat.toLowerCase()] ?? "bg-muted text-muted-foreground border-border"
 }
 
 // ─── sidebar item ─────────────────────────────────────────────────────────────
 
 function RoleItem({ role, selected, onClick }: { role: RoleRow; selected: boolean; onClick: () => void }) {
-  const accent = ROLE_ACCENT[role.key] ?? DEFAULT_ACCENT;
+  const accent = ROLE_ACCENT[role.key] ?? DEFAULT_ACCENT
 
   if (role.isSystem) {
     return (
@@ -111,12 +111,12 @@ function RoleItem({ role, selected, onClick }: { role: RoleRow; selected: boolea
         type="button"
         onClick={onClick}
         className={cn(
-          "group w-full cursor-pointer rounded-lg border border-l-[3px] px-3 py-2.5 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "group w-full cursor-pointer rounded-lg border border-l-[3px] px-3 py-2.5 text-left transition-all duration-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
           accent.border,
           selected
             ? "border-slate-300 bg-slate-100 shadow-sm ring-1 ring-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:ring-slate-600"
             : "border-slate-200 bg-slate-50 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900/50 dark:hover:bg-slate-800/80",
-          !role.isActive && "opacity-50",
+          !role.isActive && "opacity-50"
         )}
       >
         <div className="flex items-center gap-2.5">
@@ -126,11 +126,11 @@ function RoleItem({ role, selected, onClick }: { role: RoleRow; selected: boolea
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">{role.name}</span>
-              <span className="shrink-0 rounded bg-slate-200 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500 dark:bg-slate-700 dark:text-slate-400">
+              <span className="shrink-0 rounded bg-slate-200 px-1 py-0.5 text-[9px] font-bold tracking-wide text-slate-500 uppercase dark:bg-slate-700 dark:text-slate-400">
                 SYS
               </span>
               {!role.isActive && (
-                <span className="shrink-0 rounded bg-red-100 px-1 py-0.5 text-[9px] font-bold uppercase text-red-500">
+                <span className="shrink-0 rounded bg-red-100 px-1 py-0.5 text-[9px] font-bold text-red-500 uppercase">
                   off
                 </span>
               )}
@@ -143,12 +143,12 @@ function RoleItem({ role, selected, onClick }: { role: RoleRow; selected: boolea
           <ChevronRight
             className={cn(
               "h-3.5 w-3.5 shrink-0 text-slate-300 dark:text-slate-600",
-              selected && "text-slate-500 dark:text-slate-400",
+              selected && "text-slate-500 dark:text-slate-400"
             )}
           />
         </div>
       </button>
-    );
+    )
   }
 
   return (
@@ -156,11 +156,11 @@ function RoleItem({ role, selected, onClick }: { role: RoleRow; selected: boolea
       type="button"
       onClick={onClick}
       className={cn(
-        "group w-full cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "group w-full cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-all duration-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
         selected
           ? "border-violet-300 bg-violet-50 shadow-sm ring-1 ring-violet-200 dark:border-violet-700 dark:bg-violet-500/10 dark:ring-violet-700"
           : "border-border bg-card hover:border-violet-200 hover:bg-violet-50/50 dark:hover:border-violet-800 dark:hover:bg-violet-500/5",
-        !role.isActive && "opacity-50",
+        !role.isActive && "opacity-50"
       )}
     >
       <div className="flex items-center gap-2.5">
@@ -172,16 +172,16 @@ function RoleItem({ role, selected, onClick }: { role: RoleRow; selected: boolea
             <span
               className={cn(
                 "truncate text-sm font-semibold",
-                selected ? "text-violet-700 dark:text-violet-300" : "text-foreground",
+                selected ? "text-violet-700 dark:text-violet-300" : "text-foreground"
               )}
             >
               {role.name}
             </span>
-            <span className="shrink-0 rounded bg-violet-100 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-600 dark:bg-violet-500/20 dark:text-violet-400">
+            <span className="shrink-0 rounded bg-violet-100 px-1 py-0.5 text-[9px] font-bold tracking-wide text-violet-600 uppercase dark:bg-violet-500/20 dark:text-violet-400">
               CUSTOM
             </span>
             {!role.isActive && (
-              <span className="shrink-0 rounded bg-red-100 px-1 py-0.5 text-[9px] font-bold uppercase text-red-500">
+              <span className="shrink-0 rounded bg-red-100 px-1 py-0.5 text-[9px] font-bold text-red-500 uppercase">
                 off
               </span>
             )}
@@ -196,7 +196,7 @@ function RoleItem({ role, selected, onClick }: { role: RoleRow; selected: boolea
         />
       </div>
     </button>
-  );
+  )
 }
 
 // ─── permission view ──────────────────────────────────────────────────────────
@@ -206,25 +206,25 @@ function PermissionMatrix({
   permissionLabels,
   permissionCategories,
 }: {
-  role: RoleRow;
-  permissionLabels: Map<string, string>;
-  permissionCategories: Map<string, string>;
+  role: RoleRow
+  permissionLabels: Map<string, string>
+  permissionCategories: Map<string, string>
 }) {
   const byCategory = useMemo(() => {
-    const map = new Map<string, string[]>();
+    const map = new Map<string, string[]>()
     for (const key of role.permissionKeys) {
-      const cat = permissionCategories.get(key) ?? "other";
-      map.set(cat, [...(map.get(cat) ?? []), key]);
+      const cat = permissionCategories.get(key) ?? "other"
+      map.set(cat, [...(map.get(cat) ?? []), key])
     }
-    return Array.from(map.entries()).toSorted(([a], [b]) => a.localeCompare(b));
-  }, [role.permissionKeys, permissionCategories]);
+    return Array.from(map.entries()).toSorted(([a], [b]) => a.localeCompare(b))
+  }, [role.permissionKeys, permissionCategories])
 
   if (byCategory.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-muted-foreground/30 py-8 text-center">
         <p className="text-sm text-muted-foreground">No permissions assigned to this role.</p>
       </div>
-    );
+    )
   }
 
   return (
@@ -234,8 +234,8 @@ function PermissionMatrix({
           <div className="mb-2.5 flex items-center justify-between">
             <span
               className={cn(
-                "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                catColor(cat),
+                "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase",
+                catColor(cat)
               )}
             >
               {cat}
@@ -255,7 +255,7 @@ function PermissionMatrix({
         </div>
       ))}
     </div>
-  );
+  )
 }
 
 // ─── role detail view panel ────────────────────────────────────────────────────
@@ -267,13 +267,13 @@ function RoleDetailView({
   onEdit,
   onToggleActive,
 }: {
-  role: RoleRow;
-  permissionLabels: Map<string, string>;
-  permissionCategories: Map<string, string>;
-  onEdit: () => void;
-  onToggleActive: () => void;
+  role: RoleRow
+  permissionLabels: Map<string, string>
+  permissionCategories: Map<string, string>
+  onEdit: () => void
+  onToggleActive: () => void
 }) {
-  const accent = ROLE_ACCENT[role.key] ?? DEFAULT_ACCENT;
+  const accent = ROLE_ACCENT[role.key] ?? DEFAULT_ACCENT
 
   return (
     <div className="flex h-full flex-col">
@@ -285,7 +285,7 @@ function RoleDetailView({
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-bold leading-tight">{role.name}</h2>
+                <h2 className="text-lg leading-tight font-bold">{role.name}</h2>
                 <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
                   {role.key}
                 </code>
@@ -333,7 +333,7 @@ function RoleDetailView({
                 onClick={onToggleActive}
                 className={cn(
                   "gap-1.5",
-                  role.isActive && "border-destructive/40 text-destructive hover:bg-destructive/10",
+                  role.isActive && "border-destructive/40 text-destructive hover:bg-destructive/10"
                 )}
               >
                 {role.isActive ? (
@@ -352,7 +352,7 @@ function RoleDetailView({
       </div>
 
       <ScrollArea className="flex-1 px-5 py-4">
-        <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Permissions</p>
+        <p className="mb-3 text-[10px] font-bold tracking-widest text-muted-foreground uppercase">Permissions</p>
         <PermissionMatrix role={role} permissionLabels={permissionLabels} permissionCategories={permissionCategories} />
 
         {role.isSystem && (
@@ -366,7 +366,7 @@ function RoleDetailView({
         )}
       </ScrollArea>
     </div>
-  );
+  )
 }
 
 // ─── role edit panel ──────────────────────────────────────────────────────────
@@ -377,32 +377,32 @@ function RoleEditPanel({
   onSave,
   onCancel,
 }: {
-  role: RoleRow;
-  permissionOptions: PermissionOption[];
-  onSave: (patch: { name: string; description: string; permissionKeys: string[] }) => Promise<void>;
-  onCancel: () => void;
+  role: RoleRow
+  permissionOptions: PermissionOption[]
+  onSave: (patch: { name: string; description: string; permissionKeys: string[] }) => Promise<void>
+  onCancel: () => void
 }) {
   // react-doctor-disable-next-line react-doctor/no-derived-useState -- remounted via key={selectedRole._id}
-  const [name, setName] = useState(role.name);
+  const [name, setName] = useState(role.name)
   // react-doctor-disable-next-line react-doctor/no-derived-useState -- remounted via key={selectedRole._id}
-  const [description, setDescription] = useState(role.description ?? "");
+  const [description, setDescription] = useState(role.description ?? "")
   // react-doctor-disable-next-line react-doctor/no-derived-useState -- remounted via key={selectedRole._id}
-  const [perms, setPerms] = useState<string[]>(role.permissionKeys);
-  const [busy, setBusy] = useState(false);
+  const [perms, setPerms] = useState<string[]>(role.permissionKeys)
+  const [busy, setBusy] = useState(false)
 
   async function handleSave() {
-    setBusy(true);
+    setBusy(true)
     try {
-      await onSave({ name, description, permissionKeys: perms });
+      await onSave({ name, description, permissionKeys: perms })
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
   }
 
   const dirty =
     name !== role.name ||
     description !== (role.description ?? "") ||
-    perms.join() !== role.permissionKeys.toSorted().join();
+    perms.join() !== role.permissionKeys.toSorted().join()
 
   return (
     <div className="flex h-full flex-col">
@@ -441,8 +441,8 @@ function RoleEditPanel({
               <Input id="edit-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="QC Lead" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-muted-foreground text-xs">Key (read-only)</Label>
-              <Input value={role.key} readOnly className="font-mono text-sm bg-muted/50 text-muted-foreground" />
+              <Label className="text-xs text-muted-foreground">Key (read-only)</Label>
+              <Input value={role.key} readOnly className="bg-muted/50 font-mono text-sm text-muted-foreground" />
             </div>
           </div>
 
@@ -471,36 +471,36 @@ function RoleEditPanel({
         </div>
       </ScrollArea>
     </div>
-  );
+  )
 }
 
 // ─── create role panel ────────────────────────────────────────────────────────
 
 type CreateRoleFormState = {
-  key: string;
-  name: string;
-  description: string;
-  perms: string[];
-};
+  key: string
+  name: string
+  description: string
+  perms: string[]
+}
 
 type CreateRoleFormAction =
   | { type: "setKey"; value: string }
   | { type: "setName"; value: string }
   | { type: "setDescription"; value: string }
-  | { type: "setPerms"; value: string[] };
+  | { type: "setPerms"; value: string[] }
 
 function createRoleFormReducer(state: CreateRoleFormState, action: CreateRoleFormAction): CreateRoleFormState {
   switch (action.type) {
     case "setKey":
-      return { ...state, key: action.value };
+      return { ...state, key: action.value }
     case "setName":
-      return { ...state, name: action.value };
+      return { ...state, name: action.value }
     case "setDescription":
-      return { ...state, description: action.value };
+      return { ...state, description: action.value }
     case "setPerms":
-      return { ...state, perms: action.value };
+      return { ...state, perms: action.value }
     default:
-      return state;
+      return state
   }
 }
 
@@ -509,29 +509,29 @@ function CreateRolePanel({
   onCreate,
   onCancel,
 }: {
-  permissionOptions: PermissionOption[];
-  onCreate: (data: { key: string; name: string; description: string; permissionKeys: string[] }) => Promise<void>;
-  onCancel: () => void;
+  permissionOptions: PermissionOption[]
+  onCreate: (data: { key: string; name: string; description: string; permissionKeys: string[] }) => Promise<void>
+  onCancel: () => void
 }) {
   const [form, dispatch] = useReducer(createRoleFormReducer, {
     key: "",
     name: "",
     description: "",
     perms: [] as string[],
-  });
-  const [busy, setBusy] = useState(false);
-  const { key, name, description, perms } = form;
+  })
+  const [busy, setBusy] = useState(false)
+  const { key, name, description, perms } = form
 
   async function handleCreate() {
-    setBusy(true);
+    setBusy(true)
     try {
-      await onCreate({ key, name, description, permissionKeys: perms });
+      await onCreate({ key, name, description, permissionKeys: perms })
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
   }
 
-  const canCreate = key.trim().length >= 2 && name.trim().length > 0 && perms.length > 0;
+  const canCreate = key.trim().length >= 2 && name.trim().length > 0 && perms.length > 0
 
   return (
     <div className="flex h-full flex-col">
@@ -558,7 +558,7 @@ function CreateRolePanel({
             <div className="space-y-1.5">
               <Label htmlFor="new-key">
                 Key (slug){" "}
-                <span className="text-[10px] text-muted-foreground font-normal">lowercase, underscores OK</span>
+                <span className="text-[10px] font-normal text-muted-foreground">lowercase, underscores OK</span>
               </Label>
               <Input
                 id="new-key"
@@ -611,7 +611,7 @@ function CreateRolePanel({
         </div>
       </ScrollArea>
     </div>
-  );
+  )
 }
 
 // ─── master-detail layout ─────────────────────────────────────────────────────
@@ -664,7 +664,7 @@ export function RolesMasterDetail({
               <div className="mb-2 flex items-center justify-between rounded-md bg-slate-100 px-2.5 py-1.5 dark:bg-slate-800/60">
                 <div className="flex items-center gap-1.5">
                   <Lock className="h-3 w-3 text-slate-500 dark:text-slate-400" />
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  <p className="text-[10px] font-bold tracking-wider text-slate-600 uppercase dark:text-slate-300">
                     System Roles
                   </p>
                 </div>
@@ -689,7 +689,7 @@ export function RolesMasterDetail({
             <div className="mb-2 flex items-center justify-between rounded-md bg-violet-50 px-2.5 py-1.5 dark:bg-violet-500/10">
               <div className="flex items-center gap-1.5">
                 <Sparkles className="h-3 w-3 text-violet-500" />
-                <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                <p className="text-[10px] font-bold tracking-wider text-violet-600 uppercase dark:text-violet-400">
                   Custom Roles
                 </p>
               </div>
@@ -778,5 +778,5 @@ export function RolesMasterDetail({
         )}
       </div>
     </div>
-  );
+  )
 }

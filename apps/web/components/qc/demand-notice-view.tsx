@@ -1,55 +1,55 @@
-"use client";
+"use client"
 
-import { PageTransition } from "@/components/design-system/motion";
-import { DemandNoticeDocument } from "@/components/qc/demand-notice";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
-import { useDemandNoticePrintFit } from "@/hooks/qc/useDemandNoticePrintFit";
-import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready";
-import type { DemandNoticeDocumentProps } from "@/lib/qc/demand-notice-document-types";
-import type { SurveyDetail } from "@/schema/surveys/index";
-import { useQuery as useConvexQuery } from "convex/react";
-import { ArrowLeft, Printer } from "lucide-react";
-import { Geist, JetBrains_Mono, Noto_Sans_Devanagari } from "next/font/google";
-import Link from "next/link";
+import { PageTransition } from "@/components/design-system/motion"
+import { DemandNoticeDocument } from "@/components/qc/demand-notice"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useDemandNoticePrintFit } from "@/hooks/qc/useDemandNoticePrintFit"
+import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
+import type { DemandNoticeDocumentProps } from "@/lib/qc/demand-notice-document-types"
+import { api } from "@workspace/backend/convex/_generated/api.js"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import type { SurveyDetail } from "@workspace/schemas"
+import { useQuery as useConvexQuery } from "convex/react"
+import { ArrowLeft, Printer } from "lucide-react"
+import { Geist, JetBrains_Mono, Noto_Sans_Devanagari } from "next/font/google"
+import Link from "next/link"
 
 const notoDevanagari = Noto_Sans_Devanagari({
   subsets: ["devanagari"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-devanagari",
   display: "swap",
-});
+})
 
 const geist = Geist({
   subsets: ["latin"],
   variable: "--font-geist-sans",
   display: "swap",
-});
+})
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["500", "600", "700"],
   variable: "--font-jetbrains-mono",
   display: "swap",
-});
+})
 
 type DemandNoticeViewProps = {
-  survey: SurveyDetail;
-  surveyId: string;
-  backHref?: string;
-};
+  survey: SurveyDetail
+  surveyId: string
+  backHref?: string
+}
 
 export function DemandNoticeView({ survey, surveyId, backHref = `/qc/${surveyId}/report` }: DemandNoticeViewProps) {
-  const ready = useConvexAuthReady();
-  const { printNotice } = useDemandNoticePrintFit();
+  const ready = useConvexAuthReady()
+  const { printNotice } = useDemandNoticePrintFit()
   const noticeProps = useConvexQuery(
     api.demandNotices.getNoticeForSurvey,
-    ready ? { surveyId: surveyId as Id<"surveys"> } : "skip",
-  ) as DemandNoticeDocumentProps | null | undefined;
+    ready ? { surveyId: surveyId as Id<"surveys"> } : "skip"
+  ) as DemandNoticeDocumentProps | null | undefined
 
-  const propertyId = noticeProps?.propertyId ?? survey.propertyId ?? survey.parcelNo;
+  const propertyId = noticeProps?.propertyId ?? survey.propertyId ?? survey.parcelNo
 
   if (noticeProps === undefined) {
     return (
@@ -75,11 +75,11 @@ export function DemandNoticeView({ survey, surveyId, backHref = `/qc/${surveyId}
           <p className="text-center text-sm text-muted-foreground">Loading demand notice from server…</p>
         </div>
       </PageTransition>
-    );
+    )
   }
 
   if (!noticeProps) {
-    const notApproved = survey.qcStatus !== "approved";
+    const notApproved = survey.qcStatus !== "approved"
     return (
       <PageTransition
         className={`demand-notice ${notoDevanagari.variable} ${geist.variable} bg-slate-50 ${jetbrainsMono.variable}`}
@@ -95,7 +95,7 @@ export function DemandNoticeView({ survey, surveyId, backHref = `/qc/${surveyId}
           </Button>
         </div>
       </PageTransition>
-    );
+    )
   }
 
   return (
@@ -131,5 +131,5 @@ export function DemandNoticeView({ survey, surveyId, backHref = `/qc/${surveyId}
         <DemandNoticeDocument {...noticeProps} />
       </div>
     </PageTransition>
-  );
+  )
 }

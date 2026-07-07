@@ -1,0 +1,12 @@
+{
+  "extends": "@workspace/typescript-config/base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "paths": {
+      "@workspace/backend/convex/*": ["../backend/convex/*"]
+    }
+  },
+  "include": ["src"]
+}

@@ -1,7 +1,14 @@
-"use client";
+"use client"
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import type { DraftReassignFilters } from "@/hooks/surveys/useSurveyReassignment"
+import { useDraftOwners, useReassignDrafts } from "@/hooks/surveys/useSurveyReassignment"
+import { useHasCapability } from "@/hooks/use-capability"
+import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
+import { parseConvexError } from "@/lib/errors"
+import { api } from "@workspace/backend/convex/_generated/api.js"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { Badge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
 import {
   Dialog,
   DialogContent,
@@ -9,37 +16,30 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
-import type { DraftReassignFilters } from "@/hooks/surveys/useSurveyReassignment";
-import { useDraftOwners, useReassignDrafts } from "@/hooks/surveys/useSurveyReassignment";
-import { useHasCapability } from "@/hooks/use-capability";
-import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready";
-import { parseConvexError } from "@/lib/errors";
-import { useQuery } from "convex/react";
-import { AlertTriangle, ArrowRightLeft } from "lucide-react";
-import { useMemo, useState } from "react";
-import { toast } from "sonner";
+} from "@workspace/ui/components/dialog"
+import { Label } from "@workspace/ui/components/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select"
+import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
+import { useQuery } from "convex/react"
+import { AlertTriangle, ArrowRightLeft } from "lucide-react"
+import { useMemo, useState } from "react"
+import { toast } from "sonner"
 
-const ALL = "__all__";
+const ALL = "__all__"
 
 export function SurveyReassignDialog({
   open,
   onOpenChange,
   scope,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  scope: DraftReassignFilters;
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  scope: DraftReassignFilters
 }) {
-  const ready = useConvexAuthReady();
-  const canReassign = useHasCapability("surveys.reassign");
-  const draftOwners = useDraftOwners(scope);
-  const reassign = useReassignDrafts();
+  const ready = useConvexAuthReady()
+  const canReassign = useHasCapability("surveys.reassign")
+  const draftOwners = useDraftOwners(scope)
+  const reassign = useReassignDrafts()
   const { page: fieldUserPage } =
     useQuery(
       api.admin.listUsers,
@@ -48,41 +48,41 @@ export function SurveyReassignDialog({
             paginationOpts: { numItems: 200, cursor: null },
             status: "active",
           }
-        : "skip",
-    ) ?? {};
+        : "skip"
+    ) ?? {}
 
-  const [mode, setMode] = useState<"fromSurveyor" | "orphaned">("fromSurveyor");
-  const [fromSurveyorId, setFromSurveyorId] = useState<string>(ALL);
-  const [toSurveyorId, setToSurveyorId] = useState<string>("");
-  const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<"fromSurveyor" | "orphaned">("fromSurveyor")
+  const [fromSurveyorId, setFromSurveyorId] = useState<string>(ALL)
+  const [toSurveyorId, setToSurveyorId] = useState<string>("")
+  const [busy, setBusy] = useState(false)
 
   const targetOptions = useMemo(() => {
-    const rows = fieldUserPage ?? [];
-    return rows.filter((u) => u.role === "surveyor" || u.role === "supervisor");
-  }, [fieldUserPage]);
+    const rows = fieldUserPage ?? []
+    return rows.filter((u) => u.role === "surveyor" || u.role === "supervisor")
+  }, [fieldUserPage])
 
   const sourceOptions = useMemo(() => {
-    const owners = draftOwners?.owners ?? [];
+    const owners = draftOwners?.owners ?? []
     if (mode === "orphaned") {
-      return owners.filter((o) => o.isOrphaned);
+      return owners.filter((o) => o.isOrphaned)
     }
-    return owners.filter((o) => !o.isOrphaned);
-  }, [draftOwners, mode]);
+    return owners.filter((o) => !o.isOrphaned)
+  }, [draftOwners, mode])
 
-  const selectedSource = sourceOptions.find((o) => o.surveyorId === fromSurveyorId);
-  const transferCount = mode === "orphaned" ? (draftOwners?.orphanedCount ?? 0) : (selectedSource?.draftCount ?? 0);
+  const selectedSource = sourceOptions.find((o) => o.surveyorId === fromSurveyorId)
+  const transferCount = mode === "orphaned" ? (draftOwners?.orphanedCount ?? 0) : (selectedSource?.draftCount ?? 0)
 
   async function submit() {
     if (!toSurveyorId) {
-      toast.error("Select the surveyor who will receive these drafts");
-      return;
+      toast.error("Select the surveyor who will receive these drafts")
+      return
     }
     if (mode === "fromSurveyor" && fromSurveyorId === ALL) {
-      toast.error("Select the surveyor whose drafts should move");
-      return;
+      toast.error("Select the surveyor whose drafts should move")
+      return
     }
 
-    setBusy(true);
+    setBusy(true)
     try {
       const result = await reassign({
         toSurveyorId: toSurveyorId as Id<"users">,
@@ -91,16 +91,16 @@ export function SurveyReassignDialog({
         districtId: scope.districtId as Id<"districts"> | undefined,
         municipalityId: scope.municipalityId as Id<"municipalities"> | undefined,
         wardNo: scope.wardNo,
-      });
-      const adjusted = result.localIdAdjusted > 0 ? ` (${result.localIdAdjusted} local IDs adjusted for sync)` : "";
-      toast.success(`Transferred ${result.transferred} draft${result.transferred === 1 ? "" : "s"}${adjusted}`);
-      onOpenChange(false);
-      setFromSurveyorId(ALL);
-      setToSurveyorId("");
+      })
+      const adjusted = result.localIdAdjusted > 0 ? ` (${result.localIdAdjusted} local IDs adjusted for sync)` : ""
+      toast.success(`Transferred ${result.transferred} draft${result.transferred === 1 ? "" : "s"}${adjusted}`)
+      onOpenChange(false)
+      setFromSurveyorId(ALL)
+      setToSurveyorId("")
     } catch (e) {
-      toast.error(parseConvexError(e).message);
+      toast.error(parseConvexError(e).message)
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
   }
 
@@ -121,8 +121,8 @@ export function SurveyReassignDialog({
         <Tabs
           value={mode}
           onValueChange={(v) => {
-            setMode(v as "fromSurveyor" | "orphaned");
-            setFromSurveyorId(ALL);
+            setMode(v as "fromSurveyor" | "orphaned")
+            setFromSurveyorId(ALL)
           }}
         >
           <TabsList className="grid w-full grid-cols-2">
@@ -206,5 +206,5 @@ export function SurveyReassignDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

@@ -1,4 +1,4 @@
-"use client";
+"use client"
 
 import {
   buildWardForm,
@@ -6,9 +6,9 @@ import {
   pct,
   pctToDecimal,
   ulbSettingsFromForm,
-} from "@/components/masters/tax-rates-form-utils";
-import type { RateForm, WardInfo } from "@/components/masters/tax-rates-types";
-import { editorUiReducer, initialEditorUiState } from "@/components/masters/ulb-rate-editor-reducer";
+} from "@/components/masters/tax-rates-form-utils"
+import type { RateForm, WardInfo } from "@/components/masters/tax-rates-types"
+import { editorUiReducer, initialEditorUiState } from "@/components/masters/ulb-rate-editor-reducer"
 import {
   UlbRateEditorEmptyWards,
   UlbRateEditorErrorBanner,
@@ -16,23 +16,23 @@ import {
   UlbRateEditorTaxSettings,
   UlbRateEditorWardMatrixPanel,
   UlbRateEditorWardRail,
-} from "@/components/masters/ulb-rate-editor-sections";
-import { RateInput, WardRatePreview } from "@/components/masters/ulb-rate-editor-widgets";
-import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
-import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready";
+} from "@/components/masters/ulb-rate-editor-sections"
+import { RateInput, WardRatePreview } from "@/components/masters/ulb-rate-editor-widgets"
+import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
 import {
   buildDefaultMonthlyMatrix,
   cloneMonthlyMatrix,
   hasWardCustomRates,
   matricesEqual,
   monthlyFormToAnnualMatrix,
-} from "@/lib/qc/tax-rate-matrix";
-import { convexQuery } from "@convex-dev/react-query";
-import { useQuery } from "@tanstack/react-query";
-import { useMutation } from "convex/react";
-import { Loader2 } from "lucide-react";
-import { useMemo, useReducer, useRef, type Dispatch, type SetStateAction } from "react";
+} from "@/lib/qc/tax-rate-matrix"
+import { convexQuery } from "@convex-dev/react-query"
+import { useQuery } from "@tanstack/react-query"
+import { api } from "@workspace/backend/convex/_generated/api.js"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { useMutation } from "convex/react"
+import { Loader2 } from "lucide-react"
+import { useMemo, useReducer, useRef, type Dispatch, type SetStateAction } from "react"
 
 export function UlbRateEditor({
   municipalityId,
@@ -40,103 +40,101 @@ export function UlbRateEditor({
   districtName,
   wards,
 }: {
-  municipalityId: Id<"municipalities">;
-  municipalityName: string;
-  districtName: string;
-  wards: WardInfo[];
+  municipalityId: Id<"municipalities">
+  municipalityName: string
+  districtName: string
+  wards: WardInfo[]
 }) {
-  const ready = useConvexAuthReady();
-  const { data: existing } = useQuery(
-    convexQuery(api.taxRates.getForMunicipality, ready ? { municipalityId } : "skip"),
-  );
-  const upsert = useMutation(api.taxRates.upsert);
-  const saveWard = useMutation(api.taxRates.saveWard);
-  const reset = useMutation(api.taxRates.resetToDefaults);
+  const ready = useConvexAuthReady()
+  const { data: existing } = useQuery(convexQuery(api.taxRates.getForMunicipality, ready ? { municipalityId } : "skip"))
+  const upsert = useMutation(api.taxRates.upsert)
+  const saveWard = useMutation(api.taxRates.saveWard)
+  const reset = useMutation(api.taxRates.resetToDefaults)
 
-  const [ui, dispatch] = useReducer(editorUiReducer, initialEditorUiState);
+  const [ui, dispatch] = useReducer(editorUiReducer, initialEditorUiState)
   const activeWardNo = useMemo(() => {
-    if (ui.selectedWardNo && wards.some((w) => w.wardNo === ui.selectedWardNo)) return ui.selectedWardNo;
-    return wards[0]?.wardNo ?? "";
-  }, [wards, ui.selectedWardNo]);
+    if (ui.selectedWardNo && wards.some((w) => w.wardNo === ui.selectedWardNo)) return ui.selectedWardNo
+    return wards[0]?.wardNo ?? ""
+  }, [wards, ui.selectedWardNo])
 
   const serverForm = useMemo(() => {
-    if (existing === undefined || wards.length === 0) return null;
-    return buildWardForm(wards, existing);
-  }, [existing, wards]);
+    if (existing === undefined || wards.length === 0) return null
+    return buildWardForm(wards, existing)
+  }, [existing, wards])
 
   const baselineForm = useMemo(() => {
-    if (!serverForm) return null;
+    if (!serverForm) return null
     return {
       ...serverForm,
       wardMatrices: Object.fromEntries(
-        Object.entries(serverForm.wardMatrices).map(([key, matrix]) => [key, cloneMonthlyMatrix(matrix)]),
+        Object.entries(serverForm.wardMatrices).map(([key, matrix]) => [key, cloneMonthlyMatrix(matrix)])
       ),
       usageMultipliers: { ...serverForm.usageMultipliers },
-    };
-  }, [serverForm]);
+    }
+  }, [serverForm])
 
-  const prevExistingRef = useRef(existing);
+  const prevExistingRef = useRef(existing)
   if (existing !== prevExistingRef.current) {
-    prevExistingRef.current = existing;
-    if (ui.draftForm !== null) dispatch({ type: "resetDraft" });
+    prevExistingRef.current = existing
+    if (ui.draftForm !== null) dispatch({ type: "resetDraft" })
   }
 
-  const form = ui.draftForm ?? serverForm;
+  const form = ui.draftForm ?? serverForm
   const setForm: Dispatch<SetStateAction<RateForm | null>> = (action) => {
     dispatch({
       type: "patch",
       patch: {
         draftForm: typeof action === "function" ? action(ui.draftForm ?? serverForm) : action,
       },
-    });
-  };
+    })
+  }
 
   const filteredWards = useMemo(() => {
-    const q = ui.wardSearch.trim().toLowerCase();
-    if (!q) return wards;
+    const q = ui.wardSearch.trim().toLowerCase()
+    if (!q) return wards
     return wards.filter(
       (w) =>
-        w.wardNo.toLowerCase().includes(q) || w.name.toLowerCase().includes(q) || w.wardCode.toLowerCase().includes(q),
-    );
-  }, [wards, ui.wardSearch]);
+        w.wardNo.toLowerCase().includes(q) || w.name.toLowerCase().includes(q) || w.wardCode.toLowerCase().includes(q)
+    )
+  }, [wards, ui.wardSearch])
 
-  const selectedWard = wards.find((w) => w.wardNo === activeWardNo);
-  const wardMatrix = form?.wardMatrices[activeWardNo];
+  const selectedWard = wards.find((w) => w.wardNo === activeWardNo)
+  const wardMatrix = form?.wardMatrices[activeWardNo]
 
   const configuredCount = useMemo(() => {
-    if (!existing) return 0;
-    return wards.filter((w) => hasWardCustomRates(w.wardNo, existing.wardRates)).length;
-  }, [existing, wards]);
+    if (!existing) return 0
+    return wards.filter((w) => hasWardCustomRates(w.wardNo, existing.wardRates)).length
+  }, [existing, wards])
 
   const dirtyWardNos = useMemo(() => {
-    if (!form || !baselineForm) return new Set<string>();
-    const dirty = new Set<string>();
+    if (!form || !baselineForm) return new Set<string>()
+    const dirty = new Set<string>()
     for (const ward of wards) {
-      const current = form.wardMatrices[ward.wardNo];
-      const base = baselineForm.wardMatrices[ward.wardNo];
-      if (current && base && !matricesEqual(current, base)) dirty.add(ward.wardNo);
+      const current = form.wardMatrices[ward.wardNo]
+      const base = baselineForm.wardMatrices[ward.wardNo]
+      if (current && base && !matricesEqual(current, base)) dirty.add(ward.wardNo)
     }
-    return dirty;
-  }, [form, baselineForm, wards]);
+    return dirty
+  }, [form, baselineForm, wards])
 
-  const selectedWardDirty = dirtyWardNos.has(activeWardNo);
+  const selectedWardDirty = dirtyWardNos.has(activeWardNo)
   const ulbSettingsDirty = useMemo(() => {
-    if (!form || !baselineForm) return false;
+    if (!form || !baselineForm) return false
     return (
       form.propertyTaxPct !== baselineForm.propertyTaxPct ||
       form.waterTaxPct !== baselineForm.waterTaxPct ||
       form.drainageTaxPct !== baselineForm.drainageTaxPct ||
       Object.keys(form.usageMultipliers).some(
-        (key) => form.usageMultipliers[key] !== baselineForm.usageMultipliers[key],
+        (key) => form.usageMultipliers[key] !== baselineForm.usageMultipliers[key]
       )
-    );
-  }, [form, baselineForm]);
+    )
+  }, [form, baselineForm])
 
   function setCell(zone: string, constr: string, val: string) {
-    if (!form || !activeWardNo) return;
+    if (!form || !activeWardNo) return
     setForm((f) => {
-      if (!f) return f;
-      const current = f.wardMatrices[activeWardNo] ?? buildDefaultMonthlyMatrix();
+      if (!f) return f
+      const current = f.wardMatrices[activeWardNo] ?? buildDefaultMonthlyMatrix()
       return {
         ...f,
         wardMatrices: {
@@ -146,52 +144,52 @@ export function UlbRateEditor({
             [zone]: { ...current[zone], [constr]: val },
           },
         },
-      };
-    });
+      }
+    })
   }
 
   async function handleSaveWard() {
-    if (!form || !activeWardNo) return;
-    const matrix = form.wardMatrices[activeWardNo];
-    if (!matrix) return;
-    dispatch({ type: "patch", patch: { error: null, savingWard: true } });
+    if (!form || !activeWardNo) return
+    const matrix = form.wardMatrices[activeWardNo]
+    if (!matrix) return
+    dispatch({ type: "patch", patch: { error: null, savingWard: true } })
     try {
       await saveWard({
         municipalityId,
         wardNo: activeWardNo,
         wardRateMatrix: monthlyFormToAnnualMatrix(matrix),
         ...ulbSettingsFromForm(form),
-      });
-      dispatch({ type: "patch", patch: { wardSaved: true } });
-      setTimeout(() => dispatch({ type: "patch", patch: { wardSaved: false } }), 2500);
+      })
+      dispatch({ type: "patch", patch: { wardSaved: true } })
+      setTimeout(() => dispatch({ type: "patch", patch: { wardSaved: false } }), 2500)
     } catch (e) {
-      dispatch({ type: "patch", patch: { error: e instanceof Error ? e.message : "Save failed" } });
+      dispatch({ type: "patch", patch: { error: e instanceof Error ? e.message : "Save failed" } })
     } finally {
-      dispatch({ type: "patch", patch: { savingWard: false } });
+      dispatch({ type: "patch", patch: { savingWard: false } })
     }
   }
 
   async function handleSave() {
-    if (!form) return;
-    dispatch({ type: "patch", patch: { error: null, saving: true } });
+    if (!form) return
+    dispatch({ type: "patch", patch: { error: null, saving: true } })
     try {
-      await upsert({ municipalityId, ...formToPayload(form, wards) });
-      dispatch({ type: "patch", patch: { saved: true } });
-      setTimeout(() => dispatch({ type: "patch", patch: { saved: false } }), 2500);
+      await upsert({ municipalityId, ...formToPayload(form, wards) })
+      dispatch({ type: "patch", patch: { saved: true } })
+      setTimeout(() => dispatch({ type: "patch", patch: { saved: false } }), 2500)
     } catch (e) {
-      dispatch({ type: "patch", patch: { error: e instanceof Error ? e.message : "Save failed" } });
+      dispatch({ type: "patch", patch: { error: e instanceof Error ? e.message : "Save failed" } })
     } finally {
-      dispatch({ type: "patch", patch: { saving: false } });
+      dispatch({ type: "patch", patch: { saving: false } })
     }
   }
 
   async function handleResetAll() {
-    dispatch({ type: "patch", patch: { resetting: true } });
+    dispatch({ type: "patch", patch: { resetting: true } })
     try {
-      await reset({ municipalityId });
-      setForm(buildWardForm(wards, null));
+      await reset({ municipalityId })
+      setForm(buildWardForm(wards, null))
     } finally {
-      dispatch({ type: "patch", patch: { resetting: false } });
+      dispatch({ type: "patch", patch: { resetting: false } })
     }
   }
 
@@ -201,16 +199,16 @@ export function UlbRateEditor({
         <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden />
         Loading rate schedule…
       </div>
-    );
+    )
   }
 
   if (wards.length === 0) {
-    return <UlbRateEditorEmptyWards />;
+    return <UlbRateEditorEmptyWards />
   }
 
   const combinedPctLabel = pct(
-    pctToDecimal(form.propertyTaxPct) + pctToDecimal(form.waterTaxPct) + pctToDecimal(form.drainageTaxPct),
-  );
+    pctToDecimal(form.propertyTaxPct) + pctToDecimal(form.waterTaxPct) + pctToDecimal(form.drainageTaxPct)
+  )
 
   return (
     <div className="space-y-5">
@@ -255,7 +253,7 @@ export function UlbRateEditor({
               onPreviewZoneChange={(key) => dispatch({ type: "patch", patch: { previewZoneKey: key } })}
               onPreviewConstrChange={(key) => dispatch({ type: "patch", patch: { previewConstrKey: key } })}
               onApplyDefault={() => {
-                if (!form || !activeWardNo) return;
+                if (!form || !activeWardNo) return
                 setForm((f) =>
                   f
                     ? {
@@ -265,11 +263,11 @@ export function UlbRateEditor({
                           [activeWardNo]: cloneMonthlyMatrix(f.defaultMatrix),
                         },
                       }
-                    : f,
-                );
+                    : f
+                )
               }}
               onResetSystemDefault={() => {
-                if (!form || !activeWardNo) return;
+                if (!form || !activeWardNo) return
                 setForm((f) =>
                   f
                     ? {
@@ -279,21 +277,21 @@ export function UlbRateEditor({
                           [activeWardNo]: buildDefaultMonthlyMatrix(),
                         },
                       }
-                    : f,
-                );
+                    : f
+                )
               }}
               onCopyToAll={() => {
-                if (!form || !activeWardNo) return;
-                const source = form.wardMatrices[activeWardNo];
-                if (!source) return;
+                if (!form || !activeWardNo) return
+                const source = form.wardMatrices[activeWardNo]
+                if (!source) return
                 setForm((f) => {
-                  if (!f) return f;
-                  const wardMatrices = { ...f.wardMatrices };
+                  if (!f) return f
+                  const wardMatrices = { ...f.wardMatrices }
                   for (const w of wards) {
-                    wardMatrices[w.wardNo] = cloneMonthlyMatrix(source);
+                    wardMatrices[w.wardNo] = cloneMonthlyMatrix(source)
                   }
-                  return { ...f, wardMatrices };
-                });
+                  return { ...f, wardMatrices }
+                })
               }}
               onSaveWard={handleSaveWard}
               onCellChange={setCell}
@@ -310,5 +308,5 @@ export function UlbRateEditor({
         </div>
       </div>
     </div>
-  );
+  )
 }

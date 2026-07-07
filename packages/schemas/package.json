@@ -3,8 +3,15 @@
   "version": "0.0.0",
   "type": "module",
   "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./analytics": "./src/analytics/index.ts",
+    "./surveys": "./src/surveys/index.ts",
+    "./surveys/input": "./src/surveys/input.ts",
+    "./surveys/responses": "./src/surveys/responses.ts"
   },
   "dependencies": {
     "zod": "^4.4.3"

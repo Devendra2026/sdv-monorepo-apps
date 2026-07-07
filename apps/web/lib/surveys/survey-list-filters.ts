@@ -1,26 +1,26 @@
-import type { QcStatus, SurveyStatus } from "@/lib/domain";
+import type { QcStatus, SurveyStatus } from "@/lib/domain"
 
 type ListStatusFilter = {
-  status?: SurveyStatus;
-  qcStatus?: QcStatus;
-  qcStatuses?: QcStatus[];
-};
+  status?: SurveyStatus
+  qcStatus?: QcStatus
+  qcStatuses?: QcStatus[]
+}
 
 /** Map Surveys registry tab → server-side list filters. */
 export function surveyTabToListFilters(activeTab: string): ListStatusFilter {
   switch (activeTab) {
     case "qcPending":
-      return { qcStatus: "pending" as QcStatus };
+      return { qcStatus: "pending" as QcStatus }
     case "qcApproved":
-      return { qcStatus: "approved" as QcStatus };
+      return { qcStatus: "approved" as QcStatus }
     case "qcRejected":
-      return { qcStatus: "rejected" as QcStatus };
+      return { qcStatus: "rejected" as QcStatus }
     case "draft":
-      return { status: "draft" as SurveyStatus };
+      return { status: "draft" as SurveyStatus }
     case "submitted":
-      return { status: "submitted" as SurveyStatus };
+      return { status: "submitted" as SurveyStatus }
     default:
-      return {};
+      return {}
   }
 }
 
@@ -28,23 +28,32 @@ export function surveyTabToListFilters(activeTab: string): ListStatusFilter {
 export function qcTabToListFilters(activeTab: string): ListStatusFilter {
   switch (activeTab) {
     case "active":
-      return { qcStatuses: ["pending", "approved"] as QcStatus[] };
+      return { qcStatuses: ["pending", "approved"] as QcStatus[] }
     case "pending":
-      return { status: "submitted" as SurveyStatus, qcStatus: "pending" as QcStatus };
+      return { status: "submitted" as SurveyStatus, qcStatus: "pending" as QcStatus }
     case "approved":
-      return { qcStatus: "approved" as QcStatus };
+      return { qcStatus: "approved" as QcStatus }
     case "rejected":
-      return { qcStatus: "rejected" as QcStatus };
+      return { qcStatus: "rejected" as QcStatus }
     case "parcelShared":
-      return { qcStatuses: ["pending", "approved"] as QcStatus[] };
+      return { qcStatuses: ["pending", "approved"] as QcStatus[] }
     default:
-      return {};
+      return {}
   }
 }
 
-/** Approximate QC-pending count from aggregate summary fields. */
+/** Prefer authoritative server `qcPending`; fallback only when server stats are unavailable. */
+export function resolveQcPendingCount(
+  serverQcPending: number | undefined,
+  summary: { submitted?: number; approved?: number; rejected?: number }
+): number {
+  if (serverQcPending !== undefined) return serverQcPending
+  return estimateQcPendingCount(summary)
+}
+
+/** Approximate QC-pending count from aggregate summary fields (fallback only). */
 export function estimateQcPendingCount(summary: { submitted?: number; approved?: number; rejected?: number }): number {
-  const submitted = summary.submitted ?? 0;
-  const closed = (summary.approved ?? 0) + (summary.rejected ?? 0);
-  return Math.max(0, submitted - closed);
+  const submitted = summary.submitted ?? 0
+  const closed = (summary.approved ?? 0) + (summary.rejected ?? 0)
+  return Math.max(0, submitted - closed)
 }

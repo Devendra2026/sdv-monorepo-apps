@@ -1,6 +1,7 @@
 import { CLERK_CONVEX_JWT_TEMPLATE } from "@/lib/clerk-convex"
 import { auth } from "@clerk/nextjs/server"
 import { api } from "@workspace/backend/convex/_generated/api.js"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import { preloadQuery } from "convex/nextjs"
 
 import type { FunctionReference } from "convex/server"
@@ -86,4 +87,34 @@ export const preloadDashboardAnalytics = cache(async (nowMs: number, trendDays =
 /** Deduped per-request preload for the home activity feed. */
 export const preloadDashboardActivity = cache(async () => {
   return preloadConvexQuery(api.analytics.queries.recentActivity, {})
+})
+
+export type SurveyCommandCenterPreloadFilters = {
+  districtId?: Id<"districts">
+  municipalityId?: Id<"municipalities">
+  wardNo?: string
+  status?: "draft" | "submitted" | "approved" | "rejected"
+  qcStatus?: "pending" | "approved" | "rejected"
+  fromMs?: number
+  toMs?: number
+}
+
+/** Preload survey detail for server-rendered detail pages. */
+export const preloadSurveyDetail = cache(async (id: Id<"surveys">) => {
+  return preloadConvexQuery(api.surveys.queries.get, { id })
+})
+
+/** Preload command center KPI + ward stats. */
+export const preloadSurveyCommandCenter = cache(
+  async (nowMs: number, filters: SurveyCommandCenterPreloadFilters = {}) => {
+    return preloadConvexQuery(api.surveys.queries.commandCenterStats, { nowMs, ...filters })
+  }
+)
+
+/** Preload first page of registry list (default scope). */
+export const preloadSurveyRegistryPage = cache(async (nowMs: number, pageSize = 20) => {
+  return preloadConvexQuery(api.surveys.queries.listPaginated, {
+    paginationOpts: { numItems: pageSize, cursor: null },
+    nowMs,
+  })
 })

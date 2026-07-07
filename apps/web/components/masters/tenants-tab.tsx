@@ -1,45 +1,38 @@
-"use client";
+"use client"
 
-import { TenantDialogs } from "@/components/masters/tenant-dialogs";
-import { EmptyState } from "@/components/shared/empty-state";
-import { TableSkeleton } from "@/components/shared/loading";
-import { TablePagination } from "@/components/shared/table-pagination";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Input } from "@/components/ui/input";
-import type { Id } from "@/convex/_generated/dataModel";
-import { useTenantAdmin, useUpsertDistrict, useUpsertMunicipality, useUpsertWard } from "@/hooks/tenants/useTenants";
-import { parseConvexError } from "@/lib/errors";
-import { cn } from "@/lib/utils";
-import { Building2, ChevronDown, ChevronLeft, ChevronRight, MapPin, Pencil, Plus, Search } from "lucide-react";
-import { useMemo, useReducer, useState, type Dispatch } from "react";
-import { toast } from "sonner";
-import type {
-  DistrictDraft,
-  MunicipalityDraft,
-  TenantDistrict,
-  TenantUlb,
-  TenantWard,
-  WardDraft,
-} from "./tenant-types";
+import { TenantDialogs } from "@/components/masters/tenant-dialogs"
+import { EmptyState } from "@/components/shared/empty-state"
+import { TableSkeleton } from "@/components/shared/loading"
+import { TablePagination } from "@/components/shared/table-pagination"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Input } from "@/components/ui/input"
+import { useTenantAdmin, useUpsertDistrict, useUpsertMunicipality, useUpsertWard } from "@/hooks/tenants/useTenants"
+import { parseConvexError } from "@/lib/errors"
+import { cn } from "@/lib/utils"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { Building2, ChevronDown, ChevronLeft, ChevronRight, MapPin, Pencil, Plus, Search } from "lucide-react"
+import { useMemo, useReducer, useState, type Dispatch } from "react"
+import { toast } from "sonner"
+import type { DistrictDraft, MunicipalityDraft, TenantDistrict, TenantUlb, TenantWard, WardDraft } from "./tenant-types"
 
-const DEFAULT_DISTRICT_PAGE_SIZE = 10;
-const DEFAULT_ULB_PAGE_SIZE = 10;
-const DEFAULT_WARD_PAGE_SIZE = 24;
+const DEFAULT_DISTRICT_PAGE_SIZE = 10
+const DEFAULT_ULB_PAGE_SIZE = 10
+const DEFAULT_WARD_PAGE_SIZE = 24
 
 function matchesTenantSearch(district: TenantDistrict, query: string) {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  if (district.name.toLowerCase().includes(q) || district.code.toLowerCase().includes(q)) return true;
-  if (district.stateName.toLowerCase().includes(q)) return true;
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  if (district.name.toLowerCase().includes(q) || district.code.toLowerCase().includes(q)) return true
+  if (district.stateName.toLowerCase().includes(q)) return true
   return district.ulbs.some(
     (ulb) =>
       ulb.name.toLowerCase().includes(q) ||
       ulb.code.toLowerCase().includes(q) ||
-      ulb.wards.some((w) => w.name.toLowerCase().includes(q) || String(w.wardNo).includes(q)),
-  );
+      ulb.wards.some((w) => w.name.toLowerCase().includes(q) || String(w.wardNo).includes(q))
+  )
 }
 
 function CompactPagination({
@@ -50,20 +43,20 @@ function CompactPagination({
   noun,
   className,
 }: {
-  page: number;
-  pageSize: number;
-  total: number;
-  onPageChange: (page: number) => void;
-  noun: string;
-  className?: string;
+  page: number
+  pageSize: number
+  total: number
+  onPageChange: (page: number) => void
+  noun: string
+  className?: string
 }) {
-  if (total <= pageSize) return null;
+  if (total <= pageSize) return null
 
-  const totalPages = Math.ceil(total / pageSize);
-  const start = (page - 1) * pageSize + 1;
-  const end = Math.min(page * pageSize, total);
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
+  const totalPages = Math.ceil(total / pageSize)
+  const start = (page - 1) * pageSize + 1
+  const end = Math.min(page * pageSize, total)
+  const canPrev = page > 1
+  const canNext = page < totalPages
 
   return (
     <div className={cn("flex items-center justify-between gap-2 pt-1", className)}>
@@ -82,7 +75,7 @@ function CompactPagination({
         >
           <ChevronLeft className="h-3 w-3" />
         </Button>
-        <span className="min-w-8 text-center text-[10px] font-medium tabular-nums text-muted-foreground">
+        <span className="min-w-8 text-center text-[10px] font-medium text-muted-foreground tabular-nums">
           {page}/{totalPages}
         </span>
         <Button
@@ -98,25 +91,25 @@ function CompactPagination({
         </Button>
       </div>
     </div>
-  );
+  )
 }
 
 // ─── UI state (drafts + expand/collapse) ─────────────────────────────────────
 
 type TenantsUiState = {
-  districtDraft: DistrictDraft | null;
-  muniDraft: MunicipalityDraft | null;
-  wardDraft: WardDraft | null;
-  expandedDistricts: Set<string>;
-  expandedUlbs: Set<string>;
-};
+  districtDraft: DistrictDraft | null
+  muniDraft: MunicipalityDraft | null
+  wardDraft: WardDraft | null
+  expandedDistricts: Set<string>
+  expandedUlbs: Set<string>
+}
 
 type TenantsUiAction =
   | { type: "setDistrictDraft"; draft: DistrictDraft | null }
   | { type: "setMuniDraft"; draft: MunicipalityDraft | null }
   | { type: "setWardDraft"; draft: WardDraft | null }
   | { type: "setDistrictOpen"; id: string; open: boolean }
-  | { type: "setUlbOpen"; id: string; open: boolean };
+  | { type: "setUlbOpen"; id: string; open: boolean }
 
 const initialTenantsUiState: TenantsUiState = {
   districtDraft: null,
@@ -124,27 +117,27 @@ const initialTenantsUiState: TenantsUiState = {
   wardDraft: null,
   expandedDistricts: new Set(),
   expandedUlbs: new Set(),
-};
+}
 
 function tenantsUiReducer(state: TenantsUiState, action: TenantsUiAction): TenantsUiState {
   switch (action.type) {
     case "setDistrictDraft":
-      return { ...state, districtDraft: action.draft };
+      return { ...state, districtDraft: action.draft }
     case "setMuniDraft":
-      return { ...state, muniDraft: action.draft };
+      return { ...state, muniDraft: action.draft }
     case "setWardDraft":
-      return { ...state, wardDraft: action.draft };
+      return { ...state, wardDraft: action.draft }
     case "setDistrictOpen": {
-      const expandedDistricts = new Set(state.expandedDistricts);
-      if (action.open) expandedDistricts.add(action.id);
-      else expandedDistricts.delete(action.id);
-      return { ...state, expandedDistricts };
+      const expandedDistricts = new Set(state.expandedDistricts)
+      if (action.open) expandedDistricts.add(action.id)
+      else expandedDistricts.delete(action.id)
+      return { ...state, expandedDistricts }
     }
     case "setUlbOpen": {
-      const expandedUlbs = new Set(state.expandedUlbs);
-      if (action.open) expandedUlbs.add(action.id);
-      else expandedUlbs.delete(action.id);
-      return { ...state, expandedUlbs };
+      const expandedUlbs = new Set(state.expandedUlbs)
+      if (action.open) expandedUlbs.add(action.id)
+      else expandedUlbs.delete(action.id)
+      return { ...state, expandedUlbs }
     }
   }
 }
@@ -152,11 +145,11 @@ function tenantsUiReducer(state: TenantsUiState, action: TenantsUiAction): Tenan
 // ─── sub-components ──────────────────────────────────────────────────────────
 
 function TenantsSummaryBar({ tenants, onAddDistrict }: { tenants: TenantDistrict[]; onAddDistrict: () => void }) {
-  const ulbCount = tenants.reduce((acc, d) => acc + d.ulbs.length, 0);
-  const wardCount = tenants.reduce((acc, d) => acc + d.ulbs.reduce((a, u) => a + u.wards.length, 0), 0);
+  const ulbCount = tenants.reduce((acc, d) => acc + d.ulbs.length, 0)
+  const wardCount = tenants.reduce((acc, d) => acc + d.ulbs.reduce((a, u) => a + u.wards.length, 0), 0)
 
   return (
-    <div className="flex flex-col gap-4 border-b border-border/60 bg-linear-to-r from-violet-50/80 to-card px-5 py-4 dark:from-violet-950/30 dark:to-card sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-4 border-b border-border/60 bg-linear-to-r from-violet-50/80 to-card px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:from-violet-950/30 dark:to-card">
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20">
           <MapPin className="h-5 w-5 text-violet-600 dark:text-violet-400" />
@@ -183,7 +176,7 @@ function TenantsSummaryBar({ tenants, onAddDistrict }: { tenants: TenantDistrict
         <Plus className="h-4 w-4" /> Add district
       </Button>
     </div>
-  );
+  )
 }
 
 function WardChips({
@@ -191,18 +184,18 @@ function WardChips({
   municipalityId,
   onEditWard,
 }: {
-  wards: TenantWard[];
-  municipalityId: Id<"municipalities">;
-  onEditWard: (draft: WardDraft) => void;
+  wards: TenantWard[]
+  municipalityId: Id<"municipalities">
+  onEditWard: (draft: WardDraft) => void
 }) {
-  const [page, setPage] = useState(1);
-  const pageSize = DEFAULT_WARD_PAGE_SIZE;
+  const [page, setPage] = useState(1)
+  const pageSize = DEFAULT_WARD_PAGE_SIZE
 
   if (wards.length === 0) {
-    return <p className="text-xs text-muted-foreground">No wards yet.</p>;
+    return <p className="text-xs text-muted-foreground">No wards yet.</p>
   }
 
-  const pagedWards = wards.slice((page - 1) * pageSize, page * pageSize);
+  const pagedWards = wards.slice((page - 1) * pageSize, page * pageSize)
 
   return (
     <div className="space-y-2">
@@ -224,13 +217,13 @@ function WardChips({
           >
             <span className="font-medium">W{ward.wardNo}</span>
             <span className="text-muted-foreground">· {ward.name}</span>
-            <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
           </button>
         ))}
       </div>
       <CompactPagination page={page} pageSize={pageSize} total={wards.length} onPageChange={setPage} noun="wards" />
     </div>
-  );
+  )
 }
 
 function UlbRow({
@@ -242,13 +235,13 @@ function UlbRow({
   onAddWard,
   onEditWard,
 }: {
-  ulb: TenantUlb;
-  districtId: Id<"districts">;
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  onEditUlb: (draft: MunicipalityDraft) => void;
-  onAddWard: () => void;
-  onEditWard: (draft: WardDraft) => void;
+  ulb: TenantUlb
+  districtId: Id<"districts">
+  isOpen: boolean
+  onOpenChange: (open: boolean) => void
+  onEditUlb: (draft: MunicipalityDraft) => void
+  onAddWard: () => void
+  onEditWard: (draft: WardDraft) => void
 }) {
   return (
     <Card className="border-border/60 shadow-sm transition-shadow hover:shadow-md">
@@ -305,10 +298,10 @@ function UlbRow({
         </div>
 
         <CollapsibleContent>
-          <div className="border-t border-border bg-background px-3 py-2.5 space-y-2">
+          <div className="space-y-2 border-t border-border bg-background px-3 py-2.5">
             <div className="flex items-center justify-between">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Wards</p>
-              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={onAddWard}>
+              <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">Wards</p>
+              <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={onAddWard}>
                 <Plus className="h-3 w-3" /> Add ward
               </Button>
             </div>
@@ -322,7 +315,7 @@ function UlbRow({
         </CollapsibleContent>
       </Collapsible>
     </Card>
-  );
+  )
 }
 
 function DistrictRow({
@@ -337,22 +330,22 @@ function DistrictRow({
   onAddWard,
   onEditWard,
 }: {
-  district: TenantDistrict;
-  isOpen: boolean;
-  expandedUlbs: Set<string>;
-  onDistrictOpenChange: (open: boolean) => void;
-  onUlbOpenChange: (id: string, open: boolean) => void;
-  onEditDistrict: () => void;
-  onAddUlb: () => void;
-  onEditUlb: (draft: MunicipalityDraft) => void;
-  onAddWard: (ulb: TenantUlb) => void;
-  onEditWard: (draft: WardDraft) => void;
+  district: TenantDistrict
+  isOpen: boolean
+  expandedUlbs: Set<string>
+  onDistrictOpenChange: (open: boolean) => void
+  onUlbOpenChange: (id: string, open: boolean) => void
+  onEditDistrict: () => void
+  onAddUlb: () => void
+  onEditUlb: (draft: MunicipalityDraft) => void
+  onAddWard: (ulb: TenantUlb) => void
+  onEditWard: (draft: WardDraft) => void
 }) {
-  const districtId = district._id as Id<"districts">;
-  const [ulbPage, setUlbPage] = useState(1);
-  const ulbPageSize = DEFAULT_ULB_PAGE_SIZE;
+  const districtId = district._id as Id<"districts">
+  const [ulbPage, setUlbPage] = useState(1)
+  const ulbPageSize = DEFAULT_ULB_PAGE_SIZE
 
-  const pagedUlbs = district.ulbs.slice((ulbPage - 1) * ulbPageSize, ulbPage * ulbPageSize);
+  const pagedUlbs = district.ulbs.slice((ulbPage - 1) * ulbPageSize, ulbPage * ulbPageSize)
 
   return (
     <Card className="overflow-hidden border-l-4 border-l-violet-500/60 shadow-sm transition-shadow hover:shadow-md">
@@ -370,7 +363,7 @@ function DistrictRow({
               )}
               <MapPin className="h-4 w-4 shrink-0 text-violet-500" />
               <div className="min-w-0 flex-1">
-                <span className="font-semibold text-sm">{district.name}</span>
+                <span className="text-sm font-semibold">{district.name}</span>
                 <span className="ml-2 font-mono text-xs text-muted-foreground">{district.code}</span>
                 <span className="ml-2 text-xs text-muted-foreground">{district.stateName}</span>
               </div>
@@ -392,9 +385,9 @@ function DistrictRow({
         </div>
 
         <CollapsibleContent>
-          <div className="border-t border-border bg-muted/20 px-4 py-3 space-y-2">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          <div className="space-y-2 border-t border-border bg-muted/20 px-4 py-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                 ULBs / Municipalities
               </p>
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onAddUlb}>
@@ -403,7 +396,7 @@ function DistrictRow({
             </div>
 
             {district.ulbs.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-2">No ULBs yet for this district.</p>
+              <p className="py-2 text-xs text-muted-foreground">No ULBs yet for this district.</p>
             ) : (
               <div className="space-y-1.5">
                 {pagedUlbs.map((ulb) => (
@@ -432,7 +425,7 @@ function DistrictRow({
         </CollapsibleContent>
       </Collapsible>
     </Card>
-  );
+  )
 }
 
 function DistrictList({
@@ -441,10 +434,10 @@ function DistrictList({
   expandedUlbs,
   dispatch,
 }: {
-  tenants: TenantDistrict[];
-  expandedDistricts: Set<string>;
-  expandedUlbs: Set<string>;
-  dispatch: Dispatch<TenantsUiAction>;
+  tenants: TenantDistrict[]
+  expandedDistricts: Set<string>
+  expandedUlbs: Set<string>
+  dispatch: Dispatch<TenantsUiAction>
 }) {
   return (
     <div className="space-y-2">
@@ -497,40 +490,40 @@ function DistrictList({
         />
       ))}
     </div>
-  );
+  )
 }
 
 // ─── main tab ────────────────────────────────────────────────────────────────
 
 export function TenantsTab() {
-  const tenants = useTenantAdmin();
-  const upsertDistrict = useUpsertDistrict();
-  const upsertMunicipality = useUpsertMunicipality();
-  const upsertWard = useUpsertWard();
-  const [ui, dispatch] = useReducer(tenantsUiReducer, initialTenantsUiState);
-  const [search, setSearch] = useState("");
-  const [pageNumber, setPageNumber] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_DISTRICT_PAGE_SIZE);
+  const tenants = useTenantAdmin()
+  const upsertDistrict = useUpsertDistrict()
+  const upsertMunicipality = useUpsertMunicipality()
+  const upsertWard = useUpsertWard()
+  const [ui, dispatch] = useReducer(tenantsUiReducer, initialTenantsUiState)
+  const [search, setSearch] = useState("")
+  const [pageNumber, setPageNumber] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_DISTRICT_PAGE_SIZE)
 
   const filteredDistricts = useMemo(() => {
-    if (!tenants) return [];
-    return (tenants as TenantDistrict[]).filter((d) => matchesTenantSearch(d, search));
-  }, [tenants, search]);
+    if (!tenants) return []
+    return (tenants as TenantDistrict[]).filter((d) => matchesTenantSearch(d, search))
+  }, [tenants, search])
 
-  const totalDistrictPages = Math.max(1, Math.ceil(filteredDistricts.length / pageSize));
-  const effectivePageNumber = Math.min(Math.max(1, pageNumber), totalDistrictPages);
+  const totalDistrictPages = Math.max(1, Math.ceil(filteredDistricts.length / pageSize))
+  const effectivePageNumber = Math.min(Math.max(1, pageNumber), totalDistrictPages)
 
   const pagedDistricts = useMemo(() => {
-    const start = (effectivePageNumber - 1) * pageSize;
-    return filteredDistricts.slice(start, start + pageSize);
-  }, [filteredDistricts, effectivePageNumber, pageSize]);
+    const start = (effectivePageNumber - 1) * pageSize
+    return filteredDistricts.slice(start, start + pageSize)
+  }, [filteredDistricts, effectivePageNumber, pageSize])
 
-  const canGoPrev = effectivePageNumber > 1;
-  const canGoNext = effectivePageNumber < totalDistrictPages;
+  const canGoPrev = effectivePageNumber > 1
+  const canGoNext = effectivePageNumber < totalDistrictPages
 
   function handlePageSizeChange(size: number) {
-    setPageSize(size);
-    setPageNumber(1);
+    setPageSize(size)
+    setPageNumber(1)
   }
 
   async function saveDistrict(d: DistrictDraft) {
@@ -541,12 +534,12 @@ export function TenantsTab() {
         name: d.name,
         stateName: d.stateName,
         isActive: d.isActive,
-      });
-      toast.success(d.id ? "District updated" : "District created");
-      dispatch({ type: "setDistrictDraft", draft: null });
+      })
+      toast.success(d.id ? "District updated" : "District created")
+      dispatch({ type: "setDistrictDraft", draft: null })
     } catch (e) {
-      toast.error(parseConvexError(e).message);
-      throw e;
+      toast.error(parseConvexError(e).message)
+      throw e
     }
   }
 
@@ -560,12 +553,12 @@ export function TenantsTab() {
         bodyType: m.bodyType,
         postalCode: m.postalCode || undefined,
         isActive: m.isActive,
-      });
-      toast.success(m.id ? "ULB updated" : "ULB created");
-      dispatch({ type: "setMuniDraft", draft: null });
+      })
+      toast.success(m.id ? "ULB updated" : "ULB created")
+      dispatch({ type: "setMuniDraft", draft: null })
     } catch (e) {
-      toast.error(parseConvexError(e).message);
-      throw e;
+      toast.error(parseConvexError(e).message)
+      throw e
     }
   }
 
@@ -577,18 +570,18 @@ export function TenantsTab() {
         wardNo: w.wardNo,
         wardCode: w.wardCode || undefined,
         name: w.name,
-      });
-      toast.success(w.id ? "Ward updated" : "Ward created");
-      dispatch({ type: "setWardDraft", draft: null });
+      })
+      toast.success(w.id ? "Ward updated" : "Ward created")
+      dispatch({ type: "setWardDraft", draft: null })
     } catch (e) {
-      toast.error(parseConvexError(e).message);
-      throw e;
+      toast.error(parseConvexError(e).message)
+      throw e
     }
   }
 
-  if (tenants === undefined) return <TableSkeleton rows={4} />;
+  if (tenants === undefined) return <TableSkeleton rows={4} />
 
-  const tenantRows = tenants as TenantDistrict[];
+  const tenantRows = tenants as TenantDistrict[]
 
   return (
     <Card className="overflow-hidden border-border/60 shadow-sm">
@@ -602,17 +595,17 @@ export function TenantsTab() {
         }
       />
 
-      <div className="p-5 space-y-4">
+      <div className="space-y-4 p-5">
         {tenantRows.length > 0 && (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative max-w-md flex-1">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search districts, ULBs, or wards…"
                 value={search}
                 onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPageNumber(1);
+                  setSearch(e.target.value)
+                  setPageNumber(1)
                 }}
                 className="h-9 pl-8 text-sm"
               />
@@ -692,5 +685,5 @@ export function TenantsTab() {
         onSaveWard={saveWard}
       />
     </Card>
-  );
+  )
 }

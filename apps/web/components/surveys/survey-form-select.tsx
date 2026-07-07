@@ -1,8 +1,8 @@
-"use client";
+"use client"
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { SurveyDraftValues } from "@/schema/surveys/surveySchema";
-import { Controller, type Control, type Path } from "react-hook-form";
+import type { SurveyDraftValues } from "@workspace/schemas"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select"
+import { Controller, type Control, type Path } from "react-hook-form"
 
 export function SurveySelect({
   control,
@@ -10,10 +10,10 @@ export function SurveySelect({
   options,
   placeholder,
 }: {
-  control: Control<SurveyDraftValues>;
-  name: Path<SurveyDraftValues>;
-  options: { value: string; label: string }[];
-  placeholder: string;
+  control: Control<SurveyDraftValues>
+  name: Path<SurveyDraftValues>
+  options: { value: string; label: string }[]
+  placeholder: string
 }) {
   return (
     <Controller
@@ -34,5 +34,5 @@ export function SurveySelect({
         </Select>
       )}
     />
-  );
+  )
 }

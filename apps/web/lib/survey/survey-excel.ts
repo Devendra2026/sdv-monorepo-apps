@@ -4,7 +4,7 @@
  */
 import { PHOTO_SLOT_LABEL, QC_STATUS_LABEL, SURVEY_STATUS_LABEL } from "@/lib/domain";
 import { surveyAreaMetrics } from "@/lib/survey/area";
-import { fmtDate } from "@/lib/utils";
+import { fmtDate } from "@workspace/ui/lib/utils";
 import * as XLSX from "xlsx";
 
 export const SURVEY_SHEET = "Surveys";

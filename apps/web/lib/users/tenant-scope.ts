@@ -1,16 +1,16 @@
-import type { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 
 export type TenantScopeValue = {
-  scope: "ulb" | "district";
-  districtId: string;
-  municipalityId: string;
-  wards: string[];
-};
+  scope: "ulb" | "district"
+  districtId: string
+  municipalityId: string
+  wards: string[]
+}
 
 export function tenantScopeIsComplete(value: TenantScopeValue): boolean {
-  if (!value.districtId) return false;
-  if (value.scope === "district") return true;
-  return !!value.municipalityId;
+  if (!value.districtId) return false
+  if (value.scope === "district") return true
+  return !!value.municipalityId
 }
 
 export function tenantScopeToApproveArgs(value: TenantScopeValue) {
@@ -19,5 +19,5 @@ export function tenantScopeToApproveArgs(value: TenantScopeValue) {
     municipalityId:
       value.scope === "ulb" && value.municipalityId ? (value.municipalityId as Id<"municipalities">) : undefined,
     wardAssignments: value.wards,
-  };
+  }
 }

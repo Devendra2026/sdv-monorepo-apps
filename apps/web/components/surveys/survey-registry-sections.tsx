@@ -6,7 +6,7 @@ import { FadeIn } from "@/components/design-system/motion";
 import type { SurveyDataTableRow } from "@/components/surveys/survey-data-table";
 import { SurveyRegistryTable } from "@/components/surveys/survey-registry-table";
 import { SurveyorSearch } from "@/components/surveys/surveyor-search";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
 import type { SurveyQueueStats } from "@/hooks/surveys/useSurveyQueue";
 import { SURVEY_MODULE } from "@/lib/design-system";
 

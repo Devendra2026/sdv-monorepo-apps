@@ -1,5 +1,5 @@
 import { CardsSkeleton, TableSkeleton } from "@/components/shared/loading";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@workspace/ui/components/skeleton";
 
 export function QcPageSkeleton({ variant = "review" }: { variant?: "review" | "registry" | "edit" }) {
   if (variant === "registry") {

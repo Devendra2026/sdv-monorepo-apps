@@ -1,28 +1,28 @@
-"use client";
+"use client"
 
-import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card";
-import { QcPropertyUseCell } from "@/components/qc/qc-registry-cells";
-import { QcStatusBadge } from "@/components/shared/status-badge";
-import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { Id } from "@/convex/_generated/dataModel";
-import { useMasters } from "@/hooks/masters/useMasters";
-import { useDecide, useParcelSiblings } from "@/hooks/qc/useQc";
-import { QC_DUPLICATE_BADGE, QC_TABLE } from "@/lib/design-system";
-import { detectParcelConflict, type ParcelSiblingRow } from "@/lib/qc/parcel-siblings";
-import { formatRegistryParcelNo, formatRegistryWardNo } from "@/lib/survey/format-registry-parcel";
-import { buildUlbCodeMap, resolveDisplayPropertyId } from "@/lib/survey/resolve-display-property-id";
-import { resolveOwnerDisplayName } from "@/lib/survey/resolve-owner-name";
-import { cn } from "@/lib/utils";
-import { AlertTriangle, Eye, Pencil } from "lucide-react";
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { toast } from "sonner";
+import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card"
+import { QcPropertyUseCell } from "@/components/qc/qc-registry-cells"
+import { QcStatusBadge } from "@/components/shared/status-badge"
+import { Button } from "@/components/ui/button"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useMasters } from "@/hooks/masters/useMasters"
+import { useDecide, useParcelSiblings } from "@/hooks/qc/useQc"
+import { QC_DUPLICATE_BADGE, QC_TABLE } from "@/lib/design-system"
+import { detectParcelConflict, type ParcelSiblingRow } from "@/lib/qc/parcel-siblings"
+import { formatRegistryParcelNo, formatRegistryWardNo } from "@/lib/survey/format-registry-parcel"
+import { buildUlbCodeMap, resolveDisplayPropertyId } from "@/lib/survey/resolve-display-property-id"
+import { resolveOwnerDisplayName } from "@/lib/survey/resolve-owner-name"
+import { cn } from "@/lib/utils"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { AlertTriangle, Eye, Pencil } from "lucide-react"
+import Link from "next/link"
+import { useMemo, useState } from "react"
+import { toast } from "sonner"
 
 const DUPLICATE_REJECT_COMMENT =
-  "Duplicate parcel entry — please reassign parcel number or correct property use with field team.";
+  "Duplicate parcel entry — please reassign parcel number or correct property use with field team."
 
-type PanelRow = ParcelSiblingRow & { isCurrent?: boolean };
+type PanelRow = ParcelSiblingRow & { isCurrent?: boolean }
 
 export function QcParcelSiblingsPanel({
   surveyId,
@@ -30,52 +30,52 @@ export function QcParcelSiblingsPanel({
   parcelNo,
   currentSurvey,
 }: {
-  surveyId: string;
-  wardNo: string;
-  parcelNo: string;
-  currentSurvey: ParcelSiblingRow;
+  surveyId: string
+  wardNo: string
+  parcelNo: string
+  currentSurvey: ParcelSiblingRow
 }) {
-  const siblings = useParcelSiblings(surveyId);
-  const decide = useDecide();
-  const { masters } = useMasters();
-  const ulbCodes = useMemo(() => (masters ? buildUlbCodeMap(masters.ulbs) : undefined), [masters]);
-  const propertyUses = masters?.propertyUses;
-  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const siblings = useParcelSiblings(surveyId)
+  const decide = useDecide()
+  const { masters } = useMasters()
+  const ulbCodes = useMemo(() => (masters ? buildUlbCodeMap(masters.ulbs) : undefined), [masters])
+  const propertyUses = masters?.propertyUses
+  const [rejectingId, setRejectingId] = useState<string | null>(null)
 
   const allOnParcel = useMemo(() => {
-    if (!siblings) return undefined;
-    return [currentSurvey, ...siblings];
-  }, [siblings, currentSurvey]);
+    if (!siblings) return undefined
+    return [currentSurvey, ...siblings]
+  }, [siblings, currentSurvey])
 
   const tableRows = useMemo((): PanelRow[] => {
-    if (!siblings) return [];
-    return [{ ...currentSurvey, isCurrent: true }, ...siblings.map((s) => ({ ...s, isCurrent: false }))];
-  }, [siblings, currentSurvey]);
+    if (!siblings) return []
+    return [{ ...currentSurvey, isCurrent: true }, ...siblings.map((s) => ({ ...s, isCurrent: false }))]
+  }, [siblings, currentSurvey])
 
   const hasConflict = useMemo(() => {
-    if (!allOnParcel) return false;
-    return detectParcelConflict(allOnParcel);
-  }, [allOnParcel]);
+    if (!allOnParcel) return false
+    return detectParcelConflict(allOnParcel)
+  }, [allOnParcel])
 
-  if (siblings === undefined) return null;
-  if (siblings.length === 0) return null;
+  if (siblings === undefined) return null
+  if (siblings.length === 0) return null
 
   const handleRejectDuplicate = async (targetId: string) => {
-    setRejectingId(targetId);
+    setRejectingId(targetId)
     try {
       await decide({
         surveyId: targetId as Id<"surveys">,
         decision: "reject",
         comment: DUPLICATE_REJECT_COMMENT,
         taggedSections: ["property"],
-      });
-      toast.success("Record returned to surveyor for correction");
+      })
+      toast.success("Record returned to surveyor for correction")
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not reject record");
+      toast.error(err instanceof Error ? err.message : "Could not reject record")
     } finally {
-      setRejectingId(null);
+      setRejectingId(null)
     }
-  };
+  }
 
   return (
     <GlassCard padding="md" className={cn("border-amber-500/30", QC_DUPLICATE_BADGE.conflictPanel)}>
@@ -117,7 +117,7 @@ export function QcParcelSiblingsPanel({
                 <TableCell className={cn(QC_TABLE.monoCell, "py-2.5")}>
                   {resolveDisplayPropertyId(row, ulbCodes) ?? row.propertyId ?? "—"}
                   {row.isCurrent && (
-                    <span className="ml-2 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-950 dark:text-amber-100">
+                    <span className="ml-2 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-amber-950 uppercase dark:text-amber-100">
                       Current
                     </span>
                   )}
@@ -164,7 +164,7 @@ export function QcParcelSiblingsPanel({
                           variant="outline"
                           className={cn(
                             "h-7 cursor-pointer rounded-full px-2.5 text-xs",
-                            QC_DUPLICATE_BADGE.rejectButton,
+                            QC_DUPLICATE_BADGE.rejectButton
                           )}
                           disabled={rejectingId === row._id}
                           onClick={() => void handleRejectDuplicate(row._id)}
@@ -181,5 +181,5 @@ export function QcParcelSiblingsPanel({
         </Table>
       </div>
     </GlassCard>
-  );
+  )
 }

@@ -1,4 +1,4 @@
-"use client";
+"use client"
 
 import {
   AddressSection,
@@ -6,46 +6,46 @@ import {
   ServicesSection,
   TaxationSection,
   TenantPropertySection,
-} from "@/components/surveys/survey-form-sections";
-import { useMasters, useWardsForMunicipality } from "@/hooks/masters/useMasters";
-import { useSaveDraft } from "@/hooks/surveys/useSurveys";
+} from "@/components/surveys/survey-form-sections"
+import { useMasters, useWardsForMunicipality } from "@/hooks/masters/useMasters"
+import { useSaveDraft } from "@/hooks/surveys/useSurveys"
 import {
   applyServerFieldErrors,
   conflictSurveyHref,
   getConflictingSurveyId,
   toastSurveyConflict,
   type ConflictSurveyLinkVariant,
-} from "@/lib/errors";
-import { formatPropertyId } from "@/lib/survey/area";
-import type { SurveyListItem } from "@/schema/surveys/index";
-import { surveyDraftSchema, type SurveyDraftValues } from "@/schema/surveys/surveySchema";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
-import { useForm } from "react-hook-form";
-import { toast } from "sonner";
+} from "@/lib/errors"
+import { formatPropertyId } from "@/lib/survey/area"
+import { zodResolver } from "@hookform/resolvers/zod"
+import type { SurveyListItem } from "@workspace/schemas"
+import { surveyDraftSchema, type SurveyDraftValues } from "@workspace/schemas"
+import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react"
+import { useForm } from "react-hook-form"
+import { toast } from "sonner"
 
 export type SurveyFormHandle = {
-  save: (patch?: Partial<SurveyDraftValues>) => Promise<boolean>;
-};
+  save: (patch?: Partial<SurveyDraftValues>) => Promise<boolean>
+}
 
 type SurveyFormProps = {
-  ref?: Ref<SurveyFormHandle>;
-  localId: string;
+  ref?: Ref<SurveyFormHandle>
+  localId: string
   /** Server row id — required for supervisor QC corrections on web. */
-  surveyId?: string;
-  municipalityId?: string;
-  existing?: SurveyListItem | null;
-  onSaved?: (surveyId: string) => void;
-  onDirty?: () => void;
-  onValidationError?: () => void;
-  conflictLinkVariant?: ConflictSurveyLinkVariant;
-};
+  surveyId?: string
+  municipalityId?: string
+  existing?: SurveyListItem | null
+  onSaved?: (surveyId: string) => void
+  onDirty?: () => void
+  onValidationError?: () => void
+  conflictLinkVariant?: ConflictSurveyLinkVariant
+}
 
 function buildDefaultValues(
   localId: string,
   municipalityId: string | undefined,
-  existing?: SurveyListItem | null,
+  existing?: SurveyListItem | null
 ): SurveyDraftValues {
   const defaultOwners =
     existing?.owners && existing.owners.length > 0
@@ -55,7 +55,7 @@ function buildDefaultValues(
           mobileNo: owner.mobileNo ?? "",
           altMobileNo: owner.altMobileNo ?? "",
         }))
-      : [{ name: "", fatherOrHusbandName: "", mobileNo: "", altMobileNo: "" }];
+      : [{ name: "", fatherOrHusbandName: "", mobileNo: "", altMobileNo: "" }]
 
   return {
     localId,
@@ -92,7 +92,7 @@ function buildDefaultValues(
     waterSource: existing?.waterSource as SurveyDraftValues["waterSource"],
     sanitationType: existing?.sanitationType as SurveyDraftValues["sanitationType"],
     municipalWasteCollection: existing?.municipalWasteCollection ?? false,
-  } as SurveyDraftValues;
+  } as SurveyDraftValues
 }
 
 export function SurveyForm({
@@ -106,10 +106,10 @@ export function SurveyForm({
   onValidationError,
   conflictLinkVariant = "surveys",
 }: SurveyFormProps) {
-  const router = useRouter();
-  const { masters } = useMasters();
-  const saveDraft = useSaveDraft();
-  const [conflictingSurveyId, setConflictingSurveyId] = useState<string | undefined>();
+  const router = useRouter()
+  const { masters } = useMasters()
+  const saveDraft = useSaveDraft()
+  const [conflictingSurveyId, setConflictingSurveyId] = useState<string | undefined>()
 
   const {
     register,
@@ -121,25 +121,25 @@ export function SurveyForm({
   } = useForm<SurveyDraftValues>({
     resolver: zodResolver(surveyDraftSchema),
     defaultValues: buildDefaultValues(localId, municipalityId, existing),
-  });
+  })
 
-  const saveDraftRef = useRef(saveDraft);
-  saveDraftRef.current = saveDraft;
-  const rowIdRef = useRef(surveyId ?? existing?._id);
-  rowIdRef.current = surveyId ?? existing?._id;
-  const setErrorRef = useRef(setError);
-  setErrorRef.current = setError;
-  const onSavedRef = useRef(onSaved);
-  onSavedRef.current = onSaved;
-  const onDirtyRef = useRef(onDirty);
-  onDirtyRef.current = onDirty;
-  const onValidationErrorRef = useRef(onValidationError);
-  onValidationErrorRef.current = onValidationError;
-  const conflictLinkVariantRef = useRef(conflictLinkVariant);
-  conflictLinkVariantRef.current = conflictLinkVariant;
-  const routerRef = useRef(router);
-  routerRef.current = router;
-  const skipDirtyRef = useRef(true);
+  const saveDraftRef = useRef(saveDraft)
+  saveDraftRef.current = saveDraft
+  const rowIdRef = useRef(surveyId ?? existing?._id)
+  rowIdRef.current = surveyId ?? existing?._id
+  const setErrorRef = useRef(setError)
+  setErrorRef.current = setError
+  const onSavedRef = useRef(onSaved)
+  onSavedRef.current = onSaved
+  const onDirtyRef = useRef(onDirty)
+  onDirtyRef.current = onDirty
+  const onValidationErrorRef = useRef(onValidationError)
+  onValidationErrorRef.current = onValidationError
+  const conflictLinkVariantRef = useRef(conflictLinkVariant)
+  conflictLinkVariantRef.current = conflictLinkVariant
+  const routerRef = useRef(router)
+  routerRef.current = router
+  const skipDirtyRef = useRef(true)
 
   const saveDetails = useCallback(
     (patch?: Partial<SurveyDraftValues>): Promise<boolean> => {
@@ -152,17 +152,17 @@ export function SurveyForm({
                 ...patch,
                 ...(rowIdRef.current ? { id: rowIdRef.current as any } : {}),
                 clientUpdatedAt: Date.now(),
-              } as any);
-              toast.success("Details saved");
-              setConflictingSurveyId(undefined);
-              onSavedRef.current?.(id as unknown as string);
-              resolve(true);
+              } as any)
+              toast.success("Details saved")
+              setConflictingSurveyId(undefined)
+              onSavedRef.current?.(id as unknown as string)
+              resolve(true)
             } catch (e) {
-              const parsed = applyServerFieldErrors(e, setErrorRef.current as any);
-              const conflictId = getConflictingSurveyId(e);
-              setConflictingSurveyId(conflictId);
+              const parsed = applyServerFieldErrors(e, setErrorRef.current as any)
+              const conflictId = getConflictingSurveyId(e)
+              setConflictingSurveyId(conflictId)
               if (parsed.code === "VALIDATION") {
-                onValidationErrorRef.current?.();
+                onValidationErrorRef.current?.()
               }
               if (
                 !toastSurveyConflict(e, {
@@ -170,39 +170,39 @@ export function SurveyForm({
                   onNavigate: (href) => routerRef.current.push(href),
                 })
               ) {
-                toast.error(parsed.message);
+                toast.error(parsed.message)
               }
-              resolve(false);
+              resolve(false)
             }
           },
-          () => resolve(false),
-        )();
-      });
+          () => resolve(false)
+        )()
+      })
     },
-    [handleSubmit],
-  );
+    [handleSubmit]
+  )
 
-  useImperativeHandle(ref, () => ({ save: saveDetails }), [saveDetails]);
+  useImperativeHandle(ref, () => ({ save: saveDetails }), [saveDetails])
 
   useEffect(() => {
     const subscription = watch(() => {
       if (skipDirtyRef.current) {
-        skipDirtyRef.current = false;
-        return;
+        skipDirtyRef.current = false
+        return
       }
-      onDirtyRef.current?.();
-    });
-    return () => subscription.unsubscribe();
-  }, [watch]);
+      onDirtyRef.current?.()
+    })
+    return () => subscription.unsubscribe()
+  }, [watch])
 
-  const muniId = watch("municipalityId");
-  const wards = useWardsForMunicipality(muniId);
-  const propertyUse = watch("propertyUse");
-  const wardNo = watch("wardNo");
-  const parcelNo = watch("parcelNo");
-  const unitNo = watch("unitNo");
-  const subcats = propertyUse ? (masters?.propertyUseSubcategories?.[propertyUse] ?? []) : [];
-  const selectedUlb = (masters?.ulbs ?? []).find((m: { _id: string }) => m._id === muniId);
+  const muniId = watch("municipalityId")
+  const wards = useWardsForMunicipality(muniId)
+  const propertyUse = watch("propertyUse")
+  const wardNo = watch("wardNo")
+  const parcelNo = watch("parcelNo")
+  const unitNo = watch("unitNo")
+  const subcats = propertyUse ? (masters?.propertyUseSubcategories?.[propertyUse] ?? []) : []
+  const selectedUlb = (masters?.ulbs ?? []).find((m: { _id: string }) => m._id === muniId)
   const previewPropertyId =
     formatPropertyId({
       ulbCode: selectedUlb?.code ?? "",
@@ -210,9 +210,9 @@ export function SurveyForm({
       parcelNo: parcelNo ?? "",
       unitNo: unitNo ?? "",
       propertyUse: propertyUse ?? "",
-    }) ?? existing?.propertyId;
+    }) ?? existing?.propertyId
 
-  const sectionProps = { control, register, errors, masters };
+  const sectionProps = { control, register, errors, masters }
 
   return (
     <div className="space-y-4">
@@ -229,5 +229,5 @@ export function SurveyForm({
       <TaxationSection {...sectionProps} subcats={subcats} />
       <ServicesSection {...sectionProps} />
     </div>
-  );
+  )
 }

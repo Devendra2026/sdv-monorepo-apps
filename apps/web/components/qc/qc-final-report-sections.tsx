@@ -1,20 +1,20 @@
-"use client";
+"use client"
 
-import { SectionHeader } from "@/components/design-system/executive-hero";
-import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card";
-import { MetricCard } from "@/components/design-system/metric-card";
-import { FadeIn, StaggerGrid, StaggerItem } from "@/components/design-system/motion";
-import { GoogleMapEmbed } from "@/components/shared/google-map-embed";
-import { QcStatusBadge, SurveyStatusBadge } from "@/components/shared/status-badge";
-import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { api } from "@/convex/_generated/api";
-import { formatInr, type DemandAssessment } from "@/lib/qc/demand-estimate";
-import { formatAreaSqft, formatAreaSqMeter, type SurveyAreaMetrics } from "@/lib/survey/area";
-import { labelFromOptions } from "@/lib/survey/detail-labels";
-import { fmtDate } from "@/lib/utils";
-import type { SurveyDetail } from "@/schema/surveys/index";
-import type { FunctionReturnType } from "convex/server";
+import { SectionHeader } from "@/components/design-system/executive-hero"
+import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card"
+import { MetricCard } from "@/components/design-system/metric-card"
+import { FadeIn, StaggerGrid, StaggerItem } from "@/components/design-system/motion"
+import { GoogleMapEmbed } from "@/components/shared/google-map-embed"
+import { QcStatusBadge, SurveyStatusBadge } from "@/components/shared/status-badge"
+import { Button } from "@/components/ui/button"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { formatInr, type DemandAssessment } from "@/lib/qc/demand-estimate"
+import { formatAreaSqft, formatAreaSqMeter, type SurveyAreaMetrics } from "@/lib/survey/area"
+import { labelFromOptions } from "@/lib/survey/detail-labels"
+import { fmtDate } from "@/lib/utils"
+import type { api } from "@workspace/backend/convex/_generated/api.js"
+import type { SurveyDetail } from "@workspace/schemas"
+import type { FunctionReturnType } from "convex/server"
 import {
   BadgeCheck,
   Building2,
@@ -28,22 +28,22 @@ import {
   Ruler,
   ShieldCheck,
   Users,
-} from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
+} from "lucide-react"
+import Image from "next/image"
+import Link from "next/link"
 
 function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
-  const empty = value == null || value === "" || value === "—";
+  const empty = value == null || value === "" || value === "—"
   return (
     <div className="rounded-xl border border-border/50 bg-card/80 px-3 py-2.5 shadow-premium-sm backdrop-blur-sm dark:bg-card/40">
-      <p className="mb-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
+      <p className="mb-0.5 text-[10px] font-bold tracking-[0.12em] text-muted-foreground uppercase">{label}</p>
       <p
-        className={`text-sm font-medium leading-snug ${empty ? "italic text-muted-foreground/50" : "text-foreground"}`}
+        className={`text-sm leading-snug font-medium ${empty ? "text-muted-foreground/50 italic" : "text-foreground"}`}
       >
         {empty ? "—" : value}
       </p>
     </div>
-  );
+  )
 }
 
 function ReportPhoto({ url, label }: { url?: string | null; label: string }) {
@@ -70,11 +70,11 @@ function ReportPhoto({ url, label }: { url?: string | null; label: string }) {
         {label}
       </figcaption>
     </figure>
-  );
+  )
 }
 
-type MastersBundle = NonNullable<FunctionReturnType<typeof api.masters.bundle>>;
-type ReportDemand = DemandAssessment & { assessableSqft: number };
+type MastersBundle = NonNullable<FunctionReturnType<typeof api.masters.bundle>>
+type ReportDemand = DemandAssessment & { assessableSqft: number }
 
 export function QcReportKpiStrip({
   demand,
@@ -83,11 +83,11 @@ export function QcReportKpiStrip({
   certifiedAt,
   assessmentYear,
 }: {
-  demand: ReportDemand;
-  displayAssessableSqft: number;
-  areas: SurveyAreaMetrics;
-  certifiedAt: number;
-  assessmentYear: string;
+  demand: ReportDemand
+  displayAssessableSqft: number
+  areas: SurveyAreaMetrics
+  certifiedAt: number
+  assessmentYear: string
 }) {
   return (
     <section aria-labelledby="report-kpi-heading">
@@ -145,7 +145,7 @@ export function QcReportKpiStrip({
         </StaggerItem>
       </StaggerGrid>
     </section>
-  );
+  )
 }
 
 export function QcReportMainColumn({
@@ -162,18 +162,18 @@ export function QcReportMainColumn({
   frontPhoto,
   sidePhoto,
 }: {
-  survey: SurveyDetail;
-  propertyId: string;
-  ownerName: string;
-  propertyType: string;
-  ownershipType: string;
-  taxZone: string;
-  roadType: string;
-  assessmentYear: string;
-  displayAssessableSqft: number;
-  masters?: Pick<MastersBundle, "floors" | "usageTypes" | "usageFactors" | "constructionTypes">;
-  frontPhoto?: string | null;
-  sidePhoto?: string | null;
+  survey: SurveyDetail
+  propertyId: string
+  ownerName: string
+  propertyType: string
+  ownershipType: string
+  taxZone: string
+  roadType: string
+  assessmentYear: string
+  displayAssessableSqft: number
+  masters?: Pick<MastersBundle, "floors" | "usageTypes" | "usageFactors" | "constructionTypes">
+  frontPhoto?: string | null
+  sidePhoto?: string | null
 }) {
   return (
     <div className="space-y-6">
@@ -225,13 +225,13 @@ export function QcReportMainColumn({
                 <Table>
                   <TableHeader>
                     <TableRow className="border-b border-brand-navy/10 bg-linear-to-r from-brand-navy/6 via-muted/25 to-brand-navy/4 hover:bg-brand-navy/6 dark:border-primary/15 dark:from-primary/12">
-                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.12em]">Floor</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.12em]">Usage</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.12em]">Construction</TableHead>
-                      <TableHead className="text-right text-[10px] font-bold uppercase tracking-[0.12em]">
+                      <TableHead className="text-[10px] font-bold tracking-[0.12em] uppercase">Floor</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-[0.12em] uppercase">Usage</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-[0.12em] uppercase">Construction</TableHead>
+                      <TableHead className="text-right text-[10px] font-bold tracking-[0.12em] uppercase">
                         Built-up (sqft)
                       </TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.12em]">Status</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-[0.12em] uppercase">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -240,11 +240,11 @@ export function QcReportMainColumn({
                         <TableCell className="font-medium capitalize">
                           {labelFromOptions(masters?.floors, floor.floorName)}
                         </TableCell>
-                        <TableCell className="capitalize text-muted-foreground">
+                        <TableCell className="text-muted-foreground capitalize">
                           {labelFromOptions(masters?.usageTypes, floor.usageType) ||
                             labelFromOptions(masters?.usageFactors, floor.usageFactor)}
                         </TableCell>
-                        <TableCell className="capitalize text-muted-foreground">
+                        <TableCell className="text-muted-foreground capitalize">
                           {labelFromOptions(masters?.constructionTypes, floor.constructionType)}
                         </TableCell>
                         <TableCell className="text-right font-mono font-semibold tabular-nums">
@@ -269,10 +269,10 @@ export function QcReportMainColumn({
             <p className="px-5 py-10 text-center text-sm text-muted-foreground">No floor records available</p>
           )}
           <div className="flex items-center justify-between border-t border-border/50 bg-brand-navy/5 px-5 py-4 dark:bg-primary/8">
-            <span className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+            <span className="text-xs font-bold tracking-[0.12em] text-muted-foreground uppercase">
               Total Assessable Area
             </span>
-            <span className="font-display text-2xl font-bold tabular-nums text-foreground">
+            <span className="font-display text-2xl font-bold text-foreground tabular-nums">
               {displayAssessableSqft > 0
                 ? `${displayAssessableSqft.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} sq ft`
                 : "—"}
@@ -296,7 +296,7 @@ export function QcReportMainColumn({
         </GlassCard>
       </FadeIn>
     </div>
-  );
+  )
 }
 
 export function QcReportSidebar({
@@ -305,10 +305,10 @@ export function QcReportSidebar({
   demand,
   certifiedAt,
 }: {
-  survey: SurveyDetail;
-  surveyId: string;
-  demand: ReportDemand;
-  certifiedAt: number;
+  survey: SurveyDetail
+  surveyId: string
+  demand: ReportDemand
+  certifiedAt: number
 }) {
   return (
     <aside className="space-y-5 xl:sticky xl:top-6">
@@ -325,7 +325,7 @@ export function QcReportSidebar({
               {demand.lines.map((line) => (
                 <li key={line.label} className="flex items-center justify-between py-3 first:pt-0">
                   <span className="text-sm text-muted-foreground">{line.label}</span>
-                  <span className="font-mono text-sm font-semibold tabular-nums text-foreground">
+                  <span className="font-mono text-sm font-semibold text-foreground tabular-nums">
                     {formatInr(line.amount)}
                   </span>
                 </li>
@@ -337,10 +337,10 @@ export function QcReportSidebar({
             </p>
           )}
           <div className="mt-4 rounded-xl border-2 border-brand-red/25 bg-brand-red/8 px-4 py-5 dark:border-brand-red/35 dark:bg-brand-red/12">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            <p className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
               Total Annual Demand
             </p>
-            <p className="mt-1 font-display text-3xl font-bold tabular-nums text-brand-red">
+            <p className="mt-1 font-display text-3xl font-bold text-brand-red tabular-nums">
               {demand.total > 0 ? formatInr(demand.total) : "—"}
             </p>
           </div>
@@ -372,15 +372,15 @@ export function QcReportSidebar({
           <SectionHeader title="Certification Record" description="Report metadata" className="mb-4" />
           <dl className="space-y-3 text-sm">
             <div>
-              <dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Certified On</dt>
+              <dt className="text-[10px] font-bold tracking-[0.12em] text-muted-foreground uppercase">Certified On</dt>
               <dd className="mt-0.5 font-mono font-semibold text-foreground">{fmtDate(certifiedAt)}</dd>
             </div>
             <div>
-              <dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Surveyor</dt>
+              <dt className="text-[10px] font-bold tracking-[0.12em] text-muted-foreground uppercase">Surveyor</dt>
               <dd className="mt-0.5 font-medium text-foreground">{survey.surveyor?.name ?? "—"}</dd>
             </div>
             <div>
-              <dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">ULB</dt>
+              <dt className="text-[10px] font-bold tracking-[0.12em] text-muted-foreground uppercase">ULB</dt>
               <dd className="mt-0.5 font-medium text-foreground">{survey.city ?? "—"}</dd>
             </div>
           </dl>
@@ -393,7 +393,7 @@ export function QcReportSidebar({
         </GlassCard>
       </FadeIn>
     </aside>
-  );
+  )
 }
 
-export { ShieldCheck };
+export { ShieldCheck }

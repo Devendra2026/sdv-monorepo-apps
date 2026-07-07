@@ -5,14 +5,14 @@ export const SURVEY_STATUS_BADGE: Record<string, string> = {
     "border-brand-navy/35 bg-brand-navy/10 text-brand-navy dark:border-primary/40 dark:bg-primary/15 dark:text-primary-foreground",
   approved: "border-success/35 bg-success/12 text-emerald-800 dark:text-emerald-300",
   rejected: "border-brand-red/35 bg-brand-red/10 text-brand-red dark:text-brand-red-foreground",
-};
+}
 
 export const QC_STATUS_BADGE: Record<string, string> = {
   pending:
     "border-warning/45 bg-warning/14 text-amber-950 dark:border-warning/40 dark:bg-warning/12 dark:text-amber-200",
   approved: "border-success/35 bg-success/12 text-emerald-800 dark:text-emerald-300",
   rejected: "border-brand-red/35 bg-brand-red/10 text-brand-red dark:text-brand-red-foreground",
-};
+}
 
 export const SURVEY_ROW_TONE: Record<string, string> = {
   draft: "hover:bg-muted/35",
@@ -20,27 +20,35 @@ export const SURVEY_ROW_TONE: Record<string, string> = {
   qcPending: "bg-warning/7 hover:bg-warning/12",
   approved: "bg-success/6 hover:bg-success/10",
   rejected: "bg-brand-red/5 hover:bg-brand-red/9",
-};
+}
 
-/** Survey Command Center module — indigo workflow accent with emerald CTA. */
+/** Survey Command Center — porcelain light / obsidian glass dark with indigo + emerald accents. */
 export const SURVEY_MODULE = {
   accent: "#6366F1",
+  accentNeon: "#818CF8",
   approved: "#10B981",
   structure: "#002366",
-  canvas: "#F5F3FF",
+  canvas: "#FAFAF8",
+  canvasDark: "#0A0A0F",
   heroGradient: "brand" as const,
-  tabActive: "data-[state=active]:bg-indigo-600 data-[state=active]:text-white",
+  portalShell: "border-t-4 border-indigo-500/80 bg-[#FAFAF8] dark:border-indigo-400/60 dark:bg-[#0A0A0F]",
+  portalGradient:
+    "bg-[radial-gradient(ellipse_at_top_left,rgba(99,102,241,0.06),transparent_50%),radial-gradient(ellipse_at_bottom_right,rgba(16,185,129,0.05),transparent_55%)] dark:bg-[radial-gradient(ellipse_at_top_left,rgba(99,102,241,0.14),transparent_45%),radial-gradient(ellipse_at_bottom_right,rgba(16,185,129,0.08),transparent_50%)]",
+  glassPanel:
+    "rounded-2xl border border-indigo-500/15 bg-card/85 shadow-premium-md backdrop-blur-xl dark:border-indigo-400/25 dark:bg-card/40 dark:shadow-[0_0_40px_-12px_rgba(99,102,241,0.35)]",
+  tabActive:
+    "data-[state=active]:bg-indigo-600 data-[state=active]:text-white dark:data-[state=active]:shadow-[0_0_20px_-4px_rgba(99,102,241,0.6)]",
   tableHeader:
-    "border-indigo-500/15 bg-linear-to-r from-indigo-500/12 via-indigo-500/6 to-transparent dark:from-indigo-500/18",
-  cardBorder: "border-indigo-500/15",
-  scopeBanner: "border-indigo-500/20 bg-indigo-50/30 dark:bg-indigo-950/15",
+    "border-indigo-500/15 bg-linear-to-r from-indigo-500/10 via-indigo-500/5 to-transparent dark:from-indigo-500/20 dark:via-indigo-500/8",
+  cardBorder: "border-indigo-500/15 dark:border-indigo-400/20",
+  scopeBanner: "border-indigo-500/20 bg-indigo-50/40 dark:border-indigo-400/25 dark:bg-indigo-950/20",
   metricTones: {
     total: "info",
     drafts: "default",
     submitted: "info",
     approved: "success",
   } as const,
-} as const;
+} as const
 
 /** Survey registry / ward data tables — typography + surface tokens. */
 export const SURVEY_TABLE = {
@@ -57,7 +65,7 @@ export const SURVEY_TABLE = {
   monoCell: "font-mono text-xs font-medium tabular-nums text-foreground",
   bodyCell: "py-2.5",
   sectionLabel: "text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70",
-} as const;
+} as const
 
 /** QC registry / ward data tables — typography + surface tokens. */
 export const QC_TABLE = {
@@ -74,7 +82,7 @@ export const QC_TABLE = {
   monoCell: "font-mono text-xs font-medium tabular-nums text-foreground",
   bodyCell: "py-2.5",
   sectionLabel: "text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70",
-} as const;
+} as const
 
 /** Parcel duplicate indicators — shared parcel vs different-owner conflict. */
 export const QC_DUPLICATE_BADGE = {
@@ -87,4 +95,4 @@ export const QC_DUPLICATE_BADGE = {
     "rounded-lg border border-amber-500/35 bg-amber-500/12 px-3 py-2 text-xs font-medium text-amber-950 dark:text-amber-100",
   rejectButton: "text-brand-red hover:bg-brand-red/10 dark:text-brand-red-foreground",
   currentRowHighlight: "bg-amber-500/12 ring-1 ring-inset ring-amber-500/25",
-} as const;
+} as const

@@ -1,27 +1,21 @@
-"use client";
+"use client"
 
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RoleSelectItems } from "@/components/users/role-select-items";
-import { TenantScopeFields } from "@/components/users/tenant-scope-fields";
-import { UserSheetFooter, UserSheetHero, UserWorkspaceSection } from "@/components/users/user-sheet-layout";
-import type { Id } from "@/convex/_generated/dataModel";
-import { useAssignableRoles, useSetUserAllotments, useUserAllotments } from "@/hooks/rbac/useRbac";
-import { useHasCapability } from "@/hooks/use-capability";
-import {
-  useApproveUser,
-  useAssignTenant,
-  useRejectUser,
-  useTenantCatalog,
-  useUpdateUser,
-} from "@/hooks/users/useUsers";
-import { parseConvexError } from "@/lib/errors";
-import { isDistrictScopedRole, isSystemRoleKey, roleRequiresTenancy } from "@/lib/tenancy-ui";
-import { tenantScopeIsComplete, tenantScopeToApproveArgs, type TenantScopeValue } from "@/lib/users/tenant-scope";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Select, SelectContent, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { RoleSelectItems } from "@/components/users/role-select-items"
+import { TenantScopeFields } from "@/components/users/tenant-scope-fields"
+import { UserSheetFooter, UserSheetHero, UserWorkspaceSection } from "@/components/users/user-sheet-layout"
+import { useAssignableRoles, useSetUserAllotments, useUserAllotments } from "@/hooks/rbac/useRbac"
+import { useHasCapability } from "@/hooks/use-capability"
+import { useApproveUser, useAssignTenant, useRejectUser, useTenantCatalog, useUpdateUser } from "@/hooks/users/useUsers"
+import { parseConvexError } from "@/lib/errors"
+import { isDistrictScopedRole, isSystemRoleKey, roleRequiresTenancy } from "@/lib/tenancy-ui"
+import { tenantScopeIsComplete, tenantScopeToApproveArgs, type TenantScopeValue } from "@/lib/users/tenant-scope"
+import { cn } from "@/lib/utils"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import {
   Ban,
   Building2,
@@ -34,47 +28,47 @@ import {
   Sparkles,
   UserCheck,
   UserX,
-} from "lucide-react";
-import { useReducer, useState } from "react";
-import { toast } from "sonner";
-import { UserAllotmentsDialog } from "./user-allotments-dialog";
+} from "lucide-react"
+import { useReducer, useState } from "react"
+import { toast } from "sonner"
+import { UserAllotmentsDialog } from "./user-allotments-dialog"
 
 // ─── exported types ───────────────────────────────────────────────────────────
 
 export type SheetPendingUser = {
-  kind: "pending";
-  _id: Id<"users">;
-  name: string;
-  email: string;
-  requestedRole?: string;
-  requestedReason?: string;
-  createdAt: number;
-};
+  kind: "pending"
+  _id: Id<"users">
+  name: string
+  email: string
+  requestedRole?: string
+  requestedReason?: string
+  createdAt: number
+}
 
 export type SheetListedUser = {
-  kind: "listed";
-  _id: Id<"users">;
-  name: string;
-  email: string;
-  role: string;
-  status: string;
-  municipalityId?: Id<"municipalities"> | null;
-  municipalityName?: string | null;
-  wardAssignments?: string[] | null;
-  createdAt: number;
-};
+  kind: "listed"
+  _id: Id<"users">
+  name: string
+  email: string
+  role: string
+  status: string
+  municipalityId?: Id<"municipalities"> | null
+  municipalityName?: string | null
+  wardAssignments?: string[] | null
+  createdAt: number
+}
 
-export type SheetUser = SheetPendingUser | SheetListedUser;
+export type SheetUser = SheetPendingUser | SheetListedUser
 
 // ─── approve pending panel ────────────────────────────────────────────────────
 
 function ApprovePendingPanel({ user, onClose }: { user: SheetPendingUser; onClose: () => void }) {
-  const approve = useApproveUser();
-  const reject = useRejectUser();
-  const roleCatalog = useAssignableRoles({ includeInactive: false });
-  const catalog = useTenantCatalog();
+  const approve = useApproveUser()
+  const reject = useRejectUser()
+  const roleCatalog = useAssignableRoles({ includeInactive: false })
+  const catalog = useTenantCatalog()
 
-  const activeRoles = (roleCatalog ?? []).filter((r) => r.isActive && r.key !== "pending");
+  const activeRoles = (roleCatalog ?? []).filter((r) => r.isActive && r.key !== "pending")
 
   const preferredRole =
     user.requestedRole &&
@@ -82,49 +76,49 @@ function ApprovePendingPanel({ user, onClose }: { user: SheetPendingUser; onClos
       ? user.requestedRole
       : isDistrictScopedRole(user.requestedRole ?? "")
         ? user.requestedRole!
-        : "surveyor";
+        : "surveyor"
 
-  const [role, setRole] = useState<string>(preferredRole);
+  const [role, setRole] = useState<string>(preferredRole)
   const [tenantScope, setTenantScope] = useState<TenantScopeValue>({
     scope: isDistrictScopedRole(preferredRole) ? "district" : "ulb",
     districtId: catalog?.[0]?._id ?? "",
     municipalityId: "",
     wards: [],
-  });
-  const [busy, setBusy] = useState(false);
+  })
+  const [busy, setBusy] = useState(false)
 
-  const roleRow = activeRoles.find((r) => r.key === role);
-  const needsTenancy = roleRequiresTenancy(role, roleRow?.permissionKeys);
-  const canApprove = !needsTenancy || tenantScopeIsComplete(tenantScope);
+  const roleRow = activeRoles.find((r) => r.key === role)
+  const needsTenancy = roleRequiresTenancy(role, roleRow?.permissionKeys)
+  const canApprove = !needsTenancy || tenantScopeIsComplete(tenantScope)
 
   async function onApprove() {
-    setBusy(true);
+    setBusy(true)
     try {
       await approve({
         userId: user._id,
         role: role as never,
         ...tenantScopeToApproveArgs(tenantScope),
-      });
-      toast.success(`${user.name} approved as ${role}`);
-      onClose();
+      })
+      toast.success(`${user.name} approved as ${role}`)
+      onClose()
     } catch (e) {
-      toast.error(parseConvexError(e).message);
+      toast.error(parseConvexError(e).message)
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
   }
 
   async function onReject() {
-    if (!confirm(`Reject ${user.name}? Their account will be disabled.`)) return;
-    setBusy(true);
+    if (!confirm(`Reject ${user.name}? Their account will be disabled.`)) return
+    setBusy(true)
     try {
-      await reject({ userId: user._id });
-      toast.success("User rejected");
-      onClose();
+      await reject({ userId: user._id })
+      toast.success("User rejected")
+      onClose()
     } catch (e) {
-      toast.error(parseConvexError(e).message);
+      toast.error(parseConvexError(e).message)
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
   }
 
@@ -141,11 +135,11 @@ function ApprovePendingPanel({ user, onClose }: { user: SheetPendingUser; onClos
             >
               {user.requestedRole && (
                 <p className="mb-2 text-sm text-muted-foreground">
-                  Requested role: <span className="font-medium capitalize text-foreground">{user.requestedRole}</span>
+                  Requested role: <span className="font-medium text-foreground capitalize">{user.requestedRole}</span>
                 </p>
               )}
               {user.requestedReason && (
-                <blockquote className="rounded-lg border border-amber-200/50 bg-background/60 px-3 py-2 text-sm italic text-foreground/90 dark:border-amber-500/20">
+                <blockquote className="rounded-lg border border-amber-200/50 bg-background/60 px-3 py-2 text-sm text-foreground/90 italic dark:border-amber-500/20">
                   &ldquo;{user.requestedReason}&rdquo;
                 </blockquote>
               )}
@@ -161,13 +155,13 @@ function ApprovePendingPanel({ user, onClose }: { user: SheetPendingUser; onClos
             <Select
               value={role}
               onValueChange={(v) => {
-                setRole(v);
+                setRole(v)
                 setTenantScope((s) => ({
                   ...s,
                   scope: isDistrictScopedRole(v) ? "district" : "ulb",
                   municipalityId: "",
                   wards: [],
-                }));
+                }))
               }}
             >
               <SelectTrigger className="h-10 w-full cursor-pointer rounded-xl">
@@ -225,21 +219,21 @@ function ApprovePendingPanel({ user, onClose }: { user: SheetPendingUser; onClos
         </Button>
       </UserSheetFooter>
     </>
-  );
+  )
 }
 
 // ─── edit listed user panel ───────────────────────────────────────────────────
 
 function resolveInitialTenantScope(
   user: SheetListedUser,
-  catalog: ReturnType<typeof useTenantCatalog>,
+  catalog: ReturnType<typeof useTenantCatalog>
 ): TenantScopeValue {
-  let districtId = "";
+  let districtId = ""
   if (user.municipalityId && catalog) {
     for (const d of catalog) {
       if (d.ulbs.some((m) => m._id === user.municipalityId)) {
-        districtId = d._id;
-        break;
+        districtId = d._id
+        break
       }
     }
   }
@@ -248,30 +242,30 @@ function resolveInitialTenantScope(
     districtId: districtId || catalog?.[0]?._id || "",
     municipalityId: user.municipalityId ?? "",
     wards: user.wardAssignments ?? [],
-  };
+  }
 }
 
 type EditListedState = {
-  role: string;
-  tenantScope: TenantScopeValue;
-  busy: boolean;
-  allotDialogOpen: boolean;
-  tab: "access" | "allotments";
-};
+  role: string
+  tenantScope: TenantScopeValue
+  busy: boolean
+  allotDialogOpen: boolean
+  tab: "access" | "allotments"
+}
 
 type EditListedAction =
   | { type: "set_role"; role: string }
   | { type: "patch_tenant_scope"; patch: Partial<TenantScopeValue> }
   | { type: "set_busy"; busy: boolean }
   | { type: "set_allot_dialog"; open: boolean }
-  | { type: "set_tab"; tab: "access" | "allotments" };
+  | { type: "set_tab"; tab: "access" | "allotments" }
 
 function initEditListedState({
   user,
   catalog,
 }: {
-  user: SheetListedUser;
-  catalog: ReturnType<typeof useTenantCatalog>;
+  user: SheetListedUser
+  catalog: ReturnType<typeof useTenantCatalog>
 }): EditListedState {
   return {
     role: user.role,
@@ -279,13 +273,13 @@ function initEditListedState({
     busy: false,
     allotDialogOpen: false,
     tab: "access",
-  };
+  }
 }
 
 function editListedReducer(state: EditListedState, action: EditListedAction): EditListedState {
   switch (action.type) {
     case "set_role": {
-      if (action.role === "admin") return { ...state, role: action.role };
+      if (action.role === "admin") return { ...state, role: action.role }
       return {
         ...state,
         role: action.role,
@@ -295,26 +289,26 @@ function editListedReducer(state: EditListedState, action: EditListedAction): Ed
           municipalityId: "",
           wards: [],
         },
-      };
+      }
     }
     case "patch_tenant_scope":
-      return { ...state, tenantScope: { ...state.tenantScope, ...action.patch } };
+      return { ...state, tenantScope: { ...state.tenantScope, ...action.patch } }
     case "set_busy":
-      return { ...state, busy: action.busy };
+      return { ...state, busy: action.busy }
     case "set_allot_dialog":
-      return { ...state, allotDialogOpen: action.open };
+      return { ...state, allotDialogOpen: action.open }
     case "set_tab":
-      return { ...state, tab: action.tab };
+      return { ...state, tab: action.tab }
     default:
-      return state;
+      return state
   }
 }
 
 function AllotmentSummaryCard({ userId, onManage }: { userId: Id<"users">; onManage: () => void }) {
-  const allotments = useUserAllotments(userId);
-  const active = (allotments ?? []).filter((a) => a.isActive);
-  const districtCount = active.filter((a) => a.districtId && !a.municipalityId).length;
-  const ulbCount = active.filter((a) => a.municipalityId).length;
+  const allotments = useUserAllotments(userId)
+  const active = (allotments ?? []).filter((a) => a.isActive)
+  const districtCount = active.filter((a) => a.districtId && !a.municipalityId).length
+  const ulbCount = active.filter((a) => a.municipalityId).length
 
   return (
     <button
@@ -342,71 +336,71 @@ function AllotmentSummaryCard({ userId, onManage }: { userId: Id<"users">; onMan
         aria-hidden
       />
     </button>
-  );
+  )
 }
 
 function EditListedPanel({ user, onClose }: { user: SheetListedUser; onClose: () => void }) {
-  const updateUserMut = useUpdateUser();
-  const assignTenantMut = useAssignTenant();
-  const setAllotments = useSetUserAllotments();
-  const roleCatalog = useAssignableRoles({ includeInactive: false });
-  const catalog = useTenantCatalog();
-  const canDisableUsers = useHasCapability("users.disable");
-  const canChangeRole = useHasCapability("users.approve");
-  const canAssignTenant = useHasCapability("users.assignTenant");
+  const updateUserMut = useUpdateUser()
+  const assignTenantMut = useAssignTenant()
+  const setAllotments = useSetUserAllotments()
+  const roleCatalog = useAssignableRoles({ includeInactive: false })
+  const catalog = useTenantCatalog()
+  const canDisableUsers = useHasCapability("users.disable")
+  const canChangeRole = useHasCapability("users.approve")
+  const canAssignTenant = useHasCapability("users.assignTenant")
 
   const [{ role, tenantScope, busy, allotDialogOpen, tab }, dispatch] = useReducer(
     editListedReducer,
     { user, catalog },
-    initEditListedState,
-  );
+    initEditListedState
+  )
 
-  const activeRoles = (roleCatalog ?? []).filter((r) => r.isActive && r.key !== "pending");
-  const isAdmin = role === "admin";
-  const needsTenancy = roleRequiresTenancy(role, activeRoles.find((r) => r.key === role)?.permissionKeys);
+  const activeRoles = (roleCatalog ?? []).filter((r) => r.isActive && r.key !== "pending")
+  const isAdmin = role === "admin"
+  const needsTenancy = roleRequiresTenancy(role, activeRoles.find((r) => r.key === role)?.permissionKeys)
 
-  const initialScope = resolveInitialTenantScope(user, catalog);
-  const roleChanged = role !== user.role;
+  const initialScope = resolveInitialTenantScope(user, catalog)
+  const roleChanged = role !== user.role
   const scopeChanged =
     tenantScope.scope !== initialScope.scope ||
     tenantScope.districtId !== initialScope.districtId ||
     tenantScope.municipalityId !== initialScope.municipalityId ||
-    tenantScope.wards.toSorted().join() !== initialScope.wards.toSorted().join();
-  const dirty = roleChanged || scopeChanged;
+    tenantScope.wards.toSorted().join() !== initialScope.wards.toSorted().join()
+  const dirty = roleChanged || scopeChanged
   const canSave =
-    (roleChanged && canChangeRole) || (scopeChanged && canAssignTenant) || (!roleChanged && !scopeChanged && dirty);
+    (roleChanged && canChangeRole) || (scopeChanged && canAssignTenant) || (!roleChanged && !scopeChanged && dirty)
 
   async function onToggleStatus() {
-    if (!canDisableUsers) return;
-    const next = user.status === "active" ? "disabled" : "active";
-    if (!confirm(`${next === "disabled" ? "Disable" : "Enable"} ${user.name}?`)) return;
-    dispatch({ type: "set_busy", busy: true });
+    if (!canDisableUsers) return
+    const next = user.status === "active" ? "disabled" : "active"
+    if (!confirm(`${next === "disabled" ? "Disable" : "Enable"} ${user.name}?`)) return
+    dispatch({ type: "set_busy", busy: true })
     try {
-      await updateUserMut({ userId: user._id, status: next as "active" | "disabled" });
-      toast.success(`User ${next === "disabled" ? "disabled" : "enabled"}`);
-      onClose();
+      await updateUserMut({ userId: user._id, status: next as "active" | "disabled" })
+      toast.success(`User ${next === "disabled" ? "disabled" : "enabled"}`)
+      onClose()
     } catch (e) {
-      toast.error(parseConvexError(e).message);
+      toast.error(parseConvexError(e).message)
     } finally {
-      dispatch({ type: "set_busy", busy: false });
+      dispatch({ type: "set_busy", busy: false })
     }
   }
 
   async function onSave() {
     if (roleChanged && !canChangeRole) {
-      toast.error("You don't have permission to change roles.");
-      return;
+      toast.error("You don't have permission to change roles.")
+      return
     }
     if (scopeChanged && !canAssignTenant) {
-      toast.error("You don't have permission to change tenant scope.");
-      return;
+      toast.error("You don't have permission to change tenant scope.")
+      return
     }
-    dispatch({ type: "set_busy", busy: true });
+    dispatch({ type: "set_busy", busy: true })
     try {
-      const jobs: Promise<unknown>[] = [];
+      const jobs: Promise<unknown>[] = []
 
       if (roleChanged && canChangeRole) {
-        jobs.push(updateUserMut({ userId: user._id, role: role as never }));
+        jobs.push(updateUserMut({ userId: user._id, role: role as never }))
       }
       if (!isAdmin && scopeChanged && canAssignTenant) {
         if (tenantScope.scope === "ulb" && tenantScope.municipalityId) {
@@ -415,25 +409,25 @@ function EditListedPanel({ user, onClose }: { user: SheetListedUser; onClose: ()
               userId: user._id,
               municipalityId: tenantScope.municipalityId as Id<"municipalities">,
               wardAssignments: tenantScope.wards,
-            }),
-          );
+            })
+          )
         } else if (tenantScope.scope === "district" && tenantScope.districtId) {
           jobs.push(
             setAllotments({
               userId: user._id,
               allotments: [{ districtId: tenantScope.districtId as Id<"districts">, isActive: true }],
-            }),
-          );
+            })
+          )
         }
       }
 
-      await Promise.all(jobs);
-      toast.success("User updated");
-      onClose();
+      await Promise.all(jobs)
+      toast.success("User updated")
+      onClose()
     } catch (e) {
-      toast.error(parseConvexError(e).message);
+      toast.error(parseConvexError(e).message)
     } finally {
-      dispatch({ type: "set_busy", busy: false });
+      dispatch({ type: "set_busy", busy: false })
     }
   }
 
@@ -473,7 +467,7 @@ function EditListedPanel({ user, onClose }: { user: SheetListedUser; onClose: ()
                       "flex h-10 w-10 items-center justify-center rounded-xl",
                       user.status === "active"
                         ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
-                        : "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400",
+                        : "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400"
                     )}
                   >
                     {user.status === "active" ? (
@@ -501,7 +495,7 @@ function EditListedPanel({ user, onClose }: { user: SheetListedUser; onClose: ()
                       "h-9 shrink-0 rounded-xl",
                       user.status === "active"
                         ? "border-destructive/40 text-destructive hover:bg-destructive/10"
-                        : "border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-600 dark:text-emerald-400",
+                        : "border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-600 dark:text-emerald-400"
                     )}
                     onClick={onToggleStatus}
                     disabled={busy}
@@ -602,7 +596,7 @@ function EditListedPanel({ user, onClose }: { user: SheetListedUser; onClose: ()
         />
       )}
     </>
-  );
+  )
 }
 
 // ─── main exported sheet ──────────────────────────────────────────────────────
@@ -634,5 +628,5 @@ export function UserEditSheet({ user, onClose }: { user: SheetUser | null; onClo
         )}
       </SheetContent>
     </Sheet>
-  );
+  )
 }

@@ -1,29 +1,29 @@
-"use client";
+"use client"
 
-import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card";
-import { UlbRateEditor } from "@/components/masters/ulb-rate-editor";
-import type { WardInfo } from "@/components/masters/tax-rates-types";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
-import { useTenantAdmin } from "@/hooks/tenants/useTenants";
-import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready";
-import { convexQuery } from "@convex-dev/react-query";
-import { useQuery } from "@tanstack/react-query";
-import { IndianRupee, MapPin } from "lucide-react";
-import { useMemo, useState } from "react";
+import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card"
+import type { WardInfo } from "@/components/masters/tax-rates-types"
+import { UlbRateEditor } from "@/components/masters/ulb-rate-editor"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useTenantAdmin } from "@/hooks/tenants/useTenants"
+import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
+import { convexQuery } from "@convex-dev/react-query"
+import { useQuery } from "@tanstack/react-query"
+import { api } from "@workspace/backend/convex/_generated/api.js"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { IndianRupee, MapPin } from "lucide-react"
+import { useMemo, useState } from "react"
 
 export function TaxRatesTab() {
-  const ready = useConvexAuthReady();
-  const tenants = useTenantAdmin();
-  const [selectedDistrictId, setSelectedDistrictId] = useState("");
-  const [selectedMuniId, setSelectedMuniId] = useState("");
+  const ready = useConvexAuthReady()
+  const tenants = useTenantAdmin()
+  const [selectedDistrictId, setSelectedDistrictId] = useState("")
+  const [selectedMuniId, setSelectedMuniId] = useState("")
 
-  const { data: allRates } = useQuery(convexQuery(api.taxRates.listAll, ready ? {} : "skip"));
+  const { data: allRates } = useQuery(convexQuery(api.taxRates.listAll, ready ? {} : "skip"))
 
   const rateStatusByMuni = useMemo(() => {
-    if (!allRates) return new Map<string, { published: boolean; wardCount: number }>();
+    if (!allRates) return new Map<string, { published: boolean; wardCount: number }>()
     return new Map(
       allRates.map((r) => [
         r.municipality._id,
@@ -31,25 +31,25 @@ export function TaxRatesTab() {
           published: r.rates !== null,
           wardCount: r.rates ? Object.keys(r.rates.wardRates).length : 0,
         },
-      ]),
-    );
-  }, [allRates]);
+      ])
+    )
+  }, [allRates])
 
   const activeDistrictId = useMemo(() => {
-    if (selectedDistrictId && tenants?.some((d) => d._id === selectedDistrictId)) return selectedDistrictId;
-    return tenants?.[0]?._id ?? "";
-  }, [tenants, selectedDistrictId]);
+    if (selectedDistrictId && tenants?.some((d) => d._id === selectedDistrictId)) return selectedDistrictId
+    return tenants?.[0]?._id ?? ""
+  }, [tenants, selectedDistrictId])
 
-  const selectedDistrict = tenants?.find((d) => d._id === activeDistrictId);
-  const ulbs = selectedDistrict?.ulbs ?? [];
+  const selectedDistrict = tenants?.find((d) => d._id === activeDistrictId)
+  const ulbs = selectedDistrict?.ulbs ?? []
 
   const activeMuniId = useMemo(() => {
-    const districtUlbs = selectedDistrict?.ulbs ?? [];
-    if (selectedMuniId && districtUlbs.some((u) => u._id === selectedMuniId)) return selectedMuniId;
-    return districtUlbs[0]?._id ?? "";
-  }, [selectedDistrict, selectedMuniId]);
+    const districtUlbs = selectedDistrict?.ulbs ?? []
+    if (selectedMuniId && districtUlbs.some((u) => u._id === selectedMuniId)) return selectedMuniId
+    return districtUlbs[0]?._id ?? ""
+  }, [selectedDistrict, selectedMuniId])
 
-  const selectedUlb = ulbs.find((u) => u._id === activeMuniId);
+  const selectedUlb = ulbs.find((u) => u._id === activeMuniId)
   const wards: WardInfo[] = useMemo(
     () =>
       (selectedUlb?.wards ?? []).map((w) => ({
@@ -57,13 +57,13 @@ export function TaxRatesTab() {
         name: w.name,
         wardCode: w.wardCode,
       })),
-    [selectedUlb],
-  );
+    [selectedUlb]
+  )
 
   function handleDistrictChange(id: string) {
-    setSelectedDistrictId(id);
-    const d = tenants?.find((t) => t._id === id);
-    setSelectedMuniId(d?.ulbs[0]?._id ?? "");
+    setSelectedDistrictId(id)
+    const d = tenants?.find((t) => t._id === id)
+    setSelectedMuniId(d?.ulbs[0]?._id ?? "")
   }
 
   return (
@@ -85,7 +85,7 @@ export function TaxRatesTab() {
           <div className="space-y-1.5">
             <Label
               htmlFor="district-select"
-              className="text-xs font-semibold uppercase tracking-widest text-muted-foreground"
+              className="text-xs font-semibold tracking-widest text-muted-foreground uppercase"
             >
               District
             </Label>
@@ -106,7 +106,7 @@ export function TaxRatesTab() {
           <div className="space-y-1.5">
             <Label
               htmlFor="ulb-select"
-              className="text-xs font-semibold uppercase tracking-widest text-muted-foreground"
+              className="text-xs font-semibold tracking-widest text-muted-foreground uppercase"
             >
               Municipality
             </Label>
@@ -116,7 +116,7 @@ export function TaxRatesTab() {
               </SelectTrigger>
               <SelectContent>
                 {ulbs.map((u) => {
-                  const status = rateStatusByMuni.get(u._id);
+                  const status = rateStatusByMuni.get(u._id)
                   return (
                     <SelectItem key={u._id} value={u._id} className="cursor-pointer">
                       <span className="flex items-center gap-2">
@@ -129,7 +129,7 @@ export function TaxRatesTab() {
                         )}
                       </span>
                     </SelectItem>
-                  );
+                  )
                 })}
               </SelectContent>
             </Select>
@@ -152,5 +152,5 @@ export function TaxRatesTab() {
         </div>
       )}
     </div>
-  );
+  )
 }

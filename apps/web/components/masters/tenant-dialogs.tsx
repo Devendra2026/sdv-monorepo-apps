@@ -1,37 +1,37 @@
-"use client";
+"use client"
 
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import type { Id } from "@/convex/_generated/dataModel";
-import { useState } from "react";
-import type { DistrictDraft, MunicipalityDraft, WardDraft } from "./tenant-types";
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { useState } from "react"
+import type { DistrictDraft, MunicipalityDraft, WardDraft } from "./tenant-types"
 
 function DistrictDialog({
   draft,
   onClose,
   onSave,
 }: {
-  draft: DistrictDraft | null;
-  onClose: () => void;
-  onSave: (d: DistrictDraft) => Promise<void>;
+  draft: DistrictDraft | null
+  onClose: () => void
+  onSave: (d: DistrictDraft) => Promise<void>
 }) {
   const [form, setForm] = useState<DistrictDraft>(
-    draft ?? { code: "", name: "", stateName: "Uttar Pradesh", isActive: true },
-  );
-  const [busy, setBusy] = useState(false);
+    draft ?? { code: "", name: "", stateName: "Uttar Pradesh", isActive: true }
+  )
+  const [busy, setBusy] = useState(false)
 
-  const canSave = form.code.trim().length >= 2 && form.name.trim().length > 0 && form.stateName.trim().length > 0;
+  const canSave = form.code.trim().length >= 2 && form.name.trim().length > 0 && form.stateName.trim().length > 0
 
   async function handleSave() {
-    setBusy(true);
+    setBusy(true)
     try {
-      await onSave({ ...form, code: form.code.trim().toUpperCase() });
+      await onSave({ ...form, code: form.code.trim().toUpperCase() })
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
   }
 
@@ -87,7 +87,7 @@ function DistrictDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }
 
 function MunicipalityDialog({
@@ -95,9 +95,9 @@ function MunicipalityDialog({
   onClose,
   onSave,
 }: {
-  draft: MunicipalityDraft | null;
-  onClose: () => void;
-  onSave: (d: MunicipalityDraft) => Promise<void>;
+  draft: MunicipalityDraft | null
+  onClose: () => void
+  onSave: (d: MunicipalityDraft) => Promise<void>
 }) {
   const [form, setForm] = useState<MunicipalityDraft>(
     draft ?? {
@@ -107,18 +107,18 @@ function MunicipalityDialog({
       bodyType: "municipal_council",
       postalCode: "",
       isActive: true,
-    },
-  );
-  const [busy, setBusy] = useState(false);
+    }
+  )
+  const [busy, setBusy] = useState(false)
 
-  const canSave = form.code.trim().length >= 2 && form.name.trim().length > 0 && form.postalCode.trim().length === 6;
+  const canSave = form.code.trim().length >= 2 && form.name.trim().length > 0 && form.postalCode.trim().length === 6
 
   async function handleSave() {
-    setBusy(true);
+    setBusy(true)
     try {
-      await onSave({ ...form, code: form.code.trim().toUpperCase() });
+      await onSave({ ...form, code: form.code.trim().toUpperCase() })
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
   }
 
@@ -191,7 +191,7 @@ function MunicipalityDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }
 
 function WardDialog({
@@ -199,22 +199,22 @@ function WardDialog({
   onClose,
   onSave,
 }: {
-  draft: WardDraft | null;
-  onClose: () => void;
-  onSave: (d: WardDraft) => Promise<void>;
+  draft: WardDraft | null
+  onClose: () => void
+  onSave: (d: WardDraft) => Promise<void>
 }) {
   const [form, setForm] = useState<WardDraft>(
-    draft ?? { municipalityId: "" as Id<"municipalities">, wardNo: "", wardCode: "", name: "" },
-  );
-  const [busy, setBusy] = useState(false);
-  const canSave = form.wardNo.trim().length > 0 && form.name.trim().length > 0;
+    draft ?? { municipalityId: "" as Id<"municipalities">, wardNo: "", wardCode: "", name: "" }
+  )
+  const [busy, setBusy] = useState(false)
+  const canSave = form.wardNo.trim().length > 0 && form.name.trim().length > 0
 
   async function handleSave() {
-    setBusy(true);
+    setBusy(true)
     try {
-      await onSave(form);
+      await onSave(form)
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
   }
 
@@ -267,7 +267,7 @@ function WardDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }
 
 export function TenantDialogs({
@@ -281,15 +281,15 @@ export function TenantDialogs({
   onSaveMunicipality,
   onSaveWard,
 }: {
-  districtDraft: DistrictDraft | null;
-  muniDraft: MunicipalityDraft | null;
-  wardDraft: WardDraft | null;
-  onCloseDistrict: () => void;
-  onCloseMuni: () => void;
-  onCloseWard: () => void;
-  onSaveDistrict: (d: DistrictDraft) => Promise<void>;
-  onSaveMunicipality: (d: MunicipalityDraft) => Promise<void>;
-  onSaveWard: (d: WardDraft) => Promise<void>;
+  districtDraft: DistrictDraft | null
+  muniDraft: MunicipalityDraft | null
+  wardDraft: WardDraft | null
+  onCloseDistrict: () => void
+  onCloseMuni: () => void
+  onCloseWard: () => void
+  onSaveDistrict: (d: DistrictDraft) => Promise<void>
+  onSaveMunicipality: (d: MunicipalityDraft) => Promise<void>
+  onSaveWard: (d: WardDraft) => Promise<void>
 }) {
   return (
     <>
@@ -299,5 +299,5 @@ export function TenantDialogs({
       {muniDraft !== null && <MunicipalityDialog draft={muniDraft} onClose={onCloseMuni} onSave={onSaveMunicipality} />}
       {wardDraft !== null && <WardDialog draft={wardDraft} onClose={onCloseWard} onSave={onSaveWard} />}
     </>
-  );
+  )
 }

@@ -1,12 +1,12 @@
-"use client";
+"use client"
 
-import { GoogleMapFrame } from "@/components/shared/google-map-frame";
-import { formatGpsLatLongLabel } from "@/lib/surveys/gps-format";
-import type { SurveyDetail } from "@/schema/surveys/index";
-import { ImageOff, MapPin } from "lucide-react";
-import Image from "next/image";
-import { BilingualLabel } from "./bilingual-label";
-import { SectionLabel } from "./section-label";
+import { GoogleMapFrame } from "@/components/shared/google-map-frame"
+import { formatGpsLatLongLabel } from "@/lib/surveys/gps-format"
+import type { SurveyDetail } from "@workspace/schemas"
+import { ImageOff, MapPin } from "lucide-react"
+import Image from "next/image"
+import { BilingualLabel } from "./bilingual-label"
+import { SectionLabel } from "./section-label"
 
 function GalleryPhoto({ url, label }: { url?: string | null; label: string }) {
   return (
@@ -25,15 +25,15 @@ function GalleryPhoto({ url, label }: { url?: string | null; label: string }) {
         {label}
       </figcaption>
     </figure>
-  );
+  )
 }
 
 function GisMapPanel({ survey }: { survey: SurveyDetail }) {
-  const gps = survey.gps;
+  const gps = survey.gps
 
   return (
     <figure className="demand-notice-gis-panel flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-900 text-slate-100 print:rounded-none print:border-black">
-      <p className="demand-notice-print-subhead shrink-0 border-b border-slate-700 px-2 py-1 text-center text-[7px] font-bold uppercase tracking-wide text-slate-200 print:border-black print:text-slate-700">
+      <p className="demand-notice-print-subhead shrink-0 border-b border-slate-700 px-2 py-1 text-center text-[7px] font-bold tracking-wide text-slate-200 uppercase print:border-black print:text-slate-700">
         <BilingualLabel en="GIS Map View" hi="जीआईएस मानचित्र" />
       </p>
       {gps ? (
@@ -52,7 +52,7 @@ function GisMapPanel({ survey }: { survey: SurveyDetail }) {
             />
           </div>
           <figcaption className="shrink-0 border-t border-slate-700 px-2 py-1 text-[6px] print:border-black">
-            <p className="font-semibold uppercase tracking-wide text-slate-300 print:text-slate-600">Lat / Long</p>
+            <p className="font-semibold tracking-wide text-slate-300 uppercase print:text-slate-600">Lat / Long</p>
             <p className="font-mono text-[7px] text-emerald-200 print:text-slate-800">
               {formatGpsLatLongLabel(gps.latitude, gps.longitude)}
             </p>
@@ -65,7 +65,7 @@ function GisMapPanel({ survey }: { survey: SurveyDetail }) {
         </div>
       )}
     </figure>
-  );
+  )
 }
 
 export function NoticePhotoGallery({
@@ -74,16 +74,16 @@ export function NoticePhotoGallery({
   sidePhoto,
   variant = "screen",
 }: {
-  survey: SurveyDetail;
-  frontPhoto?: string | null;
-  sidePhoto?: string | null;
-  variant?: "screen" | "print";
+  survey: SurveyDetail
+  frontPhoto?: string | null
+  sidePhoto?: string | null
+  variant?: "screen" | "print"
 }) {
-  const isPrint = variant === "print";
+  const isPrint = variant === "print"
 
   return (
     <section
-      className={`dn-section demand-notice-gallery rounded-md border border-slate-200 bg-white p-4 print:border-black print:p-1.5${isPrint ? " demand-notice-gallery-print" : ""}`}
+      className={`dn-section demand-notice-gallery rounded-md border border-slate-200 bg-white p-4 print:border-black print:p-1.5${isPrint ? "demand-notice-gallery-print" : ""}`}
     >
       <SectionLabel>
         <BilingualLabel en="Site Imagery & GIS Mapping" hi="स्थल चित्र एवं जीआईएस मानचित्रण" />
@@ -100,7 +100,7 @@ export function NoticePhotoGallery({
         }
       >
         <div className="demand-notice-site-photos rounded-lg border border-slate-100 bg-[#f9f9fa] p-4 print:rounded-none print:border-black print:bg-white print:p-1">
-          <p className="demand-notice-print-subhead mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600">
+          <p className="demand-notice-print-subhead mb-2 text-[10px] font-bold tracking-[0.14em] text-slate-600 uppercase">
             Site Imagery
           </p>
           <div className="grid grid-cols-2 gap-2">
@@ -112,5 +112,5 @@ export function NoticePhotoGallery({
         <GisMapPanel survey={survey} />
       </div>
     </section>
-  );
+  )
 }

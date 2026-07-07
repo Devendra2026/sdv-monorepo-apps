@@ -1,32 +1,32 @@
-"use client";
+"use client"
 
-import type { FloorDraft } from "@/components/surveys/floors-editor-parts";
-import { useMasters } from "@/hooks/masters/useMasters";
-import { useFloors, useRemoveFloor, useUpsertFloor } from "@/hooks/surveys/useFloors";
-import { useSaveDraft, useSurvey } from "@/hooks/surveys/useSurveys";
-import { parseConvexError, toastSurveyConflict, type ConflictSurveyLinkVariant } from "@/lib/errors";
+import type { FloorDraft } from "@/components/surveys/floors-editor-parts"
+import { useMasters } from "@/hooks/masters/useMasters"
+import { useFloors, useRemoveFloor, useUpsertFloor } from "@/hooks/surveys/useFloors"
+import { useSaveDraft, useSurvey } from "@/hooks/surveys/useSurveys"
+import { parseConvexError, toastSurveyConflict, type ConflictSurveyLinkVariant } from "@/lib/errors"
 import {
   builtUpSqftFromFloors,
   isOpenLandFloor,
   openLandSqftFromFloors,
   plinthSqftFromFloors,
   plotPlinthConflict,
-} from "@/lib/survey/area";
-import type { FloorRow } from "@/schema/surveys/index";
-import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
+} from "@/lib/survey/area"
+import type { FloorRow } from "@workspace/schemas"
+import { useRouter } from "next/navigation"
+import { useCallback, useMemo, useRef, useState } from "react"
+import { toast } from "sonner"
 
-const newId = () => `flr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+const newId = () => `flr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 
 export type UseFloorsEditorLogicArgs = {
-  surveyId: string;
-  plotSqft?: number;
-  onPlotSqftChange?: (plotSqft: number) => void;
-  onDirty?: () => void;
-  onFloorMutatingChange?: (busy: boolean) => void;
-  conflictLinkVariant?: ConflictSurveyLinkVariant;
-};
+  surveyId: string
+  plotSqft?: number
+  onPlotSqftChange?: (plotSqft: number) => void
+  onDirty?: () => void
+  onFloorMutatingChange?: (busy: boolean) => void
+  conflictLinkVariant?: ConflictSurveyLinkVariant
+}
 
 export function useFloorsEditorLogic({
   surveyId,
@@ -36,48 +36,48 @@ export function useFloorsEditorLogic({
   onFloorMutatingChange,
   conflictLinkVariant = "surveys",
 }: UseFloorsEditorLogicArgs) {
-  const router = useRouter();
-  const floors = useFloors(surveyId) as FloorRow[] | undefined;
-  const survey = useSurvey(surveyId);
-  const upsert = useUpsertFloor();
-  const remove = useRemoveFloor();
-  const saveDraft = useSaveDraft();
-  const { masters } = useMasters({ includeTenantCatalog: false });
-  const [draft, setDraft] = useState<FloorDraft | null>(null);
-  const [savingPlot, setSavingPlot] = useState(false);
+  const router = useRouter()
+  const floors = useFloors(surveyId) as FloorRow[] | undefined
+  const survey = useSurvey(surveyId)
+  const upsert = useUpsertFloor()
+  const remove = useRemoveFloor()
+  const saveDraft = useSaveDraft()
+  const { masters } = useMasters({ includeTenantCatalog: false })
+  const [draft, setDraft] = useState<FloorDraft | null>(null)
+  const [savingPlot, setSavingPlot] = useState(false)
   /** Local edits only — server value comes from `initialPlot` (parent remounts via `key={surveyId}`). */
-  const [plotOverride, setPlotOverride] = useState<number | null>(null);
-  const plotDraft = plotOverride ?? initialPlot ?? 0;
+  const [plotOverride, setPlotOverride] = useState<number | null>(null)
+  const plotDraft = plotOverride ?? initialPlot ?? 0
 
-  const builtUpFloors = useMemo(() => (floors ?? []).filter((f) => !isOpenLandFloor(f.floorName)), [floors]);
-  const openLandFloors = useMemo(() => (floors ?? []).filter((f) => isOpenLandFloor(f.floorName)), [floors]);
-  const builtUpTotal = builtUpSqftFromFloors(floors ?? []);
-  const openLandTotal = openLandSqftFromFloors(floors ?? []);
-  const plinthFromFloors = plinthSqftFromFloors(floors ?? []);
+  const builtUpFloors = useMemo(() => (floors ?? []).filter((f) => !isOpenLandFloor(f.floorName)), [floors])
+  const openLandFloors = useMemo(() => (floors ?? []).filter((f) => isOpenLandFloor(f.floorName)), [floors])
+  const builtUpTotal = builtUpSqftFromFloors(floors ?? [])
+  const openLandTotal = openLandSqftFromFloors(floors ?? [])
+  const plinthFromFloors = plinthSqftFromFloors(floors ?? [])
 
-  const saveDraftRef = useRef(saveDraft);
-  saveDraftRef.current = saveDraft;
-  const surveyRef = useRef(survey);
-  surveyRef.current = survey;
-  const plotSqftRef = useRef(plotDraft);
-  plotSqftRef.current = plotDraft;
-  const plinthRef = useRef(plinthFromFloors);
-  plinthRef.current = plinthFromFloors;
-  const floorsRef = useRef(floors);
-  floorsRef.current = floors;
-  const conflictLinkVariantRef = useRef(conflictLinkVariant);
-  conflictLinkVariantRef.current = conflictLinkVariant;
-  const routerRef = useRef(router);
-  routerRef.current = router;
-  const onFloorMutatingChangeRef = useRef(onFloorMutatingChange);
-  onFloorMutatingChangeRef.current = onFloorMutatingChange;
+  const saveDraftRef = useRef(saveDraft)
+  saveDraftRef.current = saveDraft
+  const surveyRef = useRef(survey)
+  surveyRef.current = survey
+  const plotSqftRef = useRef(plotDraft)
+  plotSqftRef.current = plotDraft
+  const plinthRef = useRef(plinthFromFloors)
+  plinthRef.current = plinthFromFloors
+  const floorsRef = useRef(floors)
+  floorsRef.current = floors
+  const conflictLinkVariantRef = useRef(conflictLinkVariant)
+  conflictLinkVariantRef.current = conflictLinkVariant
+  const routerRef = useRef(router)
+  routerRef.current = router
+  const onFloorMutatingChangeRef = useRef(onFloorMutatingChange)
+  onFloorMutatingChangeRef.current = onFloorMutatingChange
 
   async function withFloorMutation<T>(fn: () => Promise<T>): Promise<T> {
-    onFloorMutatingChangeRef.current?.(true);
+    onFloorMutatingChangeRef.current?.(true)
     try {
-      return await fn();
+      return await fn()
     } finally {
-      onFloorMutatingChangeRef.current?.(false);
+      onFloorMutatingChangeRef.current?.(false)
     }
   }
 
@@ -86,39 +86,39 @@ export function useFloorsEditorLogic({
     usageFactors: masters?.usageFactors ?? [],
     usageTypes: masters?.usageTypes ?? [],
     construction: masters?.constructionTypes ?? [],
-  };
+  }
 
   function resolvePlinthSqft(currentSurvey: NonNullable<typeof survey>): number {
-    if (plinthRef.current > 0) return plinthRef.current;
-    if ((floorsRef.current?.length ?? 0) > 0) return 0;
-    return currentSurvey.plinthSqft || 0;
+    if (plinthRef.current > 0) return plinthRef.current
+    if ((floorsRef.current?.length ?? 0) > 0) return 0
+    return currentSurvey.plinthSqft || 0
   }
 
   const validatePlotArea = useCallback((plot: number, currentSurvey: NonNullable<typeof survey>): boolean => {
     if (!(plot > 0)) {
-      toast.error("Enter plot area greater than 0.");
-      return false;
+      toast.error("Enter plot area greater than 0.")
+      return false
     }
-    const plinth = resolvePlinthSqft(currentSurvey);
-    const conflict = plotPlinthConflict(plot, plinth);
+    const plinth = resolvePlinthSqft(currentSurvey)
+    const conflict = plotPlinthConflict(plot, plinth)
     if (conflict) {
-      toast.error(conflict);
-      return false;
+      toast.error(conflict)
+      return false
     }
-    return true;
-  }, []);
+    return true
+  }, [])
 
   const validateArea = useCallback(async (): Promise<boolean> => {
-    const currentSurvey = surveyRef.current;
-    if (!currentSurvey) return false;
-    return validatePlotArea(plotSqftRef.current, currentSurvey);
-  }, [validatePlotArea]);
+    const currentSurvey = surveyRef.current
+    if (!currentSurvey) return false
+    return validatePlotArea(plotSqftRef.current, currentSurvey)
+  }, [validatePlotArea])
 
   const persistPlotArea = useCallback(
     async (plot: number): Promise<boolean> => {
-      const currentSurvey = surveyRef.current;
-      if (!currentSurvey) return false;
-      if (!validatePlotArea(plot, currentSurvey)) return false;
+      const currentSurvey = surveyRef.current
+      if (!currentSurvey) return false
+      if (!validatePlotArea(plot, currentSurvey)) return false
       try {
         await saveDraftRef.current({
           id: (surveyId ?? currentSurvey._id) as any,
@@ -127,8 +127,8 @@ export function useFloorsEditorLogic({
           clientUpdatedAt: Date.now(),
           plotSqft: plot,
           plinthSqft: resolvePlinthSqft(currentSurvey),
-        } as any);
-        return true;
+        } as any)
+        return true
       } catch (e) {
         if (
           !toastSurveyConflict(e, {
@@ -136,30 +136,30 @@ export function useFloorsEditorLogic({
             onNavigate: (href) => routerRef.current.push(href),
           })
         ) {
-          toast.error(parseConvexError(e).message);
+          toast.error(parseConvexError(e).message)
         }
-        return false;
+        return false
       }
     },
-    [surveyId, validatePlotArea],
-  );
+    [surveyId, validatePlotArea]
+  )
 
   async function savePlot() {
-    if (!survey) return;
-    setSavingPlot(true);
+    if (!survey) return
+    setSavingPlot(true)
     try {
-      const ok = await persistPlotArea(plotDraft);
+      const ok = await persistPlotArea(plotDraft)
       if (ok) {
-        setPlotOverride(null);
-        toast.success("Plot area saved");
+        setPlotOverride(null)
+        toast.success("Plot area saved")
       }
     } finally {
-      setSavingPlot(false);
+      setSavingPlot(false)
     }
   }
 
   async function saveFloor() {
-    if (!draft) return;
+    if (!draft) return
     await withFloorMutation(async () => {
       try {
         await upsert({
@@ -172,13 +172,13 @@ export function useFloorsEditorLogic({
           constructionType: draft.constructionType,
           isOccupied: draft.usageType === "self_occupied" || draft.usageType === "rented",
           areaSqft: draft.areaSqft,
-        });
-        toast.success("Floor saved");
-        setDraft(null);
+        })
+        toast.success("Floor saved")
+        setDraft(null)
       } catch (e) {
-        toast.error(parseConvexError(e).message);
+        toast.error(parseConvexError(e).message)
       }
-    });
+    })
   }
 
   function openAddFloor(isOpenLand: boolean) {
@@ -189,29 +189,29 @@ export function useFloorsEditorLogic({
       usageType: "",
       constructionType: isOpenLand ? "open_land_plot" : "",
       areaSqft: 0,
-    });
+    })
   }
 
   async function handleRemoveFloor(id: string) {
-    if (!confirm("Remove this floor row?")) return;
+    if (!confirm("Remove this floor row?")) return
     await withFloorMutation(async () => {
       try {
-        await remove({ id: id as any });
-        toast.success("Floor removed");
+        await remove({ id: id as any })
+        toast.success("Floor removed")
       } catch (e) {
-        toast.error(parseConvexError(e).message);
+        toast.error(parseConvexError(e).message)
       }
-    });
+    })
   }
 
   function handlePlotChange(value: number) {
-    setPlotOverride(value);
-    onPlotSqftChange?.(value);
-    onDirty?.();
+    setPlotOverride(value)
+    onPlotSqftChange?.(value)
+    onDirty?.()
   }
 
   function handleEditFloor(f: FloorRow) {
-    setDraft({ ...f, usageFactor: f.usageFactor });
+    setDraft({ ...f, usageFactor: f.usageFactor })
   }
 
   const floorMasters = {
@@ -219,7 +219,7 @@ export function useFloorsEditorLogic({
     usageFactors: masters?.usageFactors,
     usageTypes: masters?.usageTypes,
     constructionTypes: masters?.constructionTypes,
-  };
+  }
 
   return {
     floors,
@@ -241,5 +241,5 @@ export function useFloorsEditorLogic({
     handleRemoveFloor,
     handlePlotChange,
     handleEditFloor,
-  };
+  }
 }

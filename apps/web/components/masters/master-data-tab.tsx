@@ -1,20 +1,20 @@
-"use client";
+"use client"
 
-import { MasterFormDialog, type MasterEditRow } from "@/components/masters/master-form-dialog";
-import { EmptyState } from "@/components/shared/empty-state";
-import { TableSkeleton } from "@/components/shared/loading";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { Id } from "@/convex/_generated/dataModel";
-import { useDeleteMaster, useMasterCategory, useUpsertMaster } from "@/hooks/masters/useMasterAdmin";
-import { MASTER_CATEGORIES, MASTER_CATEGORY_LABELS, type MasterCategory } from "@/lib/domain";
-import { parseConvexError } from "@/lib/errors";
-import { cn } from "@/lib/utils";
+import { MasterFormDialog, type MasterEditRow } from "@/components/masters/master-form-dialog"
+import { EmptyState } from "@/components/shared/empty-state"
+import { TableSkeleton } from "@/components/shared/loading"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useDeleteMaster, useMasterCategory, useUpsertMaster } from "@/hooks/masters/useMasterAdmin"
+import { MASTER_CATEGORIES, MASTER_CATEGORY_LABELS, type MasterCategory } from "@/lib/domain"
+import { parseConvexError } from "@/lib/errors"
+import { cn } from "@/lib/utils"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import {
   Building2,
   CalendarDays,
@@ -29,17 +29,17 @@ import {
   Route,
   Search,
   Trash2,
-} from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
-import { toast } from "sonner";
+} from "lucide-react"
+import { useCallback, useMemo, useState } from "react"
+import { toast } from "sonner"
 
 type MasterRow = {
-  _id?: Id<"masters">;
-  value: string;
-  label: string;
-  position: number;
-  isActive: boolean;
-};
+  _id?: Id<"masters">
+  value: string
+  label: string
+  position: number
+  isActive: boolean
+}
 
 const CATEGORY_META: Record<
   MasterCategory,
@@ -87,15 +87,15 @@ const CATEGORY_META: Record<
     ring: "ring-rose-500/30 bg-rose-500/10",
     description: "Municipal tax rate zone assignments",
   },
-};
+}
 
 function CategoryPicker({ category, onChange }: { category: MasterCategory; onChange: (c: MasterCategory) => void }) {
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
       {MASTER_CATEGORIES.map((c) => {
-        const meta = CATEGORY_META[c];
-        const Icon = meta.icon;
-        const active = category === c;
+        const meta = CATEGORY_META[c]
+        const Icon = meta.icon
+        const active = category === c
 
         return (
           <button
@@ -103,58 +103,58 @@ function CategoryPicker({ category, onChange }: { category: MasterCategory; onCh
             type="button"
             onClick={() => onChange(c)}
             className={cn(
-              "group relative flex cursor-pointer flex-col items-start gap-2 rounded-xl border p-3 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "group relative flex cursor-pointer flex-col items-start gap-2 rounded-xl border p-3 text-left transition-all duration-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               active
                 ? cn("border-primary/40 bg-primary/5 shadow-sm ring-2", meta.ring)
-                : "border-border/60 bg-card hover:border-primary/25 hover:bg-muted/40",
+                : "border-border/60 bg-card hover:border-primary/25 hover:bg-muted/40"
             )}
           >
             <div
               className={cn(
                 "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
-                active ? meta.ring : "bg-muted/60 group-hover:bg-muted",
+                active ? meta.ring : "bg-muted/60 group-hover:bg-muted"
               )}
             >
               <Icon className={cn("h-4 w-4", active ? meta.accent : "text-muted-foreground")} />
             </div>
-            <p className={cn("text-xs font-semibold leading-tight", active && "text-foreground")}>
+            <p className={cn("text-xs leading-tight font-semibold", active && "text-foreground")}>
               {MASTER_CATEGORY_LABELS[c]}
             </p>
           </button>
-        );
+        )
       })}
     </div>
-  );
+  )
 }
 
 export function MasterDataTab() {
-  const [category, setCategory] = useState<MasterCategory>("assessment_year");
-  const [search, setSearch] = useState("");
-  const rows = useMasterCategory(category);
-  const upsert = useUpsertMaster();
-  const del = useDeleteMaster();
-  const [editing, setEditing] = useState<MasterEditRow | null>(null);
+  const [category, setCategory] = useState<MasterCategory>("assessment_year")
+  const [search, setSearch] = useState("")
+  const rows = useMasterCategory(category)
+  const upsert = useUpsertMaster()
+  const del = useDeleteMaster()
+  const [editing, setEditing] = useState<MasterEditRow | null>(null)
 
-  const meta = CATEGORY_META[category];
-  const CategoryIcon = meta.icon;
+  const meta = CATEGORY_META[category]
+  const CategoryIcon = meta.icon
 
   const handleCategoryChange = useCallback((next: MasterCategory) => {
-    setCategory(next);
-    setSearch("");
-  }, []);
+    setCategory(next)
+    setSearch("")
+  }, [])
 
   const filteredRows = useMemo(() => {
-    if (!rows) return undefined;
-    const q = search.trim().toLowerCase();
-    if (!q) return rows as MasterRow[];
-    return (rows as MasterRow[]).filter((r) => r.label.toLowerCase().includes(q) || r.value.toLowerCase().includes(q));
-  }, [rows, search]);
+    if (!rows) return undefined
+    const q = search.trim().toLowerCase()
+    if (!q) return rows as MasterRow[]
+    return (rows as MasterRow[]).filter((r) => r.label.toLowerCase().includes(q) || r.value.toLowerCase().includes(q))
+  }, [rows, search])
 
-  const activeCount = rows?.filter((r) => r.isActive).length ?? 0;
-  const inactiveCount = (rows?.length ?? 0) - activeCount;
+  const activeCount = rows?.filter((r) => r.isActive).length ?? 0
+  const inactiveCount = (rows?.length ?? 0) - activeCount
 
   async function save() {
-    if (!editing) return;
+    if (!editing) return
     try {
       await upsert({
         category,
@@ -162,29 +162,29 @@ export function MasterDataTab() {
         label: editing.label.trim(),
         position: editing.position,
         isActive: editing.isActive,
-      });
-      toast.success("Master saved");
-      setEditing(null);
+      })
+      toast.success("Master saved")
+      setEditing(null)
     } catch (e) {
-      toast.error(parseConvexError(e).message);
+      toast.error(parseConvexError(e).message)
     }
   }
 
   async function toggle(r: MasterRow) {
     try {
-      await upsert({ category, value: r.value, label: r.label, position: r.position, isActive: !r.isActive });
+      await upsert({ category, value: r.value, label: r.label, position: r.position, isActive: !r.isActive })
     } catch (e) {
-      toast.error(parseConvexError(e).message);
+      toast.error(parseConvexError(e).message)
     }
   }
 
   async function remove(r: MasterRow) {
-    if (!confirm(`Delete "${r.label}"?`)) return;
+    if (!confirm(`Delete "${r.label}"?`)) return
     try {
-      await del({ id: r._id! });
-      toast.success("Deleted");
+      await del({ id: r._id! })
+      toast.success("Deleted")
     } catch (e) {
-      toast.error(parseConvexError(e).message);
+      toast.error(parseConvexError(e).message)
     }
   }
 
@@ -193,7 +193,7 @@ export function MasterDataTab() {
       <CategoryPicker category={category} onChange={handleCategoryChange} />
 
       <Card className="overflow-hidden border-border/60 shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-border/60 bg-linear-to-r from-violet-50/80 to-card px-5 py-4 dark:from-violet-950/30 dark:to-card sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 border-b border-border/60 bg-linear-to-r from-violet-50/80 to-card px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:from-violet-950/30 dark:to-card">
           <div className="flex items-start gap-3">
             <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", meta.ring)}>
               <CategoryIcon className={cn("h-5 w-5", meta.accent)} />
@@ -224,7 +224,7 @@ export function MasterDataTab() {
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-45 flex-1 sm:flex-none">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search options…"
                 value={search}
@@ -286,11 +286,11 @@ export function MasterDataTab() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/30 hover:bg-muted/30">
-                  <TableHead className="w-12 pl-5 text-[10px] font-bold uppercase tracking-wider">Pos</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-wider">Label</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-wider">Value</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-wider">Status</TableHead>
-                  <TableHead className="w-24 pr-5 text-right text-[10px] font-bold uppercase tracking-wider">
+                  <TableHead className="w-12 pl-5 text-[10px] font-bold tracking-wider uppercase">Pos</TableHead>
+                  <TableHead className="text-[10px] font-bold tracking-wider uppercase">Label</TableHead>
+                  <TableHead className="text-[10px] font-bold tracking-wider uppercase">Value</TableHead>
+                  <TableHead className="text-[10px] font-bold tracking-wider uppercase">Status</TableHead>
+                  <TableHead className="w-24 pr-5 text-right text-[10px] font-bold tracking-wider uppercase">
                     Actions
                   </TableHead>
                 </TableRow>
@@ -301,7 +301,7 @@ export function MasterDataTab() {
                     <TableCell className="pl-5">
                       <div className="flex items-center gap-1.5">
                         <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40" />
-                        <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-muted/60 px-1.5 text-xs font-semibold tabular-nums text-muted-foreground">
+                        <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-muted/60 px-1.5 text-xs font-semibold text-muted-foreground tabular-nums">
                           {r.position}
                         </span>
                       </div>
@@ -319,7 +319,7 @@ export function MasterDataTab() {
                           variant={r.isActive ? "default" : "secondary"}
                           className={cn(
                             "text-[10px] font-semibold",
-                            r.isActive && "bg-emerald-600 hover:bg-emerald-600 dark:bg-emerald-600",
+                            r.isActive && "bg-emerald-600 hover:bg-emerald-600 dark:bg-emerald-600"
                           )}
                         >
                           {r.isActive ? "Active" : "Inactive"}
@@ -367,5 +367,5 @@ export function MasterDataTab() {
 
       <MasterFormDialog row={editing} onChange={setEditing} onSave={save} onClose={() => setEditing(null)} />
     </div>
-  );
+  )
 }

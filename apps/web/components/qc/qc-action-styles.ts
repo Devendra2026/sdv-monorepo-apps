@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@workspace/ui/lib/utils";
 
 /** Shared QC action button tokens — review bar + edit save bar. */
 export const qcActionBtn = {

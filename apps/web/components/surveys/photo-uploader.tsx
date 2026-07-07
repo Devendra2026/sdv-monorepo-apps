@@ -1,63 +1,63 @@
-"use client";
+"use client"
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { usePhotos, useRemovePhotoSlot, useUploadPhoto } from "@/hooks/surveys/usePhotos";
-import { QC_STATUS_BADGE } from "@/lib/design-system";
-import { PHOTO_SLOT_LABEL, type PhotoSlot } from "@/lib/domain";
-import { parseConvexError } from "@/lib/errors";
-import { cn } from "@/lib/utils";
-import type { PhotoRow } from "@/schema/surveys/index";
-import { ImageOff, Loader2, Trash2, Upload } from "lucide-react";
-import Image from "next/image";
-import { useRef, useState } from "react";
-import { toast } from "sonner";
+import { usePhotos, useRemovePhotoSlot, useUploadPhoto } from "@/hooks/surveys/usePhotos"
+import { QC_STATUS_BADGE } from "@/lib/design-system"
+import { PHOTO_SLOT_LABEL, type PhotoSlot } from "@/lib/domain"
+import { parseConvexError } from "@/lib/errors"
+import type { PhotoRow } from "@workspace/schemas"
+import { Badge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
+import { cn } from "@workspace/ui/lib/utils"
+import { ImageOff, Loader2, Trash2, Upload } from "lucide-react"
+import Image from "next/image"
+import { useRef, useState } from "react"
+import { toast } from "sonner"
 
-const REQUIRED: PhotoSlot[] = ["front", "side"];
-const EDIT_SLOTS: PhotoSlot[] = ["front", "side"];
+const REQUIRED: PhotoSlot[] = ["front", "side"]
+const EDIT_SLOTS: PhotoSlot[] = ["front", "side"]
 
 export function PhotoUploader({ surveyId }: { surveyId: string }) {
-  const photos = usePhotos(surveyId) as PhotoRow[] | undefined;
-  const upload = useUploadPhoto();
-  const removeSlot = useRemovePhotoSlot();
-  const [busySlot, setBusySlot] = useState<PhotoSlot | null>(null);
-  const inputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const photos = usePhotos(surveyId) as PhotoRow[] | undefined
+  const upload = useUploadPhoto()
+  const removeSlot = useRemovePhotoSlot()
+  const [busySlot, setBusySlot] = useState<PhotoSlot | null>(null)
+  const inputs = useRef<Record<string, HTMLInputElement | null>>({})
 
   async function onPick(slot: PhotoSlot, file?: File) {
-    if (!file || busySlot !== null) return;
-    setBusySlot(slot);
+    if (!file || busySlot !== null) return
+    setBusySlot(slot)
     try {
-      await upload(surveyId, slot, file);
-      toast.success(`${PHOTO_SLOT_LABEL[slot]} photo uploaded`);
+      await upload(surveyId, slot, file)
+      toast.success(`${PHOTO_SLOT_LABEL[slot]} photo uploaded`)
     } catch (e) {
-      toast.error(parseConvexError(e).message);
+      toast.error(parseConvexError(e).message)
     } finally {
-      setBusySlot(null);
-      const input = inputs.current[slot];
-      if (input) input.value = "";
+      setBusySlot(null)
+      const input = inputs.current[slot]
+      if (input) input.value = ""
     }
   }
 
   async function onRemove(slot: PhotoSlot) {
-    if (busySlot !== null) return;
-    setBusySlot(slot);
+    if (busySlot !== null) return
+    setBusySlot(slot)
     try {
-      await removeSlot({ surveyId: surveyId as any, slot });
-      toast.success(`${PHOTO_SLOT_LABEL[slot]} photo removed`);
+      await removeSlot({ surveyId: surveyId as any, slot })
+      toast.success(`${PHOTO_SLOT_LABEL[slot]} photo removed`)
     } catch (e) {
-      toast.error(parseConvexError(e).message);
+      toast.error(parseConvexError(e).message)
     } finally {
-      setBusySlot(null);
+      setBusySlot(null)
     }
   }
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       {EDIT_SLOTS.map((slot) => {
-        const photo = photos?.find((p) => p.slot === slot);
-        const required = REQUIRED.includes(slot);
-        const inputId = `survey-photo-${surveyId}-${slot}`;
-        const slotLabel = PHOTO_SLOT_LABEL[slot];
+        const photo = photos?.find((p) => p.slot === slot)
+        const required = REQUIRED.includes(slot)
+        const inputId = `survey-photo-${surveyId}-${slot}`
+        const slotLabel = PHOTO_SLOT_LABEL[slot]
         return (
           <div
             key={slot}
@@ -67,7 +67,7 @@ export function PhotoUploader({ surveyId }: { surveyId: string }) {
                 ? "border-brand-navy/20 dark:border-primary/25"
                 : required
                   ? "border-dashed border-warning/45 dark:border-warning/35"
-                  : "border-border/60",
+                  : "border-border/60"
             )}
           >
             <div className="mb-3 flex items-center justify-between gap-2">
@@ -79,7 +79,7 @@ export function PhotoUploader({ surveyId }: { surveyId: string }) {
                     "font-medium",
                     photo
                       ? QC_STATUS_BADGE.approved
-                      : "border-warning/45 bg-warning/14 text-amber-950 dark:text-amber-200",
+                      : "border-warning/45 bg-warning/14 text-amber-950 dark:text-amber-200"
                   )}
                 >
                   {photo ? "Uploaded" : "Required"}
@@ -111,7 +111,7 @@ export function PhotoUploader({ surveyId }: { surveyId: string }) {
             <input
               id={inputId}
               ref={(el) => {
-                inputs.current[slot] = el;
+                inputs.current[slot] = el
               }}
               type="file"
               accept="image/*"
@@ -144,8 +144,8 @@ export function PhotoUploader({ surveyId }: { surveyId: string }) {
               )}
             </div>
           </div>
-        );
+        )
       })}
     </div>
-  );
+  )
 }

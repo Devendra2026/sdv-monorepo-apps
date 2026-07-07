@@ -1,9 +1,9 @@
 "use client";
 
 import { PermissionDeniedDialog, PermissionDeniedInline } from "@/components/shared/permission-boundary";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@workspace/ui/components/skeleton";
 import { canAnyWithCapabilities, canWithCapabilities, type Capability } from "@/lib/permissions";
-import { useCurrentUser } from "@/lib/session";
+import { useCurrentUser } from "@/lib/sessions";
 
 /**
  * Hides children unless the current user's role has the capability. This is a

@@ -1,18 +1,18 @@
-"use client";
+"use client"
 
-import { RoleGate } from "@/components/shared/role-gate";
-import { QcStatusBadge, SurveyStatusBadge } from "@/components/shared/status-badge";
-import { Button } from "@/components/ui/button";
-import { useMasters } from "@/hooks/masters/useMasters";
-import { QC_TABLE } from "@/lib/design-system";
-import { formatRegistryParcelNo } from "@/lib/survey/format-registry-parcel";
-import { buildUlbCodeMap, resolveDisplayPropertyId } from "@/lib/survey/resolve-display-property-id";
-import { resolveOwnerDisplayName } from "@/lib/survey/resolve-owner-name";
-import { cn } from "@/lib/utils";
-import type { SurveyDetail, SurveyListItem } from "@/schema/surveys/index";
-import { Pencil, Trash2, type LucideIcon } from "lucide-react";
-import Link from "next/link";
-import type { ReactNode } from "react";
+import { RoleGate } from "@/components/shared/role-gate"
+import { QcStatusBadge, SurveyStatusBadge } from "@/components/shared/status-badge"
+import { useMasters } from "@/hooks/masters/useMasters"
+import { QC_TABLE } from "@/lib/design-system"
+import { formatRegistryParcelNo } from "@/lib/survey/format-registry-parcel"
+import { buildUlbCodeMap, resolveDisplayPropertyId } from "@/lib/survey/resolve-display-property-id"
+import { resolveOwnerDisplayName } from "@/lib/survey/resolve-owner-name"
+import type { SurveyDetail, SurveyListItem } from "@workspace/schemas"
+import { Button } from "@workspace/ui/components/button"
+import { cn } from "@workspace/ui/lib/utils"
+import { Pencil, Trash2, type LucideIcon } from "lucide-react"
+import Link from "next/link"
+import type { ReactNode } from "react"
 
 function HeaderField({
   label,
@@ -20,12 +20,12 @@ function HeaderField({
   mono = false,
   className,
 }: {
-  label: string;
-  value: ReactNode;
-  mono?: boolean;
-  className?: string;
+  label: string
+  value: ReactNode
+  mono?: boolean
+  className?: string
 }) {
-  const empty = value == null || value === "" || value === "—";
+  const empty = value == null || value === "" || value === "—"
   return (
     <div className={cn("min-w-0 space-y-0.5", className)}>
       <p className={QC_TABLE.sectionLabel}>{label}</p>
@@ -33,13 +33,13 @@ function HeaderField({
         className={cn(
           "truncate text-sm font-semibold text-foreground",
           mono && "font-mono tabular-nums",
-          empty && "italic font-normal text-muted-foreground/45",
+          empty && "font-normal text-muted-foreground/45 italic"
         )}
       >
         {empty ? "—" : value}
       </p>
     </div>
-  );
+  )
 }
 
 export function SurveyViewHero({
@@ -65,29 +65,29 @@ export function SurveyViewHero({
     | "owners"
     | "respondentName"
     | "city"
-  > & { surveyor?: SurveyDetail["surveyor"] };
-  surveyId: string;
-  canEdit: boolean;
-  onDelete?: () => void;
-  title?: string;
-  icon?: LucideIcon;
-  extraActions?: ReactNode;
+  > & { surveyor?: SurveyDetail["surveyor"] }
+  surveyId: string
+  canEdit: boolean
+  onDelete?: () => void
+  title?: string
+  icon?: LucideIcon
+  extraActions?: ReactNode
   /** Survey + QC status badges — enabled on `/surveys/[id]` header only. */
-  showStatus?: boolean;
-  className?: string;
+  showStatus?: boolean
+  className?: string
 }) {
-  const { masters } = useMasters();
-  const ulbCodes = buildUlbCodeMap(masters?.ulbs);
-  const propertyId = resolveDisplayPropertyId(survey, ulbCodes) ?? survey.propertyId ?? `Parcel ${survey.parcelNo}`;
-  const ulb = masters?.ulbs?.find((m: { _id: string }) => m._id === survey.municipalityId);
-  const ulbName = ulb?.name ?? survey.city;
-  const ownerName = resolveOwnerDisplayName(survey);
+  const { masters } = useMasters()
+  const ulbCodes = buildUlbCodeMap(masters?.ulbs)
+  const propertyId = resolveDisplayPropertyId(survey, ulbCodes) ?? survey.propertyId ?? `Parcel ${survey.parcelNo}`
+  const ulb = masters?.ulbs?.find((m: { _id: string }) => m._id === survey.municipalityId)
+  const ulbName = ulb?.name ?? survey.city
+  const ownerName = resolveOwnerDisplayName(survey)
 
   return (
     <section
       className={cn(
         "overflow-hidden rounded-2xl border border-border/70 bg-card shadow-premium-sm dark:bg-card/90",
-        className,
+        className
       )}
     >
       <div className="flex flex-col gap-4 border-b border-border/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
@@ -97,7 +97,7 @@ export function SurveyViewHero({
               <Icon className="h-4 w-4" aria-hidden />
             </div>
           )}
-          <h1 className="font-heading text-sm font-bold uppercase tracking-[0.14em] text-brand-navy dark:text-primary">
+          <h1 className="font-heading text-sm font-bold tracking-[0.14em] text-brand-navy uppercase dark:text-primary">
             {title}
           </h1>
         </div>
@@ -150,7 +150,7 @@ export function SurveyViewHero({
 
         {showStatus && (
           <div className="flex min-w-0 flex-col gap-1.5 lg:items-end lg:pb-0.5">
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Status</p>
+            <p className="text-[10px] font-bold tracking-[0.12em] text-muted-foreground/70 uppercase">Status</p>
             <div className="flex flex-wrap items-center gap-1.5">
               <SurveyStatusBadge status={survey.status} />
               <QcStatusBadge status={survey.qcStatus} />
@@ -159,5 +159,5 @@ export function SurveyViewHero({
         )}
       </div>
     </section>
-  );
+  )
 }

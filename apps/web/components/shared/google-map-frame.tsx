@@ -3,7 +3,7 @@
 import { googleMapsEmbedUrl, googleMapsStaticUrl } from "@/lib/maps/google-maps";
 import { isGoogleMapsKeyConfigured } from "@/lib/maps/google-maps-config";
 import { formatGpsDms } from "@/lib/surveys/gps-format";
-import { cn } from "@/lib/utils";
+import { cn } from "@workspace/ui/lib/utils";
 import { MapPin } from "lucide-react";
 import NextImage from "next/image";
 import { useEffect } from "react";

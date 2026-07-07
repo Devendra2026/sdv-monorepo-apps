@@ -1,19 +1,19 @@
-"use client";
+"use client"
 
-import { GisDebugPanel } from "@/components/dev/gis-debug-panel";
-import { GoogleMapEmbed } from "@/components/shared/google-map-embed";
-import { Badge } from "@/components/ui/badge";
-import { useSetGps } from "@/hooks/surveys/useSurveys";
-import { parseConvexError } from "@/lib/errors";
-import { captureBrowserGps } from "@/lib/surveys/gps-browser-capture";
-import { gpsCoordinateInputsKey } from "@/lib/surveys/gps-coordinates";
-import { formatGpsDecimal } from "@/lib/surveys/gps-format";
-import { fmtDate } from "@/lib/utils";
-import type { GpsCapture } from "@/schema/surveys/index";
-import { Crosshair } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
-import { GpsCoordinateInputs } from "./gps-coordinate-inputs";
+import { GisDebugPanel } from "@/components/dev/gis-debug-panel"
+import { GoogleMapEmbed } from "@/components/shared/google-map-embed"
+import { useSetGps } from "@/hooks/surveys/useSurveys"
+import { parseConvexError } from "@/lib/errors"
+import { captureBrowserGpsSafe } from "@/lib/surveys/gps-browser-capture"
+import { gpsCoordinateInputsKey } from "@/lib/surveys/gps-coordinates"
+import { formatGpsDecimal } from "@/lib/surveys/gps-format"
+import type { GpsCapture } from "@workspace/schemas"
+import { Badge } from "@workspace/ui/components/badge"
+import { fmtDate } from "@workspace/ui/lib/utils"
+import { Crosshair } from "lucide-react"
+import { useState } from "react"
+import { toast } from "sonner"
+import { GpsCoordinateInputs } from "./gps-coordinate-inputs"
 
 function GisPreview({ gps, surveyId }: { gps: GpsCapture; surveyId: string }) {
   return (
@@ -29,49 +29,53 @@ function GisPreview({ gps, surveyId }: { gps: GpsCapture; surveyId: string }) {
         <Badge variant="secondary" className="font-mono text-[10px] uppercase">
           ±{gps.accuracyMeters.toFixed(1)} m
         </Badge>
-        <span className="font-mono tabular-nums text-muted-foreground">
+        <span className="font-mono text-muted-foreground tabular-nums">
           {formatGpsDecimal(gps.latitude, gps.longitude)}
         </span>
         {gps.provider === "manual" ? (
           <span className="text-muted-foreground">Manual entry — accuracy not measured</span>
         ) : null}
       </div>
-      <GisDebugPanel surveyId={surveyId} gps={gps} />
+      {process.env.NODE_ENV === "development" ? <GisDebugPanel surveyId={surveyId} gps={gps} /> : null}
     </div>
-  );
+  )
 }
 
 export function GpsEditPanel({ surveyId, gps, canEdit }: { surveyId: string; gps?: GpsCapture; canEdit: boolean }) {
-  const setGps = useSetGps();
-  const [capturing, setCapturing] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const setGps = useSetGps()
+  const [capturing, setCapturing] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   async function capture() {
-    setCapturing(true);
+    setCapturing(true)
     try {
-      const fix = await captureBrowserGps();
+      const result = await captureBrowserGpsSafe()
+      if (!result.ok) {
+        toast.error(result.message)
+        return
+      }
       await setGps({
         id: surveyId as any,
-        gps: fix,
-      });
-      toast.success("GPS captured");
+        gps: result.data,
+      })
+      toast.success("GPS captured")
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : parseConvexError(e).message);
+      toast.error(e instanceof Error ? e.message : parseConvexError(e).message)
     } finally {
-      setCapturing(false);
+      setCapturing(false)
     }
   }
 
   async function saveManual(lat: number | null, lng: number | null) {
     if (lat === null) {
-      toast.error("Latitude must be between -90 and 90");
-      return;
+      toast.error("Latitude must be between -90 and 90")
+      return
     }
     if (lng === null) {
-      toast.error("Longitude must be between -180 and 180");
-      return;
+      toast.error("Longitude must be between -180 and 180")
+      return
     }
-    setSaving(true);
+    setSaving(true)
     try {
       await setGps({
         id: surveyId as any,
@@ -83,23 +87,23 @@ export function GpsEditPanel({ surveyId, gps, canEdit }: { surveyId: string; gps
           provider: "manual",
           isMockLocation: false,
         },
-      });
-      toast.success("GPS coordinates saved");
+      })
+      toast.success("GPS coordinates saved")
     } catch (e) {
-      toast.error(parseConvexError(e).message);
+      toast.error(parseConvexError(e).message)
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
   }
 
   if (!canEdit) {
-    if (gps) return <GisPreview gps={gps} surveyId={surveyId} />;
+    if (gps) return <GisPreview gps={gps} surveyId={surveyId} />
     return (
       <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/50 py-14 text-muted-foreground">
         <Crosshair className="h-8 w-8 opacity-30" aria-hidden />
         <p className="text-sm font-medium opacity-60">No GPS captured</p>
       </div>
-    );
+    )
   }
 
   return (
@@ -131,5 +135,5 @@ export function GpsEditPanel({ surveyId, gps, canEdit }: { surveyId: string; gps
         onSave={(lat, lng) => void saveManual(lat, lng)}
       />
     </div>
-  );
+  )
 }

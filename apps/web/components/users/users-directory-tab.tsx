@@ -1,15 +1,15 @@
-"use client";
+"use client"
 
-import { EmptyState } from "@/components/shared/empty-state";
-import { TableSkeleton } from "@/components/shared/loading";
-import { TablePagination } from "@/components/shared/table-pagination";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { EmptyState } from "@/components/shared/empty-state"
+import { TableSkeleton } from "@/components/shared/loading"
+import { TablePagination } from "@/components/shared/table-pagination"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   ALL,
   avatarColor,
@@ -21,10 +21,10 @@ import {
   toListedSheet,
   usersListHasActiveFilters,
   type UsersDirectoryTabModel,
-} from "@/components/users/users-page-shared";
-import type { Id } from "@/convex/_generated/dataModel";
-import { cn, fmtDate } from "@/lib/utils";
-import { Building2, Layers, MapPin, Search, SlidersHorizontal, UserCheck, X } from "lucide-react";
+} from "@/components/users/users-page-shared"
+import { cn, fmtDate } from "@/lib/utils"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { Building2, Layers, MapPin, Search, SlidersHorizontal, UserCheck, X } from "lucide-react"
 
 export function AllUsersDirectoryTab({
   filteredUsers,
@@ -36,9 +36,9 @@ export function AllUsersDirectoryTab({
   setSheetUser,
   setAllotUser,
 }: UsersDirectoryTabModel) {
-  const { roleFilter, statusFilter, search } = listUi;
-  const { pageNumber, rowsPerPage, canGoPrev, canGoNext, goPrev, goNext } = pagination;
-  const hasActiveFilters = usersListHasActiveFilters(listUi);
+  const { roleFilter, statusFilter, search } = listUi
+  const { pageNumber, rowsPerPage, canGoPrev, canGoNext, goPrev, goNext } = pagination
+  const hasActiveFilters = usersListHasActiveFilters(listUi)
 
   return (
     <div>
@@ -66,11 +66,11 @@ export function AllUsersDirectoryTab({
                       <SelectItem key={r.key} value={r.key}>
                         <span className="flex items-center gap-1.5">
                           {r.isSystem ? (
-                            <span className="rounded bg-slate-200 px-1 py-0.5 text-[9px] font-bold uppercase text-slate-500 dark:bg-slate-700 dark:text-slate-400">
+                            <span className="rounded bg-slate-200 px-1 py-0.5 text-[9px] font-bold text-slate-500 uppercase dark:bg-slate-700 dark:text-slate-400">
                               SYS
                             </span>
                           ) : (
-                            <span className="rounded bg-violet-100 px-1 py-0.5 text-[9px] font-bold uppercase text-violet-600 dark:bg-violet-500/20 dark:text-violet-400">
+                            <span className="rounded bg-violet-100 px-1 py-0.5 text-[9px] font-bold text-violet-600 uppercase dark:bg-violet-500/20 dark:text-violet-400">
                               CUSTOM
                             </span>
                           )}
@@ -213,12 +213,12 @@ export function AllUsersDirectoryTab({
                         <span
                           className={cn(
                             "absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-background",
-                            ROLE_DOT[u.role] ?? "bg-muted-foreground",
+                            ROLE_DOT[u.role] ?? "bg-muted-foreground"
                           )}
                         />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold leading-tight">{u.name}</p>
+                        <p className="text-sm leading-tight font-semibold">{u.name}</p>
                         <p className="max-w-44 truncate text-xs text-muted-foreground">{u.email}</p>
                       </div>
                     </div>
@@ -273,7 +273,7 @@ export function AllUsersDirectoryTab({
                       <span className="text-sm text-muted-foreground">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                  <TableCell className="text-xs whitespace-nowrap text-muted-foreground">
                     {fmtDate(u.createdAt)}
                   </TableCell>
                   <TableCell className="pr-5" onClick={(e) => e.stopPropagation()}>
@@ -320,5 +320,5 @@ export function AllUsersDirectoryTab({
         </>
       )}
     </div>
-  );
+  )
 }

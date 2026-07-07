@@ -1,9 +1,9 @@
-"use client";
+"use client"
 
-import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card";
-import { GpsEditPanel } from "@/components/surveys/gps-edit-panel";
-import type { GpsCapture } from "@/schema/surveys/index";
-import { MapPin } from "lucide-react";
+import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card"
+import { GpsEditPanel } from "@/components/surveys/gps-edit-panel"
+import type { GpsCapture } from "@workspace/schemas"
+import { MapPin } from "lucide-react"
 
 export function GpsCapturePanel({ surveyId, gps }: { surveyId: string; gps?: GpsCapture }) {
   return (
@@ -15,5 +15,5 @@ export function GpsCapturePanel({ surveyId, gps }: { surveyId: string; gps?: Gps
       />
       <GpsEditPanel surveyId={surveyId} gps={gps} canEdit />
     </GlassCard>
-  );
+  )
 }

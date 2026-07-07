@@ -1,38 +1,38 @@
-"use client";
+"use client"
 
-import type { DemandNoticeData, OfficeTitles } from "@/lib/qc/demand-notice";
-import { DEFAULT_TAX_RATES } from "@/lib/qc/tax-rate-defaults";
-import type { SurveyDetail } from "@/schema/surveys/index";
-import { NoticeAssessmentTable } from "./notice-assessment-table";
-import { NoticeDemandSummary } from "./notice-demand-summary";
-import { NoticeHeader } from "./notice-header";
-import { NoticeLegalBlock } from "./notice-legal-block";
-import { NoticePhotoGallery } from "./notice-photo-gallery";
-import { NoticeOwnerProfile, NoticePropertySpecs } from "./notice-property-grid";
-import { DemandNoticeBody } from "./notice-sheet";
-import { NoticeSignatureBlock } from "./notice-signature-block";
-import { pctLabel } from "./shared";
+import type { DemandNoticeData, OfficeTitles } from "@/lib/qc/demand-notice"
+import { DEFAULT_TAX_RATES } from "@/lib/qc/tax-rate-defaults"
+import type { SurveyDetail } from "@workspace/schemas"
+import { NoticeAssessmentTable } from "./notice-assessment-table"
+import { NoticeDemandSummary } from "./notice-demand-summary"
+import { NoticeHeader } from "./notice-header"
+import { NoticeLegalBlock } from "./notice-legal-block"
+import { NoticePhotoGallery } from "./notice-photo-gallery"
+import { NoticeOwnerProfile, NoticePropertySpecs } from "./notice-property-grid"
+import { DemandNoticeBody } from "./notice-sheet"
+import { NoticeSignatureBlock } from "./notice-signature-block"
+import { pctLabel } from "./shared"
 
 export type NoticePrintLayoutProps = {
-  survey: SurveyDetail;
-  propertyId: string;
-  ownerName: string;
-  fatherName: string;
-  mobileNo: string;
-  oldHouseNo: string;
-  office: OfficeTitles;
-  taxZone: string;
-  address: string;
-  propertyUseLabel: string;
-  notice: DemandNoticeData;
-  noticeDate: string;
-  assessmentYear: string;
-  frontPhoto?: string | null;
-  sidePhoto?: string | null;
-  logoUrl?: string | null;
-  signatureUrl?: string | null;
-  rateConfig?: { propertyTaxPct: number; waterTaxPct: number; drainageTaxPct: number } | null;
-};
+  survey: SurveyDetail
+  propertyId: string
+  ownerName: string
+  fatherName: string
+  mobileNo: string
+  oldHouseNo: string
+  office: OfficeTitles
+  taxZone: string
+  address: string
+  propertyUseLabel: string
+  notice: DemandNoticeData
+  noticeDate: string
+  assessmentYear: string
+  frontPhoto?: string | null
+  sidePhoto?: string | null
+  logoUrl?: string | null
+  signatureUrl?: string | null
+  rateConfig?: { propertyTaxPct: number; waterTaxPct: number; drainageTaxPct: number } | null
+}
 
 /** Dedicated A4 print layout — fills printable height via CSS flex, not JS shrink. */
 export function NoticePrintLayout({
@@ -55,9 +55,9 @@ export function NoticePrintLayout({
   signatureUrl,
   rateConfig,
 }: NoticePrintLayoutProps) {
-  const propPct = rateConfig ? pctLabel(rateConfig.propertyTaxPct) : pctLabel(DEFAULT_TAX_RATES.propertyTaxPct);
-  const waterPct = rateConfig ? pctLabel(rateConfig.waterTaxPct) : "7.5%";
-  const drainPct = rateConfig ? pctLabel(rateConfig.drainageTaxPct) : "2.5%";
+  const propPct = rateConfig ? pctLabel(rateConfig.propertyTaxPct) : pctLabel(DEFAULT_TAX_RATES.propertyTaxPct)
+  const waterPct = rateConfig ? pctLabel(rateConfig.waterTaxPct) : "7.5%"
+  const drainPct = rateConfig ? pctLabel(rateConfig.drainageTaxPct) : "2.5%"
 
   return (
     <div className="print-page demand-notice-print-root hidden print:flex" data-dn-layout="print">
@@ -129,5 +129,5 @@ export function NoticePrintLayout({
         </div>
       </DemandNoticeBody>
     </div>
-  );
+  )
 }

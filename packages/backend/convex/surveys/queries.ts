@@ -3,18 +3,21 @@ import { v } from "convex/values"
 import type { Id } from "../_generated/dataModel"
 import { query } from "../_generated/server"
 import { presentFloorRow } from "../lib/masters/areaMasters"
-import { assertCanAccessSurvey, fieldSurveyAccess, querySurveysInFieldScope } from "../shared/fieldAccess"
-import { assertCanReadWard, canReadWard, clientError, requireUser } from "../shared/helpers"
-import {
-  loadScopeStatsSummary,
-  resolveListTotalFromStats,
-  scopeStatsFastPathEligible,
-} from "../lib/surveyScopeStats"
-import { computeSurveyWardAggregates } from "../lib/surveyWardStats"
 import { resolvePropertyId } from "../lib/propertyId"
+import { loadScopeStatsSummary, resolveListTotalFromStats, scopeStatsFastPathEligible } from "../lib/surveyScopeStats"
+import { computeSurveyWardAggregates } from "../lib/surveyWardStats"
 import { qcStatus, surveyStatus } from "../schema"
-import { assertMunicipalityInScope, resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from "../shared/tenancy"
+import { assertCanAccessSurvey, fieldSurveyAccess, querySurveysInFieldScope } from "../shared/fieldAccess"
+import { clientError, requireUser } from "../shared/helpers"
 import {
+  assertMunicipalityInScope,
+  resolveTenantScope,
+  tenantDistrictIds,
+  tenantMunicipalityIds,
+} from "../shared/tenancy"
+import {
+  COMMAND_CENTER_WARD_SCAN_LIMIT,
+  LIST_PAGINATED_SCOPE_LIMIT,
   collectSurveysForListPaginated,
   enrichSurveyPropertyIds,
   enrichSurveyorNames,
@@ -24,8 +27,6 @@ import {
   resolveListSort,
   sortSurveyRows,
   wardNumbersMatch,
-  COMMAND_CENTER_WARD_SCAN_LIMIT,
-  LIST_PAGINATED_SCOPE_LIMIT,
 } from "./helpers"
 import { listFilterArgs, surveyCommandCenterStatsShape, surveySortBy } from "./validators"
 export const list = query({
@@ -40,6 +41,7 @@ export const list = query({
     limit: v.optional(v.number()),
     sortBy: v.optional(surveySortBy),
   },
+  returns: v.array(v.any()),
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
     const limit = Math.min(args.limit ?? 200, 2000)
@@ -99,7 +101,6 @@ export const list = query({
     return await enrichSurveyorNames(ctx, enriched)
   },
 })
-
 
 /** Cursor-paginated survey list sorted by ward then parcel ascending. */
 export const listPaginated = query({
@@ -176,7 +177,6 @@ export const listPaginated = query({
     }
   },
 })
-
 
 /** Scoped KPI counts for the Survey Command Center ΓÇö full dataset, not client-capped. */
 export const commandCenterStats = query({
@@ -323,6 +323,7 @@ export const commandCenterStats = query({
 /** Single survey with floors + photos + QC remarks hydrated for the detail screen. */
 export const get = query({
   args: { id: v.id("surveys") },
+  returns: v.union(v.null(), v.any()),
   handler: async (ctx, args) => {
     const [me, survey] = await Promise.all([requireUser(ctx), ctx.db.get(args.id)])
     if (!survey) return null

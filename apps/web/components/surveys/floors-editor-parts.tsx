@@ -1,34 +1,35 @@
-"use client";
+"use client"
 
-import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card";
-import { EmptyState } from "@/components/shared/empty-state";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatAreaSqft } from "@/lib/survey/area";
-import { labelFromOptions } from "@/lib/survey/detail-labels";
-import type { FloorRow } from "@/schema/surveys/index";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card"
+import { EmptyState } from "@/components/shared/empty-state"
+import { CardsSkeleton } from "@/components/shared/loading"
+import { formatAreaSqft } from "@/lib/survey/area"
+import { labelFromOptions } from "@/lib/survey/detail-labels"
+import type { FloorRow } from "@workspace/schemas"
+import { Button } from "@workspace/ui/components/button"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@workspace/ui/components/dialog"
+import { Input } from "@workspace/ui/components/input"
+import { Label } from "@workspace/ui/components/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
+import { Pencil, Plus, Trash2 } from "lucide-react"
 
 export type FloorDraft = {
-  clientFloorId: string;
-  position: number;
-  floorName: string;
-  usageFactor?: string;
-  usageType: string;
-  constructionType: string;
-  areaSqft: number;
-};
+  clientFloorId: string
+  position: number
+  floorName: string
+  usageFactor?: string
+  usageType: string
+  constructionType: string
+  areaSqft: number
+}
 
 export type FloorMasters = {
-  floors?: { value: string; label: string }[];
-  usageFactors?: { value: string; label: string }[];
-  usageTypes?: { value: string; label: string }[];
-  constructionTypes?: { value: string; label: string }[];
-};
+  floors?: { value: string; label: string }[]
+  usageFactors?: { value: string; label: string }[]
+  usageTypes?: { value: string; label: string }[]
+  constructionTypes?: { value: string; label: string }[]
+}
 
 export function PlotAreaCard({
   plotDraft,
@@ -36,10 +37,10 @@ export function PlotAreaCard({
   onPlotChange,
   onSave,
 }: {
-  plotDraft: number;
-  savingPlot: boolean;
-  onPlotChange: (value: number) => void;
-  onSave: () => void;
+  plotDraft: number
+  savingPlot: boolean
+  onPlotChange: (value: number) => void
+  onSave: () => void
 }) {
   return (
     <GlassCard padding="md">
@@ -54,18 +55,18 @@ export function PlotAreaCard({
         </Button>
       </div>
     </GlassCard>
-  );
+  )
 }
 
 export function PlinthAreaCard({ plinthSqft }: { plinthSqft: number }) {
   return (
     <GlassCard padding="md" variant="accent">
       <GlassCardHeader title="Plinth area" description="Calculated from ground floor row." />
-      <p className="font-display text-2xl font-bold tabular-nums text-brand-navy dark:text-primary-foreground">
+      <p className="font-display text-2xl font-bold text-brand-navy tabular-nums dark:text-primary-foreground">
         {formatAreaSqft(plinthSqft)}
       </p>
     </GlassCard>
-  );
+  )
 }
 
 export function BuiltUpFloorsSection({
@@ -78,14 +79,14 @@ export function BuiltUpFloorsSection({
   onEdit,
   onRemove,
 }: {
-  floors: FloorRow[] | undefined;
-  builtUpFloors: FloorRow[];
-  openLandFloors: FloorRow[];
-  builtUpTotal: number;
-  floorMasters: FloorMasters;
-  onAddFloor: () => void;
-  onEdit: (f: FloorRow) => void;
-  onRemove: (id: string) => void;
+  floors: FloorRow[] | undefined
+  builtUpFloors: FloorRow[]
+  openLandFloors: FloorRow[]
+  builtUpTotal: number
+  floorMasters: FloorMasters
+  onAddFloor: () => void
+  onEdit: (f: FloorRow) => void
+  onRemove: (id: string) => void
 }) {
   return (
     <GlassCard padding="md">
@@ -99,7 +100,9 @@ export function BuiltUpFloorsSection({
         }
       />
       <div className="space-y-3">
-        {floors === undefined ? null : builtUpFloors.length === 0 ? (
+        {floors === undefined ? (
+          <CardsSkeleton count={2} />
+        ) : builtUpFloors.length === 0 ? (
           <EmptyState
             title={openLandFloors.length > 0 ? "No built-up floors" : "Built-up floor required"}
             description={
@@ -112,15 +115,15 @@ export function BuiltUpFloorsSection({
           <FloorTable floors={builtUpFloors} masters={floorMasters} onEdit={onEdit} onRemove={onRemove} />
         )}
         <div className="rounded-xl border border-brand-navy/15 bg-brand-navy/5 px-4 py-3 dark:border-primary/20 dark:bg-primary/10">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Total built-up area</p>
-          <p className="font-mono text-xl font-bold tabular-nums text-brand-navy dark:text-primary-foreground">
+          <p className="text-xs font-bold tracking-[0.14em] text-muted-foreground uppercase">Total built-up area</p>
+          <p className="font-mono text-xl font-bold text-brand-navy tabular-nums dark:text-primary-foreground">
             {formatAreaSqft(builtUpTotal)}
           </p>
           <p className="text-xs text-muted-foreground">Sum of all floor rows except open land.</p>
         </div>
       </div>
     </GlassCard>
-  );
+  )
 }
 
 export function OpenLandFloorsSection({
@@ -132,13 +135,13 @@ export function OpenLandFloorsSection({
   onEdit,
   onRemove,
 }: {
-  floors: FloorRow[] | undefined;
-  openLandFloors: FloorRow[];
-  openLandTotal: number;
-  floorMasters: FloorMasters;
-  onAddFloor: () => void;
-  onEdit: (f: FloorRow) => void;
-  onRemove: (id: string) => void;
+  floors: FloorRow[] | undefined
+  openLandFloors: FloorRow[]
+  openLandTotal: number
+  floorMasters: FloorMasters
+  onAddFloor: () => void
+  onEdit: (f: FloorRow) => void
+  onRemove: (id: string) => void
 }) {
   return (
     <GlassCard padding="md">
@@ -152,18 +155,20 @@ export function OpenLandFloorsSection({
         }
       />
       <div className="space-y-3">
-        {floors === undefined ? null : openLandFloors.length === 0 ? (
+        {floors === undefined ? (
+          <CardsSkeleton count={1} />
+        ) : openLandFloors.length === 0 ? (
           <p className="text-sm text-muted-foreground">No open land rows. Add one if part of the plot is vacant.</p>
         ) : (
           <FloorTable floors={openLandFloors} masters={floorMasters} onEdit={onEdit} onRemove={onRemove} />
         )}
         <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-3">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Total open land area</p>
+          <p className="text-xs font-bold tracking-[0.14em] text-muted-foreground uppercase">Total open land area</p>
           <p className="font-mono text-xl font-bold tabular-nums">{formatAreaSqft(openLandTotal)}</p>
         </div>
       </div>
     </GlassCard>
-  );
+  )
 }
 
 function FloorTable({
@@ -172,38 +177,38 @@ function FloorTable({
   onEdit,
   onRemove,
 }: {
-  floors: FloorRow[];
-  masters?: FloorMasters;
-  onEdit: (f: FloorRow) => void;
-  onRemove: (id: string) => void;
+  floors: FloorRow[]
+  masters?: FloorMasters
+  onEdit: (f: FloorRow) => void
+  onRemove: (id: string) => void
 }) {
   if (floors.length === 0) {
-    return <p className="py-4 text-center text-sm text-muted-foreground">No rows yet.</p>;
+    return <p className="py-4 text-center text-sm text-muted-foreground">No rows yet.</p>
   }
   return (
     <div className="overflow-hidden rounded-xl border border-border/60">
       <Table>
         <TableHeader>
           <TableRow className="border-b border-brand-navy/10 bg-linear-to-r from-brand-navy/6 via-muted/25 to-brand-navy/4 hover:from-brand-navy/6 dark:border-primary/15 dark:from-primary/12 dark:via-muted/10 dark:to-primary/6">
-            <TableHead className="w-14 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            <TableHead className="w-14 text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
               S. No
             </TableHead>
-            <TableHead className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            <TableHead className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
               Floor
             </TableHead>
-            <TableHead className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            <TableHead className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
               Usage type
             </TableHead>
-            <TableHead className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            <TableHead className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
               Usage factor
             </TableHead>
-            <TableHead className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            <TableHead className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
               Construction
             </TableHead>
-            <TableHead className="text-right text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            <TableHead className="text-right text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
               Area
             </TableHead>
-            <TableHead className="w-24 text-right text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            <TableHead className="w-24 text-right text-[10px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
               Actions
             </TableHead>
           </TableRow>
@@ -214,15 +219,15 @@ function FloorTable({
               key={f._id}
               className={`border-b border-border/40 last:border-b-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/20 dark:bg-muted/10"}`}
             >
-              <TableCell className="font-mono text-sm tabular-nums text-muted-foreground">{i + 1}</TableCell>
+              <TableCell className="font-mono text-sm text-muted-foreground tabular-nums">{i + 1}</TableCell>
               <TableCell className="font-medium capitalize">{labelFromOptions(masters?.floors, f.floorName)}</TableCell>
-              <TableCell className="capitalize text-muted-foreground">
+              <TableCell className="text-muted-foreground capitalize">
                 {labelFromOptions(masters?.usageTypes, f.usageType)}
               </TableCell>
-              <TableCell className="capitalize text-muted-foreground">
+              <TableCell className="text-muted-foreground capitalize">
                 {labelFromOptions(masters?.usageFactors, f.usageFactor)}
               </TableCell>
-              <TableCell className="capitalize text-muted-foreground">
+              <TableCell className="text-muted-foreground capitalize">
                 {labelFromOptions(masters?.constructionTypes, f.constructionType)}
               </TableCell>
               <TableCell className="text-right font-mono font-semibold tabular-nums">
@@ -256,29 +261,29 @@ function FloorTable({
         </TableBody>
       </Table>
     </div>
-  );
+  )
 }
 
 type FloorDraftDialogProps = {
-  draft: FloorDraft | null;
+  draft: FloorDraft | null
   opts: {
-    floors: { value: string; label: string }[];
-    usageFactors: { value: string; label: string }[];
-    usageTypes: { value: string; label: string }[];
-    construction: { value: string; label: string }[];
-  };
-  onClose: () => void;
-  onChange: (draft: FloorDraft) => void;
-  onSave: () => void;
-};
+    floors: { value: string; label: string }[]
+    usageFactors: { value: string; label: string }[]
+    usageTypes: { value: string; label: string }[]
+    construction: { value: string; label: string }[]
+  }
+  onClose: () => void
+  onChange: (draft: FloorDraft) => void
+  onSave: () => void
+}
 
 function applyFloorNameChange(draft: FloorDraft, floorName: string): FloorDraft {
   if (floorName === "open_land") {
-    return { ...draft, floorName, constructionType: "open_land_plot" };
+    return { ...draft, floorName, constructionType: "open_land_plot" }
   }
   const constructionType =
-    draft.floorName === "open_land" && draft.constructionType === "open_land_plot" ? "" : draft.constructionType;
-  return { ...draft, floorName, constructionType };
+    draft.floorName === "open_land" && draft.constructionType === "open_land_plot" ? "" : draft.constructionType
+  return { ...draft, floorName, constructionType }
 }
 
 export function FloorDraftDialog({ draft, opts, onClose, onChange, onSave }: FloorDraftDialogProps) {
@@ -362,7 +367,7 @@ export function FloorDraftDialog({ draft, opts, onClose, onChange, onSave }: Flo
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -371,7 +376,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <Label className="text-xs font-semibold text-muted-foreground">{label}</Label>
       {children}
     </div>
-  );
+  )
 }
 
 function Sel({
@@ -381,11 +386,11 @@ function Sel({
   placeholder,
   disabled,
 }: {
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-  placeholder: string;
-  disabled?: boolean;
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+  placeholder: string
+  disabled?: boolean
 }) {
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
@@ -400,5 +405,5 @@ function Sel({
         ))}
       </SelectContent>
     </Select>
-  );
+  )
 }
