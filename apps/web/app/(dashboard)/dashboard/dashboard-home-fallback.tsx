@@ -6,13 +6,16 @@ import { DashboardKpiGrid } from "@/components/dashboard/dashboard-kpi-grid"
 import { DashboardQcOperations } from "@/components/dashboard/dashboard-qc-operations"
 import { DataSection } from "@/components/shared/data-section"
 import { useClientNowMs } from "@/hooks/use-client-now"
+import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import { useQuery } from "convex/react"
 
-/** Client-side home bundle subscription when server preload fails. */
-export function DashboardHomeFallback() {
-  const nowMs = useClientNowMs()
-  const bundle = useQuery(api.analytics.queries.homeBundle, { nowMs, trendDays: 30 })
+/** Client-side home bundle subscription when server preload fails or user is not provisioned yet. */
+export function DashboardHomeFallback({ nowMs: nowMsProp }: { nowMs?: number }) {
+  const ready = useConvexAuthReady()
+  const clientNowMs = useClientNowMs()
+  const nowMs = nowMsProp ?? clientNowMs
+  const bundle = useQuery(api.analytics.queries.homeBundle, ready ? { nowMs, trendDays: 30 } : "skip")
 
   return (
     <div className="space-y-6 lg:space-y-8">

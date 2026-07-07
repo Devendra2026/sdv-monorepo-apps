@@ -1,3 +1,4 @@
+import { CLERK_CONVEX_JWT_TEMPLATE } from "@/lib/clerk-convex"
 import { auth } from "@clerk/nextjs/server"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import { preloadQuery } from "convex/nextjs"
@@ -9,11 +10,62 @@ const convexOptions = {
   skipConvexDeploymentUrlCheck: true,
 } as const
 
+/** Thrown when server preload cannot obtain a Clerk JWT for Convex. */
+export class ClerkConvexTokenUnavailableError extends Error {
+  constructor() {
+    super("Clerk Convex JWT unavailable")
+    this.name = "ClerkConvexTokenUnavailableError"
+  }
+}
+
+/** True when Clerk has no JWT template named `convex` (404 from Clerk API). */
+export function isClerkJwtTemplateMissingError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const name = (error as { name?: string }).name
+  const status = (error as { status?: number }).status
+  const message = error instanceof Error ? error.message : String(error)
+  return name === "ClerkAPIResponseError" && (status === 404 || message.toLowerCase().includes("not found"))
+}
+
+/** True when preload failed because the Convex user row is not provisioned yet. */
+export function isUserNotProvisionedError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const data = (error as { data?: { code?: string } }).data
+  if (data?.code === "USER_NOT_PROVISIONED") return true
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes("USER_NOT_PROVISIONED") || message.includes("still being set up")
+}
+
+/** Preload errors that should fall back to client queries without logging as failures. */
+export function isPreloadSkippableError(error: unknown): boolean {
+  return error instanceof ClerkConvexTokenUnavailableError || isUserNotProvisionedError(error)
+}
+
+/** Deduped per-request Clerk JWT for Convex preloads. */
+const getConvexAuthToken = cache(async (): Promise<string | undefined> => {
+  try {
+    const { getToken, userId } = await auth()
+    if (!userId) return undefined
+    return (await getToken({ template: CLERK_CONVEX_JWT_TEMPLATE })) ?? undefined
+  } catch (error) {
+    if (isClerkJwtTemplateMissingError(error)) {
+      console.warn(
+        `[convex-server] Clerk JWT template '${CLERK_CONVEX_JWT_TEMPLATE}' not found. ` +
+          "Enable Convex integration at https://dashboard.clerk.com/apps/setup/convex"
+      )
+      return undefined
+    }
+    throw error
+  }
+})
+
 /** Preload a Convex query on the server with the signed-in user's Clerk JWT. */
 async function preloadConvexQuery<Query extends FunctionReference<"query">>(query: Query, args: Query["_args"]) {
-  const { getToken } = await auth()
-  const token = await getToken({ template: "convex" })
-  return preloadQuery(query, args, { ...convexOptions, token: token ?? undefined })
+  const token = await getConvexAuthToken()
+  if (!token) {
+    throw new ClerkConvexTokenUnavailableError()
+  }
+  return preloadQuery(query, args, { ...convexOptions, token })
 }
 
 /** Deduped per-request preload for the home dashboard bundle (KPIs + analytics). */

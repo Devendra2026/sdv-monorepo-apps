@@ -1,7 +1,7 @@
 import { DashboardSkeleton } from "@/app/(dashboard)/dashboard/dashboard-skeleton"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 
-function SidebarRailSkeleton() {
+export function SidebarRailSkeleton() {
   return (
     <aside className="sidebar-glass hidden h-full w-64 shrink-0 flex-col border-r lg:flex" aria-hidden>
       <div className="flex h-14 items-center gap-3 border-b border-sidebar-border px-4">
@@ -17,7 +17,7 @@ function SidebarRailSkeleton() {
   )
 }
 
-function TopbarSkeleton() {
+export function TopbarSkeleton() {
   return (
     <div className="sticky top-0 z-30 shrink-0 px-3 pt-2 sm:px-4" aria-hidden>
       <header className="topbar-glass flex h-14 items-center gap-2 rounded-2xl px-3 sm:px-4">

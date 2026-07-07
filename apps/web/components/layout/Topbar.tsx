@@ -26,7 +26,7 @@ export function Topbar() {
               onClick={toggleMobile}
               aria-label="Open navigation menu"
             >
-              <Menu className="h-[1.125rem] w-[1.125rem]" />
+              <Menu className="h-4.5 w-4.5" />
             </Button>
             <SidebarCollapseButton className="topbar-action-btn hidden lg:inline-flex" />
           </div>
