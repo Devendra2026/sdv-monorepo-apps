@@ -70,6 +70,7 @@ import type * as rbac_queries from "../rbac/queries.js";
 import type * as reassignment_helpers from "../reassignment/helpers.js";
 import type * as reassignment_mutations from "../reassignment/mutations.js";
 import type * as reassignment_queries from "../reassignment/queries.js";
+import type * as shared_calendar from "../shared/calendar.js";
 import type * as shared_capabilities from "../shared/capabilities.js";
 import type * as shared_fieldAccess from "../shared/fieldAccess.js";
 import type * as shared_helpers from "../shared/helpers.js";
@@ -157,6 +158,7 @@ declare const fullApi: ApiFromModules<{
   "reassignment/helpers": typeof reassignment_helpers;
   "reassignment/mutations": typeof reassignment_mutations;
   "reassignment/queries": typeof reassignment_queries;
+  "shared/calendar": typeof shared_calendar;
   "shared/capabilities": typeof shared_capabilities;
   "shared/fieldAccess": typeof shared_fieldAccess;
   "shared/helpers": typeof shared_helpers;

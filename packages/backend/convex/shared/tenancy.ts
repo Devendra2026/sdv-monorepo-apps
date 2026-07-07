@@ -171,6 +171,25 @@ export async function resolveTenantScope(
   ctx: QueryCtx,
   me: Doc<"users">
 ): Promise<{ districts: Doc<"districts">[]; municipalities: Doc<"municipalities">[] }> {
+  return resolveTenantScopeInternal(ctx, me, { allowCatalogFallback: true })
+}
+
+/**
+ * Strict tenant scope for dashboard KPIs and analytics.
+ * Never grants the full seeded catalog when profile/allotment data is missing.
+ */
+export async function resolveDashboardTenantScope(
+  ctx: QueryCtx,
+  me: Doc<"users">
+): Promise<{ districts: Doc<"districts">[]; municipalities: Doc<"municipalities">[] }> {
+  return resolveTenantScopeInternal(ctx, me, { allowCatalogFallback: false })
+}
+
+async function resolveTenantScopeInternal(
+  ctx: QueryCtx,
+  me: Doc<"users">,
+  options: { allowCatalogFallback: boolean }
+): Promise<{ districts: Doc<"districts">[]; municipalities: Doc<"municipalities">[] }> {
   const districtsAll = (await ctx.db.query("districts").collect()).filter(isActive)
   const municipalitiesAll = (await ctx.db.query("municipalities").collect()).filter(isActive)
 
@@ -207,9 +226,9 @@ export async function resolveTenantScope(
   const fromWards = await scopeFromWardAssignments(ctx, me, districtsAll, municipalitiesAll)
   if (fromWards) return fromWards
 
-  // Active field users without a profile assignment can use the seeded catalog
-  // (common when approved before tenant ids were persisted).
-  if (needsTenancy && me.status === "active" && districtsAll.length > 0) {
+  if (options.allowCatalogFallback && needsTenancy && me.status === "active" && districtsAll.length > 0) {
+    // Active field users without a profile assignment can use the seeded catalog
+    // (common when approved before tenant ids were persisted).
     return { districts: districtsAll, municipalities: municipalitiesAll }
   }
 

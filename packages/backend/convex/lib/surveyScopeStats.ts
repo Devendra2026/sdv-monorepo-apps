@@ -1,8 +1,14 @@
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "../_generated/server"
+import { dayEndMs, formatDateKey, startOfDayMs, startOfDayMsFromKey } from "../shared/calendar"
 import { fieldSurveyAccess } from "../shared/fieldAccess"
 import { canReadWard } from "../shared/helpers"
-import { resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from "../shared/tenancy"
+import {
+  resolveDashboardTenantScope,
+  resolveTenantScope,
+  tenantDistrictIds,
+  tenantMunicipalityIds,
+} from "../shared/tenancy"
 import {
   computeDailyTrendFromSlice,
   computeDashboardCountsFromSlice,
@@ -13,6 +19,52 @@ import {
 
 /** Max survey documents loaded for dashboard analytics fallbacks (avoids Convex read limits). */
 export const DASHBOARD_BOUNDED_ROW_CAP = 2500
+
+const MS_PER_DAY = 86_400_000
+
+function istTrendBuckets<T>(days: number, nowMs: number, empty: () => T): { startMs: number; buckets: Map<string, T> } {
+  const safeDays = Math.min(Math.max(days, 1), 180)
+  const endDayStart = startOfDayMs(nowMs)
+  const startMs = endDayStart - (safeDays - 1) * MS_PER_DAY
+  const buckets = new Map<string, T>()
+  for (let i = 0; i < safeDays; i++) {
+    buckets.set(formatDateKey(startMs + i * MS_PER_DAY), empty())
+  }
+  return { startMs, buckets }
+}
+
+async function paginateSurveysBySurveyor(ctx: QueryCtx, surveyorId: Id<"users">): Promise<Doc<"surveys">[]> {
+  const rows: Doc<"surveys">[] = []
+  let cursor: string | null = null
+  while (true) {
+    const page = await ctx.db
+      .query("surveys")
+      .withIndex("by_surveyor", (q) => q.eq("surveyorId", surveyorId))
+      .paginate({ numItems: 500, cursor })
+    rows.push(...page.page)
+    if (page.isDone) break
+    cursor = page.continueCursor
+  }
+  return rows
+}
+
+async function paginateSurveysByMunicipality(
+  ctx: QueryCtx,
+  municipalityId: Id<"municipalities">
+): Promise<Doc<"surveys">[]> {
+  const rows: Doc<"surveys">[] = []
+  let cursor: string | null = null
+  while (true) {
+    const page = await ctx.db
+      .query("surveys")
+      .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId))
+      .paginate({ numItems: 500, cursor })
+    rows.push(...page.page)
+    if (page.isDone) break
+    cursor = page.continueCursor
+  }
+  return rows
+}
 
 function toStatsSlice(row: Doc<"surveys">): SurveyStatsSlice {
   return {
@@ -34,7 +86,7 @@ async function resolveDashboardMunicipalityIds(ctx: QueryCtx, me: Doc<"users">):
   const access = await fieldSurveyAccess(ctx, me)
   if (access === "none") return []
 
-  const scope = await resolveTenantScope(ctx, me)
+  const scope = await resolveDashboardTenantScope(ctx, me)
   const muniIds = [...tenantMunicipalityIds(scope)]
 
   if (access === "admin") {
@@ -52,7 +104,7 @@ export async function loadBoundedScopedSurveyRows(
   maxRows = DASHBOARD_BOUNDED_ROW_CAP
 ): Promise<Doc<"surveys">[]> {
   const access = await fieldSurveyAccess(ctx, me)
-  const muniIds = tenantMunicipalityIds(await resolveTenantScope(ctx, me))
+  const muniIds = tenantMunicipalityIds(await resolveDashboardTenantScope(ctx, me))
 
   if (access === "own") {
     const rows = await ctx.db
@@ -232,11 +284,8 @@ export async function loadDashboardCountsForHome(
   }
 
   if (access === "own") {
-    const muniIds = tenantMunicipalityIds(await resolveTenantScope(ctx, me))
-    const rows = await ctx.db
-      .query("surveys")
-      .withIndex("by_surveyor", (q) => q.eq("surveyorId", me._id))
-      .collect()
+    const muniIds = tenantMunicipalityIds(await resolveDashboardTenantScope(ctx, me))
+    const rows = await paginateSurveysBySurveyor(ctx, me._id)
     const scoped = rows.filter((r) => muniIds.has(r.municipalityId) && canReadWard(me, r.municipalityId, r.wardNo))
     return computeDashboardCountsFromSlice(scoped.map(toStatsSlice), todayMs)
   }
@@ -290,23 +339,13 @@ async function loadDailyQcTrendFromDecisions(
   days: number,
   nowMs: number
 ): Promise<Map<string, { approved: number; rejected: number }>> {
-  const scopedMunis = new Set(await resolveDashboardMunicipalityIds(ctx, me))
   const safeDays = Math.min(Math.max(days, 1), 180)
-  const start = new Date(nowMs)
-  start.setHours(0, 0, 0, 0)
-  start.setDate(start.getDate() - (safeDays - 1))
-  const startMs = start.getTime()
-
-  const buckets = new Map<string, { approved: number; rejected: number }>()
-  for (let i = 0; i < safeDays; i++) {
-    const d = new Date(startMs)
-    d.setDate(d.getDate() + i)
-    buckets.set(formatDateKey(d.getTime()), { approved: 0, rejected: 0 })
-  }
+  const scopedMunis = new Set(await resolveDashboardMunicipalityIds(ctx, me))
+  const { startMs, buckets } = istTrendBuckets(safeDays, nowMs, () => ({ approved: 0, rejected: 0 }))
 
   if (scopedMunis.size === 0) return buckets
 
-  const scope = await resolveTenantScope(ctx, me)
+  const scope = await resolveDashboardTenantScope(ctx, me)
   const muniIds = tenantMunicipalityIds(scope)
   const districtIds = tenantDistrictIds(scope)
 
@@ -376,17 +415,12 @@ export async function loadDailyTrendFromDailyStats(
 ): Promise<Array<{ date: string; created: number; submitted: number; approved: number; rejected: number }>> {
   const scopedMunis = await resolveDashboardMunicipalityIds(ctx, me)
   const safeDays = Math.min(Math.max(days, 1), 180)
-  const start = new Date(nowMs)
-  start.setHours(0, 0, 0, 0)
-  start.setDate(start.getDate() - (safeDays - 1))
-  const startMs = start.getTime()
-
-  const buckets = new Map<string, { created: number; submitted: number; approved: number; rejected: number }>()
-  for (let i = 0; i < safeDays; i++) {
-    const d = new Date(startMs)
-    d.setDate(d.getDate() + i)
-    buckets.set(formatDateKey(d.getTime()), { created: 0, submitted: 0, approved: 0, rejected: 0 })
-  }
+  const { buckets } = istTrendBuckets(safeDays, nowMs, () => ({
+    created: 0,
+    submitted: 0,
+    approved: 0,
+    rejected: 0,
+  }))
 
   if (scopedMunis.length === 0) {
     return [...buckets.entries()].map(([date, bucket]) => ({ date, ...bucket }))
@@ -446,14 +480,6 @@ const EMPTY_MUNI_BUCKET: MunicipalityBucket = {
   qcPending: 0,
 }
 
-function formatDateKey(ms: number): string {
-  const d = new Date(ms)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  const day = String(d.getDate()).padStart(2, "0")
-  return `${y}-${m}-${day}`
-}
-
 function municipalityBucketFor(survey: SurveySnapshot): MunicipalityBucket {
   const bucket = { ...EMPTY_MUNI_BUCKET, total: 1 }
   if (survey.status === "draft") bucket.drafts = 1
@@ -474,11 +500,6 @@ function dailyBucketFor(survey: SurveySnapshot, dateKey: string): DailyBucket {
     if (submittedAt >= dayStart && submittedAt < dayEnd) bucket.submitted = 1
   }
   return bucket
-}
-
-function startOfDayMsFromKey(dateKey: string): number {
-  const [y, m, d] = dateKey.split("-").map(Number)
-  return new Date(y!, m! - 1, d!).setHours(0, 0, 0, 0)
 }
 
 function addMunicipalityBuckets(target: MunicipalityBucket, delta: MunicipalityBucket, sign: 1 | -1) {
@@ -707,12 +728,9 @@ async function computeLiveMunicipalitySnapshot(
   municipalityId: Id<"municipalities">,
   todayMs: number
 ): Promise<MunicipalityStatsRollup & { todayCreated: number; submittedToday: number }> {
-  const muniIds = tenantMunicipalityIds(await resolveTenantScope(ctx, me))
-  const dayEnd = todayMs + 86_400_000
-  const rows = await ctx.db
-    .query("surveys")
-    .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId))
-    .collect()
+  const muniIds = tenantMunicipalityIds(await resolveDashboardTenantScope(ctx, me))
+  const dayEnd = dayEndMs(todayMs)
+  const rows = await paginateSurveysByMunicipality(ctx, municipalityId)
 
   const rollup: MunicipalityStatsRollup & { todayCreated: number; submittedToday: number } = {
     municipalityId,
