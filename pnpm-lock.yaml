@@ -93,12 +93,12 @@ importers:
         specifier: ^0.18.5
         version: 0.18.5
     devDependencies:
+      '@clerk/eslint-plugin':
+        specifier: ^0.2.0
+        version: 0.2.0(eslint@10.6.0(jiti@2.7.0))
       '@tailwindcss/postcss':
         specifier: ^4.3.2
         version: 4.3.2
-      '@types/html2canvas':
-        specifier: ^1.0.0
-        version: 1.0.0
       '@types/node':
         specifier: ^20.19.43
         version: 20.19.43
@@ -457,6 +457,13 @@ packages:
   '@clerk/backend@3.11.1':
     resolution: {integrity: sha512-rBEI0Erfd1Ddp7V+kxPL+Ki6QorNhQeLtliwAMNoM/CmbVqk7fGrNAa1iE0OIX5Q5ajjAcOiBMne7InhIQyraQ==}
     engines: {node: '>=20.9.0'}
+
+  '@clerk/eslint-plugin@0.2.0':
+    resolution: {integrity: sha512-j9o85RYTAOG8Sm++oCDYatw0XYOY4avOTj1aNFQooU+hQdjn/fVAPwPYNCMklXogguO/1bJpb+lQEdG68x75Cg==}
+    engines: {node: '>=20.9.0'}
+    hasBin: true
+    peerDependencies:
+      eslint: '>=9'
 
   '@clerk/nextjs@7.5.14':
     resolution: {integrity: sha512-Yji2jucIQk+LiNdM4UT4ovPKQ22etS0KtIX/XYnFWfG71qaPgswCBPq0/UEX09vsviEEdk8ckhc6U2zlqrsLMg==}
@@ -2177,10 +2184,6 @@ packages:
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
-
-  '@types/html2canvas@1.0.0':
-    resolution: {integrity: sha512-BJpVf+FIN9UERmzhbtUgpXj6XBZpG67FMgBLLoj9HZKd9XifcCpSV+UnFcwTZfEyun4U/KmCrrVOG7829L589w==}
-    deprecated: This is a stub types definition. html2canvas provides its own type definitions, so you do not need this installed.
 
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
@@ -4809,6 +4812,10 @@ snapshots:
       - react
       - react-dom
 
+  '@clerk/eslint-plugin@0.2.0(eslint@10.6.0(jiti@2.7.0))':
+    dependencies:
+      eslint: 10.6.0(jiti@2.7.0)
+
   '@clerk/nextjs@7.5.14(next@16.2.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:
       '@clerk/backend': 3.11.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -6314,10 +6321,6 @@ snapshots:
   '@types/esrecurse@4.3.1': {}
 
   '@types/estree@1.0.9': {}
-
-  '@types/html2canvas@1.0.0':
-    dependencies:
-      html2canvas: 1.4.1
 
   '@types/json-schema@7.0.15': {}
 

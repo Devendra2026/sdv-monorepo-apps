@@ -18,7 +18,6 @@ import type * as analytics_queries from "../analytics/queries.js";
 import type * as audit_helpers from "../audit/helpers.js";
 import type * as audit_internal from "../audit/internal.js";
 import type * as audit_queries from "../audit/queries.js";
-import type * as config_clerk from "../config/clerk.js";
 import type * as demandNotices_helpers from "../demandNotices/helpers.js";
 import type * as demandNotices_mutations from "../demandNotices/mutations.js";
 import type * as demandNotices_queries from "../demandNotices/queries.js";
@@ -106,7 +105,6 @@ declare const fullApi: ApiFromModules<{
   "audit/helpers": typeof audit_helpers;
   "audit/internal": typeof audit_internal;
   "audit/queries": typeof audit_queries;
-  "config/clerk": typeof config_clerk;
   "demandNotices/helpers": typeof demandNotices_helpers;
   "demandNotices/mutations": typeof demandNotices_mutations;
   "demandNotices/queries": typeof demandNotices_queries;
