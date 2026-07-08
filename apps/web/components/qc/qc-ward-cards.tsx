@@ -2,9 +2,9 @@
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { CardsSkeleton } from "@/components/shared/loading";
-import { Button } from "@/components/ui/button";
+import { Button } from "@workspace/ui/components/button";
 import type { QcWardRow } from "@/lib/qc/ward-stats";
-import { cn } from "@/lib/utils";
+import { cn } from "@workspace/ui/lib/utils";
 import type { LucideIcon } from "lucide-react";
 import { CheckCircle2, ClipboardCheck, Clock3, FileEdit, FileText, Home, Receipt, Table2 } from "lucide-react";
 import Link from "next/link";

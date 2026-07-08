@@ -4,18 +4,25 @@
 import { v } from "convex/values"
 import type { Doc } from "../_generated/dataModel"
 import { query } from "../_generated/server"
+import { normalizeParcelKey, resolvePropertyId } from "../lib/propertyId"
 import { computeQcWardAggregates } from "../lib/qcWardStats"
 import { loadScopeStatsSummary } from "../lib/surveyScopeStats"
-import { normalizeParcelKey, resolvePropertyId } from "../lib/propertyId"
 import { requireCapability } from "../shared/capabilities"
 import { assertCanAccessSurvey, fieldSurveyAccess } from "../shared/fieldAccess"
 import { assertCanReadWard, clientError, mapTruthyById, requireUser } from "../shared/helpers"
-import { assertMunicipalityInScope, resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from "../shared/tenancy"
+import {
+  assertMunicipalityInScope,
+  resolveTenantScope,
+  tenantDistrictIds,
+  tenantMunicipalityIds,
+} from "../shared/tenancy"
 import { collectSurveysForListPaginated } from "../surveys/helpers"
 import {
   COMMAND_CENTER_WARD_SCAN_LIMIT,
+  MAX_PARCEL_SIBLING_RESULTS,
   commandCenterStatsShape,
   parcelSiblingEntry,
+  qcRemarkWithAuthorShape,
   wardNumbersMatch,
 } from "./helpers"
 
@@ -167,7 +174,7 @@ export const listParcelSiblings = query({
     const surveyors = await Promise.all(surveyorIds.map((id) => ctx.db.get(id)))
     const surveyorById = mapTruthyById(surveyors)
 
-    return siblings.map((row) => ({
+    return siblings.slice(0, MAX_PARCEL_SIBLING_RESULTS).map((row) => ({
       _id: row._id,
       propertyId: row.propertyId,
       propertyUse: row.propertyUse,
@@ -236,6 +243,7 @@ export const listPropertyIdConflicts = query({
 
 export const listRemarks = query({
   args: { surveyId: v.id("surveys") },
+  returns: v.array(v.object(qcRemarkWithAuthorShape)),
   handler: async (ctx, args) => {
     const [me, survey] = await Promise.all([requireUser(ctx), ctx.db.get(args.surveyId)])
     if (!survey) return []

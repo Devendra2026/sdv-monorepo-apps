@@ -1,12 +1,14 @@
-"use client";
+"use client"
 
-import type { SurveyRow } from "@/components/surveys/survey-tables";
-import { useSurveyList } from "@/hooks/surveys/useSurveys";
-import type { QcWorkScope } from "@/lib/qc/work-scope";
-import { useMemo } from "react";
+import type { SurveyRow } from "@/components/surveys/survey-tables"
+import { useSurveyList } from "@/hooks/surveys/useSurveys"
+import { useHasCapability } from "@/hooks/use-capability"
+import type { QcWorkScope } from "@/lib/qc/work-scope"
+import { useMemo } from "react"
 
 /** Lightweight pending-QC list for review navigation (replaces 2000-row bulk load). */
 export function useQcPendingQueue(scope: QcWorkScope, enabled = true): SurveyRow[] {
+  const canReview = useHasCapability("qc.review")
   const filters = useMemo(
     () => ({
       wardNo: scope.wardNo,
@@ -16,9 +18,9 @@ export function useQcPendingQueue(scope: QcWorkScope, enabled = true): SurveyRow
       qcStatus: "pending" as const,
       limit: 150,
     }),
-    [scope.wardNo, scope.districtId, scope.municipalityId],
-  );
+    [scope.wardNo, scope.districtId, scope.municipalityId]
+  )
 
-  const surveys = useSurveyList(enabled ? filters : {});
-  return useMemo(() => (surveys ?? []) as SurveyRow[], [surveys]);
+  const surveys = useSurveyList(enabled && canReview ? filters : {}, enabled && canReview)
+  return useMemo(() => (surveys ?? []) as SurveyRow[], [surveys])
 }

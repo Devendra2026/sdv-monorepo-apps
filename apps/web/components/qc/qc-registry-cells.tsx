@@ -1,7 +1,7 @@
 "use client"
 
-import { Badge } from "@/components/ui/badge"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Badge } from "@workspace/ui/components/badge"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@workspace/ui/components/tooltip"
 import { QC_DUPLICATE_BADGE } from "@/lib/design-system"
 import type { ParcelSiblingIndex, ParcelSiblingRow } from "@/lib/qc/parcel-siblings"
 import { hasDifferentOwnersOnParcel } from "@/lib/qc/parcel-siblings"
@@ -9,7 +9,7 @@ import { formatPropertyUseLabel, formatRegistrySlotLabel } from "@/lib/qc/regist
 import { formatRegistryParcelNo } from "@/lib/survey/format-registry-parcel"
 import { resolveDisplayPropertyId } from "@/lib/survey/resolve-display-property-id"
 import { resolveOwnerDisplayName } from "@/lib/survey/resolve-owner-name"
-import { cn } from "@/lib/utils"
+import { cn } from "@workspace/ui/lib/utils"
 import type { MasterOption } from "@workspace/convex/lib/masters/areaMasters"
 import { Users } from "lucide-react"
 

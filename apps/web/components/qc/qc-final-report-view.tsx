@@ -8,7 +8,7 @@ import {
   QcReportSidebar,
   ShieldCheck,
 } from "@/components/qc/qc-final-report-sections"
-import { Button } from "@/components/ui/button"
+import { Button } from "@workspace/ui/components/button"
 import { useMasters } from "@/hooks/masters/useMasters"
 import { getQcReportDemand } from "@/lib/qc/qc-report-demand"
 import { reportDocumentTimestamp } from "@/lib/qc/report-dates"

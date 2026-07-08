@@ -1,24 +1,24 @@
-"use client";
+"use client"
 
-import { ExecutiveHero, SectionHeader } from "@/components/design-system/executive-hero";
-import { GlassCard } from "@/components/design-system/glass-card";
-import { MetricCard } from "@/components/design-system/metric-card";
-import { FadeIn, StaggerGrid, StaggerItem } from "@/components/design-system/motion";
-import { QcPipeline } from "@/components/design-system/qc-pipeline";
-import { QcRegistrySearchBar, QcRegistryTable, type QcRegistryRow } from "@/components/qc/qc-registry-table";
-import { QcWardCards } from "@/components/qc/qc-ward-cards";
-import { CardsSkeleton } from "@/components/shared/loading";
-import { SurveyFilters, type FilterState } from "@/components/surveys/survey-filters";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useMasters } from "@/hooks/masters/useMasters";
-import type { QcQueueStats } from "@/hooks/qc/useQcQueue";
-import type { ParcelSiblingIndex } from "@/lib/qc/parcel-siblings";
-import type { QcWardRow } from "@/lib/qc/ward-stats";
-import { isQcScopeComplete, type QcWorkScope } from "@/lib/qc/work-scope";
-import { estimateQcPendingCount } from "@/lib/surveys/survey-list-filters";
-import { CheckCircle2, Clock3, FileEdit, Filter, MapPin, Percent, ShieldCheck, Table2 } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { ExecutiveHero, SectionHeader } from "@/components/design-system/executive-hero"
+import { GlassCard } from "@/components/design-system/glass-card"
+import { MetricCard } from "@/components/design-system/metric-card"
+import { FadeIn, StaggerGrid, StaggerItem } from "@/components/design-system/motion"
+import { QcPipeline } from "@/components/design-system/qc-pipeline"
+import { QcRegistrySearchBar, QcRegistryTable, type QcRegistryRow } from "@/components/qc/qc-registry-table"
+import { QcWardCards } from "@/components/qc/qc-ward-cards"
+import { CardsSkeleton } from "@/components/shared/loading"
+import { SurveyFilters, type FilterState } from "@/components/surveys/survey-filters"
+import { useMasters } from "@/hooks/masters/useMasters"
+import type { QcQueueStats } from "@/hooks/qc/useQcQueue"
+import type { ParcelSiblingIndex } from "@/lib/qc/parcel-siblings"
+import type { QcWardRow } from "@/lib/qc/ward-stats"
+import { isQcScopeComplete, type QcWorkScope } from "@/lib/qc/work-scope"
+import { estimateQcPendingCount } from "@/lib/surveys/survey-list-filters"
+import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
+import { CheckCircle2, Clock3, FileEdit, Filter, MapPin, Percent, ShieldCheck, Table2 } from "lucide-react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 function TabPill({
   value,
@@ -26,10 +26,10 @@ function TabPill({
   count,
   activeColor,
 }: {
-  value: string;
-  label: string;
-  count: number;
-  activeColor: string;
+  value: string
+  label: string
+  count: number
+  activeColor: string
 }) {
   return (
     <TabsTrigger
@@ -41,7 +41,7 @@ function TabPill({
         {count}
       </span>
     </TabsTrigger>
-  );
+  )
 }
 
 export function QcCommandHero() {
@@ -55,7 +55,7 @@ export function QcCommandHero() {
         gradient="amber"
       />
     </FadeIn>
-  );
+  )
 }
 
 export function QcRegistryHero() {
@@ -69,7 +69,7 @@ export function QcRegistryHero() {
         gradient="amber"
       />
     </FadeIn>
-  );
+  )
 }
 
 export function QcMetricsSection({ stats, isLoading }: { stats: QcQueueStats; isLoading: boolean }) {
@@ -77,7 +77,7 @@ export function QcMetricsSection({ stats, isLoading }: { stats: QcQueueStats; is
     submitted: stats.submitted,
     approved: stats.approved,
     rejected: stats.rejected,
-  });
+  })
 
   return (
     <section aria-labelledby="qc-kpi-heading">
@@ -130,7 +130,7 @@ export function QcMetricsSection({ stats, isLoading }: { stats: QcQueueStats; is
         </StaggerGrid>
       )}
     </section>
-  );
+  )
 }
 
 export function QcPipelineSection({
@@ -138,18 +138,18 @@ export function QcPipelineSection({
   rejectedCount,
   isLoading,
 }: {
-  stats: QcQueueStats;
-  rejectedCount: number;
-  isLoading: boolean;
+  stats: QcQueueStats
+  rejectedCount: number
+  isLoading: boolean
 }) {
-  const router = useRouter();
+  const router = useRouter()
 
   if (isLoading) {
     return (
       <FadeIn delay={0.03}>
         <CardsSkeleton count={1} />
       </FadeIn>
-    );
+    )
   }
 
   return (
@@ -161,7 +161,7 @@ export function QcPipelineSection({
         onStageClick={(tab) => router.push(`/qc/registry?tab=${tab}`)}
       />
     </FadeIn>
-  );
+  )
 }
 
 export function QcWardSection({ wardStats, isLoading }: { wardStats: QcWardRow[]; isLoading: boolean }) {
@@ -177,16 +177,16 @@ export function QcWardSection({ wardStats, isLoading }: { wardStats: QcWardRow[]
         <QcWardCards rows={isLoading ? undefined : wardStats} isLoading={isLoading} />
       </section>
     </FadeIn>
-  );
+  )
 }
 
 export function QcScopeBanner({ scope }: { scope: QcWorkScope }) {
-  const { masters } = useMasters();
-  const district = masters?.districts.find((d) => d._id === scope.districtId);
-  const ulb = masters?.ulbs.find((m) => m._id === scope.municipalityId);
+  const { masters } = useMasters()
+  const district = masters?.districts.find((d) => d._id === scope.districtId)
+  const ulb = masters?.ulbs.find((m) => m._id === scope.municipalityId)
   const scopeLabel = [district?.name, ulb?.name, scope.wardNo ? `Ward ${scope.wardNo}` : undefined]
     .filter(Boolean)
-    .join(" · ");
+    .join(" · ")
 
   return (
     <FadeIn delay={0.02}>
@@ -195,7 +195,7 @@ export function QcScopeBanner({ scope }: { scope: QcWorkScope }) {
           <div className="flex min-w-0 items-start gap-2">
             <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden />
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
+              <p className="text-xs font-semibold tracking-wide text-amber-800 uppercase dark:text-amber-200">
                 Active QC scope
               </p>
               <p className="truncate text-sm font-medium text-foreground">
@@ -217,7 +217,7 @@ export function QcScopeBanner({ scope }: { scope: QcWorkScope }) {
         </div>
       </GlassCard>
     </FadeIn>
-  );
+  )
 }
 
 export function QcFiltersSection({
@@ -226,10 +226,10 @@ export function QcFiltersSection({
   onScopeChange,
   onDateFiltersChange,
 }: {
-  scope: QcWorkScope;
-  dateFilters: Pick<FilterState, "month" | "fromDate" | "toDate">;
-  onScopeChange: (next: QcWorkScope) => void;
-  onDateFiltersChange: (next: Pick<FilterState, "month" | "fromDate" | "toDate">) => void;
+  scope: QcWorkScope
+  dateFilters: Pick<FilterState, "month" | "fromDate" | "toDate">
+  onScopeChange: (next: QcWorkScope) => void
+  onDateFiltersChange: (next: Pick<FilterState, "month" | "fromDate" | "toDate">) => void
 }) {
   const filterValue: FilterState = {
     search: "",
@@ -239,7 +239,7 @@ export function QcFiltersSection({
     month: dateFilters.month,
     fromDate: dateFilters.fromDate,
     toDate: dateFilters.toDate,
-  };
+  }
 
   return (
     <FadeIn delay={0.04}>
@@ -258,17 +258,17 @@ export function QcFiltersSection({
               districtId: next.districtId,
               municipalityId: next.municipalityId,
               wardNo: next.wardNo,
-            });
+            })
             onDateFiltersChange({
               month: next.month,
               fromDate: next.fromDate,
               toDate: next.toDate,
-            });
+            })
           }}
         />
       </GlassCard>
     </FadeIn>
-  );
+  )
 }
 
 export function QcReviewRegistry({
@@ -285,21 +285,21 @@ export function QcReviewRegistry({
   onTabChange,
   parcelSiblingIndex,
 }: {
-  stats: QcQueueStats;
-  rejectedCount: number;
-  parcelSharedCount?: number;
-  activeTab: string;
-  filteredCount: number;
-  isLoading: boolean;
-  rows: QcRegistryRow[] | undefined;
-  pageStart: number;
-  registrySearch: string;
-  onRegistrySearchChange: (term: string) => void;
-  onTabChange: (tab: string) => void;
-  parcelSiblingIndex?: ParcelSiblingIndex;
+  stats: QcQueueStats
+  rejectedCount: number
+  parcelSharedCount?: number
+  activeTab: string
+  filteredCount: number
+  isLoading: boolean
+  rows: QcRegistryRow[] | undefined
+  pageStart: number
+  registrySearch: string
+  onRegistrySearchChange: (term: string) => void
+  onTabChange: (tab: string) => void
+  parcelSiblingIndex?: ParcelSiblingIndex
 }) {
-  const totalDecided = stats.pending + stats.approved + rejectedCount;
-  const activeCount = stats.pending + stats.approved;
+  const totalDecided = stats.pending + stats.approved + rejectedCount
+  const activeCount = stats.pending + stats.approved
 
   return (
     <FadeIn delay={0.08}>
@@ -310,10 +310,10 @@ export function QcReviewRegistry({
             description={`${filteredCount.toLocaleString()} records${activeTab !== "all" ? " in selected tab" : ""} · click Review to verify`}
           />
         </div>
-        <div className="border-b border-border/60 bg-muted/15 px-4 py-3">
+        <div className="sticky top-0 z-20 border-b border-border/60 bg-muted/15 px-4 py-3 backdrop-blur-md supports-backdrop-filter:bg-muted/80">
           <QcRegistrySearchBar value={registrySearch} onChange={onRegistrySearchChange} />
         </div>
-        <div className="border-b border-border/60 bg-muted/15 px-4 py-2.5">
+        <div className="sticky top-[3.25rem] z-10 border-b border-border/60 bg-muted/15 px-4 py-2.5 backdrop-blur-md supports-backdrop-filter:bg-muted/80">
           <Tabs value={activeTab} onValueChange={onTabChange}>
             <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1.5 bg-transparent p-0">
               <TabPill
@@ -365,5 +365,5 @@ export function QcReviewRegistry({
         </div>
       </GlassCard>
     </FadeIn>
-  );
+  )
 }

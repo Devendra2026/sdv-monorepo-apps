@@ -40,6 +40,28 @@ export const parcelSiblingEntry = v.object({
   surveyorName: v.optional(v.string()),
 })
 
+export const qcRemarkWithAuthorShape = {
+  _id: v.id("qcRemarks"),
+  _creationTime: v.number(),
+  surveyId: v.id("surveys"),
+  authorId: v.id("users"),
+  authorRole: v.string(),
+  message: v.string(),
+  taggedSections: v.array(v.string()),
+  status: v.union(v.literal("open"), v.literal("resolved")),
+  author: v.union(
+    v.object({
+      _id: v.id("users"),
+      name: v.string(),
+      role: v.string(),
+    }),
+    v.null()
+  ),
+}
+
+/** Max parcel siblings returned to the review UI (ward scans may be larger). */
+export const MAX_PARCEL_SIBLING_RESULTS = 25
+
 export function wardNumbersMatch(rowWard: string, filterWard: string): boolean {
   if (rowWard === filterWard) return true
   const a = Number(rowWard)

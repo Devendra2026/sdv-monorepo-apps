@@ -1,22 +1,25 @@
-"use client";
+"use client"
 
-import { QcRemarksThread } from "@/components/qc/qc-remarks-thread";
-import { Badge } from "@/components/ui/badge";
-import type { QcRemarkWithAuthor } from "@/schema/qc/index";
-import { AlertTriangle } from "lucide-react";
+import { QcRemarksThread } from "@/components/qc/qc-remarks-thread"
+import type { QcRemarkWithAuthor } from "@workspace/schemas"
+import { Badge } from "@workspace/ui/components/badge"
+import { AlertTriangle } from "lucide-react"
 
 export function QcCorrectionBanner({ remarks }: { remarks?: QcRemarkWithAuthor[] }) {
-  if (!remarks?.length) return null;
+  if (!remarks?.length) return null
 
-  const openRemarks = remarks.filter((r) => r.status === "open");
-  if (openRemarks.length === 0) return null;
+  const openRemarks = remarks.filter((r) => r.status === "open")
+  if (openRemarks.length === 0) return null
 
-  const taggedSections = [...new Set(openRemarks.flatMap((r) => r.taggedSections))];
+  const taggedSections = [...new Set(openRemarks.flatMap((r) => r.taggedSections))]
 
   return (
-    <div className="rounded-2xl border border-rose-300/60 bg-linear-to-r from-rose-50 via-orange-50 to-amber-50 px-5 py-4 shadow-sm dark:border-rose-800/40 dark:from-rose-950/40 dark:via-orange-950/30 dark:to-amber-950/20">
+    <div
+      role="alert"
+      className="rounded-2xl border border-rose-300/60 bg-linear-to-r from-rose-50 via-orange-50 to-amber-50 px-5 py-4 shadow-sm ring-1 ring-rose-200/70 dark:border-rose-800/40 dark:from-rose-950/40 dark:via-orange-950/30 dark:to-amber-950/20 dark:ring-rose-900/50"
+    >
       <div className="mb-3 flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose-100 dark:bg-rose-900/50">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose-100 motion-safe:animate-pulse dark:bg-rose-900/50">
           <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
         </div>
         <div>
@@ -43,5 +46,5 @@ export function QcCorrectionBanner({ remarks }: { remarks?: QcRemarkWithAuthor[]
       </div>
       <QcRemarksThread remarks={openRemarks} compact />
     </div>
-  );
+  )
 }

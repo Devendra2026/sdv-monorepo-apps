@@ -48,6 +48,7 @@ export interface SurveyListFilters {
   surveyorId?: string
   fromMs?: number
   toMs?: number
+  parcelSharedOnly?: boolean
   limit?: number
   searchTerm?: string
 }
@@ -76,7 +77,7 @@ export function useSurveyList(filters: SurveyListFilters = {}, enabled = true) {
 export function useSurveyListPaginated(filters: SurveyListFilters = {}, pageSize = 20, enabled = true) {
   const nowMs = useClientNowMs()
   const searchKey = filters.searchTerm?.trim() ?? ""
-  const resetKey = `${filters.status ?? ""}|${filters.qcStatus ?? ""}|${(filters.qcStatuses ?? []).join(",")}|${filters.wardNo ?? ""}|${filters.districtId ?? ""}|${filters.municipalityId ?? ""}|${filters.surveyorId ?? ""}|${filters.fromMs ?? ""}|${filters.toMs ?? ""}|${searchKey}`
+  const resetKey = `${filters.status ?? ""}|${filters.qcStatus ?? ""}|${(filters.qcStatuses ?? []).join(",")}|${filters.wardNo ?? ""}|${filters.districtId ?? ""}|${filters.municipalityId ?? ""}|${filters.surveyorId ?? ""}|${filters.fromMs ?? ""}|${filters.toMs ?? ""}|${filters.parcelSharedOnly ? "1" : "0"}|${searchKey}`
   const {
     cursor,
     pageIndex,
@@ -102,6 +103,7 @@ export function useSurveyListPaginated(filters: SurveyListFilters = {}, pageSize
           surveyorId: filters.surveyorId as Id<"users"> | undefined,
           fromMs: filters.fromMs,
           toMs: filters.toMs,
+          parcelSharedOnly: filters.parcelSharedOnly,
           searchTerm: searchKey || undefined,
           nowMs,
         }

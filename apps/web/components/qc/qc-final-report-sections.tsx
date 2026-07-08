@@ -6,14 +6,14 @@ import { MetricCard } from "@/components/design-system/metric-card"
 import { FadeIn, StaggerGrid, StaggerItem } from "@/components/design-system/motion"
 import { GoogleMapEmbed } from "@/components/shared/google-map-embed"
 import { QcStatusBadge, SurveyStatusBadge } from "@/components/shared/status-badge"
-import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatInr, type DemandAssessment } from "@/lib/qc/demand-estimate"
 import { formatAreaSqft, formatAreaSqMeter, type SurveyAreaMetrics } from "@/lib/survey/area"
 import { labelFromOptions } from "@/lib/survey/detail-labels"
-import { fmtDate } from "@/lib/utils"
 import type { api } from "@workspace/backend/convex/_generated/api.js"
 import type { SurveyDetail } from "@workspace/schemas"
+import { Button } from "@workspace/ui/components/button"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
+import { fmtDate } from "@workspace/ui/lib/utils"
 import type { FunctionReturnType } from "convex/server"
 import {
   BadgeCheck,
@@ -73,7 +73,7 @@ function ReportPhoto({ url, label }: { url?: string | null; label: string }) {
   )
 }
 
-type MastersBundle = NonNullable<FunctionReturnType<typeof api.masters.bundle>>
+type MastersBundle = NonNullable<FunctionReturnType<typeof api.masters.queries.bundle>>
 type ReportDemand = DemandAssessment & { assessableSqft: number }
 
 export function QcReportKpiStrip({
@@ -397,3 +397,4 @@ export function QcReportSidebar({
 }
 
 export { ShieldCheck }
+

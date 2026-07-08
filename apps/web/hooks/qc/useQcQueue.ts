@@ -9,6 +9,7 @@ import { useClientNowMs } from "@/hooks/use-client-now"
 import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { activeParcelSiblingPool, buildParcelSiblingIndex, filterParcelSharedRows } from "@/lib/qc/parcel-siblings"
+import { qcPerfMark, qcPerfMeasure, qcPerfNowLabel } from "@/lib/qc/qc-perf"
 import { computeQcWardStats, enrichServerWardStats, type QcWardRow } from "@/lib/qc/ward-stats"
 import { sanitizeQcWorkScope, type QcWorkScope } from "@/lib/qc/work-scope"
 import { buildUlbCodeMap } from "@/lib/survey/resolve-display-property-id"
@@ -16,7 +17,7 @@ import { qcTabToListFilters } from "@/lib/surveys/survey-list-filters"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import { useQuery as useConvexQuery } from "convex/react"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 /** Cap for ward roll-up fallback only (primary stats come from server). */
 const QC_AGGREGATE_LIMIT = 500
@@ -53,6 +54,7 @@ export function useQcQueue(options: UseQcQueueOptions = {}) {
   const { masters } = useMasters()
   const authReady = useConvexAuthReady()
   const nowMs = useClientNowMs()
+  const tabSwitchStartMarkRef = useRef<string | null>(null)
 
   const queryScope = useMemo(() => {
     if (masters) {
@@ -95,9 +97,17 @@ export function useQcQueue(options: UseQcQueueOptions = {}) {
     setRegistrySearch(term)
   }, [])
 
-  const handleTabChange = useCallback((tab: string) => {
-    setActiveTab(tab)
-  }, [])
+  const handleTabChange = useCallback(
+    (tab: string) => {
+      if (mode === "registry") {
+        const startMark = qcPerfNowLabel(`qc.registry.tab_switch.start.${tab}`)
+        qcPerfMark(startMark)
+        tabSwitchStartMarkRef.current = startMark
+      }
+      setActiveTab(tab)
+    },
+    [mode]
+  )
 
   const handlePageSizeChange = useCallback((size: number) => {
     setPageSize(size)
@@ -127,7 +137,7 @@ export function useQcQueue(options: UseQcQueueOptions = {}) {
   const registrySearchTerm = debouncedRegistrySearch.trim() || undefined
 
   const serverStats = useConvexQuery(
-    api.qc.commandCenterStats,
+    api.qc.queries.commandCenterStats,
     authReady && scopeReady
       ? {
           wardNo: scopeFilters.wardNo,
@@ -147,7 +157,14 @@ export function useQcQueue(options: UseQcQueueOptions = {}) {
   )
 
   const paginated = useSurveyListPaginated(
-    { ...scopeFilters, ...tabFilters, fromMs: fromDateMs, toMs: toDateMs, searchTerm: registrySearchTerm },
+    {
+      ...scopeFilters,
+      ...tabFilters,
+      fromMs: fromDateMs,
+      toMs: toDateMs,
+      searchTerm: registrySearchTerm,
+      parcelSharedOnly: activeTab === "parcelShared",
+    },
     pageSize,
     scopeReady && mode === "registry"
   )
@@ -159,6 +176,18 @@ export function useQcQueue(options: UseQcQueueOptions = {}) {
         ? serverStats === undefined || aggregateSurveys === undefined
         : aggregateSurveys === undefined
 
+  useEffect(() => {
+    if (mode !== "registry") return
+    const startMark = tabSwitchStartMarkRef.current
+    if (!startMark) return
+    if (isLoading) return
+
+    const endMark = qcPerfNowLabel(`qc.registry.tab_switch.end.${activeTab}`)
+    qcPerfMark(endMark)
+    qcPerfMeasure("qc.registry.tab_switch", startMark, endMark)
+    tabSwitchStartMarkRef.current = null
+  }, [activeTab, isLoading, mode])
+
   const registryFiltered = useMemo(() => {
     const rows = mode === "registry" ? paginated.surveys : aggregateSurveys
     if (!rows) return rows
@@ -168,13 +197,6 @@ export function useQcQueue(options: UseQcQueueOptions = {}) {
         : (searchQcRegistry(rows as SurveyRow[], debouncedRegistrySearch, ulbCodes) as SurveyRow[])
     if (mode === "registry" && activeTab === "all") {
       filtered = filtered.filter((r) => r.status !== "draft" || r.qcStatus !== "pending")
-    }
-    if (activeTab === "parcelShared" && aggregateSurveys) {
-      const activePool = (aggregateSurveys as SurveyRow[]).filter(
-        (r) => r.qcStatus === "approved" || (r.qcStatus === "pending" && r.status === "submitted")
-      )
-      const sharedIds = new Set(filterParcelSharedRows(activePool).map((r) => r._id))
-      filtered = filtered.filter((r) => sharedIds.has(r._id))
     }
     return filtered
   }, [mode, paginated.surveys, aggregateSurveys, debouncedRegistrySearch, activeTab, ulbCodes])

@@ -1,6 +1,6 @@
 "use client";
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table";
 import { formatAmountPlain, type DemandNoticeData } from "@/lib/qc/demand-notice";
 import { BilingualLabel } from "./bilingual-label";
 import { SectionLabel } from "./section-label";

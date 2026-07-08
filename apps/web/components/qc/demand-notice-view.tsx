@@ -2,14 +2,14 @@
 
 import { PageTransition } from "@/components/design-system/motion"
 import { DemandNoticeDocument } from "@/components/qc/demand-notice"
-import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import { useDemandNoticePrintFit } from "@/hooks/qc/useDemandNoticePrintFit"
 import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
 import type { DemandNoticeDocumentProps } from "@/lib/qc/demand-notice-document-types"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import type { SurveyDetail } from "@workspace/schemas"
+import { Button } from "@workspace/ui/components/button"
+import { Skeleton } from "@workspace/ui/components/skeleton"
 import { useQuery as useConvexQuery } from "convex/react"
 import { ArrowLeft, Printer } from "lucide-react"
 import { Geist, JetBrains_Mono, Noto_Sans_Devanagari } from "next/font/google"
@@ -45,7 +45,7 @@ export function DemandNoticeView({ survey, surveyId, backHref = `/qc/${surveyId}
   const ready = useConvexAuthReady()
   const { printNotice } = useDemandNoticePrintFit()
   const noticeProps = useConvexQuery(
-    api.demandNotices.getNoticeForSurvey,
+    api.demandNotices.queries.getNoticeForSurvey,
     ready ? { surveyId: surveyId as Id<"surveys"> } : "skip"
   ) as DemandNoticeDocumentProps | null | undefined
 

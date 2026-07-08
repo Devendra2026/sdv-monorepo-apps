@@ -116,6 +116,19 @@ export const preloadSurveyCommandCenter = cache(
   }
 )
 
+export type QcCommandCenterPreloadFilters = {
+  districtId?: Id<"districts">
+  municipalityId?: Id<"municipalities">
+  wardNo?: string
+  fromMs?: number
+  toMs?: number
+}
+
+/** Preload QC command center KPI + ward stats (default filters supported). */
+export const preloadQcCommandCenterStats = cache(async (nowMs: number, filters: QcCommandCenterPreloadFilters = {}) => {
+  return preloadConvexQuery(api.qc.queries.commandCenterStats, { nowMs, ...filters })
+})
+
 /** Preload first page of registry list (default scope). */
 export const preloadSurveyRegistryPage = cache(async (nowMs: number, pageSize = 20) => {
   return preloadConvexQuery(api.surveys.queries.listPaginated, {

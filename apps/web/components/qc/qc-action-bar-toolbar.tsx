@@ -3,9 +3,9 @@
 import type { QcToolbarVariant } from "@/components/qc/qc-action-bar.types"
 import { qcActionBtn } from "@/components/qc/qc-action-styles"
 import { RoleGate } from "@/components/shared/role-gate"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 import type { SurveyListItem } from "@workspace/schemas"
+import { Button } from "@workspace/ui/components/button"
+import { cn } from "@workspace/ui/lib/utils"
 import { CheckCircle2, Eye, Loader2, Pencil, RotateCcw, Save, Trash2 } from "lucide-react"
 import Link from "next/link"
 
@@ -115,7 +115,11 @@ export function QcActionBarToolbar({
               type="button"
               disabled={isWorking}
               onClick={() => void onApprove()}
-              className={cn(qcActionBtn.base, qcActionBtn.approve)}
+              className={cn(
+                qcActionBtn.base,
+                qcActionBtn.approve,
+                "shadow-lg ring-2 shadow-emerald-500/25 ring-emerald-400/30"
+              )}
             >
               {isWorking ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

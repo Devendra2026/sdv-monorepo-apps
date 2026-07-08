@@ -1,9 +1,10 @@
 import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
-import type { Id } from "../_generated/dataModel"
+import type { Doc, Id } from "../_generated/dataModel"
 import { query } from "../_generated/server"
 import { presentFloorRow } from "../lib/masters/areaMasters"
-import { resolvePropertyId } from "../lib/propertyId"
+import { normalizeParcelKey, resolvePropertyId } from "../lib/propertyId"
+import { normalizeWardNo } from "../lib/qcWardStats"
 import { loadScopeStatsSummary, resolveListTotalFromStats, scopeStatsFastPathEligible } from "../lib/surveyScopeStats"
 import { computeSurveyWardAggregates } from "../lib/surveyWardStats"
 import { qcStatus, surveyStatus } from "../schema"
@@ -28,7 +29,13 @@ import {
   sortSurveyRows,
   wardNumbersMatch,
 } from "./helpers"
-import { listFilterArgs, surveyCommandCenterStatsShape, surveySortBy } from "./validators"
+import {
+  listFilterArgs,
+  surveyCommandCenterStatsShape,
+  surveyListPaginatedResultShape,
+  surveyListRowValidator,
+  surveySortBy,
+} from "./validators"
 export const list = query({
   args: {
     status: v.optional(surveyStatus),
@@ -41,7 +48,7 @@ export const list = query({
     limit: v.optional(v.number()),
     sortBy: v.optional(surveySortBy),
   },
-  returns: v.array(v.any()),
+  returns: v.array(surveyListRowValidator),
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
     const limit = Math.min(args.limit ?? 200, 2000)
@@ -102,19 +109,38 @@ export const list = query({
   },
 })
 
+function filterParcelSharedSurveys(rows: Doc<"surveys">[]): Doc<"surveys">[] {
+  // Shared parcel definition matches the frontend:
+  // same ULB + normalized wardNo + normalized parcelNo (ignores unit/property use).
+  const countsByParcelKey = new Map<string, number>()
+
+  for (const row of rows) {
+    if (!row.wardNo?.trim() || !row.parcelNo?.trim()) continue
+    const key = `${row.municipalityId}:${normalizeWardNo(row.wardNo)}:${normalizeParcelKey(row.parcelNo)}`
+    countsByParcelKey.set(key, (countsByParcelKey.get(key) ?? 0) + 1)
+  }
+
+  const sharedKeys = new Set(
+    Array.from(countsByParcelKey.entries())
+      .filter(([, count]) => count > 1)
+      .map(([k]) => k)
+  )
+  if (sharedKeys.size === 0) return []
+
+  return rows.filter((row) => {
+    if (!row.wardNo?.trim() || !row.parcelNo?.trim()) return false
+    const key = `${row.municipalityId}:${normalizeWardNo(row.wardNo)}:${normalizeParcelKey(row.parcelNo)}`
+    return sharedKeys.has(key)
+  })
+}
+
 /** Cursor-paginated survey list sorted by ward then parcel ascending. */
 export const listPaginated = query({
   args: {
     paginationOpts: paginationOptsValidator,
     ...listFilterArgs,
   },
-  returns: v.object({
-    page: v.array(v.any()),
-    continueCursor: v.union(v.string(), v.null()),
-    isDone: v.boolean(),
-    totalCount: v.number(),
-    scopeTruncated: v.boolean(),
-  }),
+  returns: v.object(surveyListPaginatedResultShape),
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
     const scope = await resolveTenantScope(ctx, me)
@@ -131,20 +157,25 @@ export const listPaginated = query({
 
     const offset = parseListOffset(args.paginationOpts.cursor)
     const numItems = args.paginationOpts.numItems
-    const statsTotal = scopeStatsFastPathEligible(args)
-      ? await resolveListTotalFromStats(ctx, me, args.nowMs, {
-          districtId: args.districtId,
-          municipalityId: args.municipalityId,
-          status: args.status,
-          qcStatus: args.qcStatus,
-        })
-      : null
+    const statsTotal =
+      !args.parcelSharedOnly && scopeStatsFastPathEligible(args)
+        ? await resolveListTotalFromStats(ctx, me, args.nowMs, {
+            districtId: args.districtId,
+            municipalityId: args.municipalityId,
+            status: args.status,
+            qcStatus: args.qcStatus,
+          })
+        : null
     const scanLimit =
       statsTotal !== null
         ? Math.min(LIST_PAGINATED_SCOPE_LIMIT, Math.max(statsTotal, offset + numItems + 50))
         : LIST_PAGINATED_SCOPE_LIMIT
 
     let filtered = await collectSurveysForListPaginated(ctx, me, args, scope, muniIds, access, scanLimit)
+
+    if (args.parcelSharedOnly) {
+      filtered = filterParcelSharedSurveys(filtered)
+    }
 
     if (args.searchTerm?.trim()) {
       filtered = await filterRowsBySearchTerm(ctx, filtered, args.searchTerm)

@@ -1,18 +1,18 @@
-"use client";
+"use client"
 
-import { RoleGate } from "@/components/shared/role-gate";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { useResolveRemark } from "@/hooks/qc/useQc";
-import { fmtDate } from "@/lib/utils";
-import type { QcRemarkWithAuthor } from "@/schema/qc/index";
-import { MessageSquare } from "lucide-react";
+import { RoleGate } from "@/components/shared/role-gate"
+import { useResolveRemark } from "@/hooks/qc/useQc"
+import type { QcRemarkWithAuthor } from "@workspace/schemas"
+import { Badge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
+import { fmtDate } from "@workspace/ui/lib/utils"
+import { MessageSquare } from "lucide-react"
 
 export function QcRemarksThread({ remarks, compact = false }: { remarks?: QcRemarkWithAuthor[]; compact?: boolean }) {
-  const resolveRemark = useResolveRemark();
+  const resolveRemark = useResolveRemark()
 
   if (remarks === undefined) {
-    return <p className="text-sm text-muted-foreground">Loading remarks…</p>;
+    return <p className="text-sm text-muted-foreground">Loading remarks…</p>
   }
 
   if (remarks.length === 0) {
@@ -20,11 +20,11 @@ export function QcRemarksThread({ remarks, compact = false }: { remarks?: QcRema
       <p className="rounded-lg border border-dashed border-border/50 px-4 py-6 text-center text-sm text-muted-foreground">
         No QC remarks yet.
       </p>
-    );
+    )
   }
 
   return (
-    <div className={`space-y-3 ${compact ? "" : "max-h-[480px] overflow-y-auto pr-1"}`}>
+    <div className={`space-y-3 ${compact ? "" : "max-h-120 overflow-y-auto pr-1"}`}>
       {remarks.map((r) => (
         <div
           key={r._id}
@@ -72,5 +72,5 @@ export function QcRemarksThread({ remarks, compact = false }: { remarks?: QcRema
         </div>
       ))}
     </div>
-  );
+  )
 }

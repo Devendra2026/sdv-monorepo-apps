@@ -2,8 +2,10 @@
 
 import type { FilterState } from "@/components/surveys/survey-filters"
 import { useMasters } from "@/hooks/masters/useMasters"
+import { useQcQuery } from "@/hooks/qc/convex/useQcQuery"
 import { useTaxRatesForMunicipality } from "@/hooks/qc/useTaxRatesForMunicipality"
 import { useSurveyListPaginated } from "@/hooks/surveys/useSurveys"
+import { useHasCapability } from "@/hooks/use-capability"
 import { estimateDemandAssessment, formatInr } from "@/lib/qc/demand-estimate"
 import { computeDemandNotice } from "@/lib/qc/demand-notice"
 import { resolveAssessableSqft } from "@/lib/qc/qc-report-demand"
@@ -13,7 +15,6 @@ import { QC_TABLE_PAGE_SIZE_OPTIONS } from "@/lib/table-pagination"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import type { FloorRow, SurveyListItem } from "@workspace/schemas"
-import { useQuery } from "convex/react"
 import { useMemo, useState } from "react"
 
 export type DemandRegisterRow = {
@@ -29,6 +30,7 @@ export type DemandRegisterRow = {
 }
 
 export function useDemandNoticePanel() {
+  const canReview = useHasCapability("qc.review")
   const [filters, setFilters] = useState<FilterState>({})
   const [pageSize, setPageSize] = useState<number>(QC_TABLE_PAGE_SIZE_OPTIONS[1] ?? 20)
   const { masters } = useMasters()
@@ -44,11 +46,12 @@ export function useDemandNoticePanel() {
       municipalityId: filters.municipalityId,
       wardNo: filters.wardNo,
     },
-    pageSize
+    pageSize,
+    canReview
   )
 
   const surveyIds = useMemo(() => (paginated.surveys ?? []).map((row) => row._id as Id<"surveys">), [paginated.surveys])
-  const groupedFloors = useQuery(api.floors.listForSurveys, surveyIds.length > 0 ? { surveyIds } : "skip")
+  const groupedFloors = useQcQuery(api.floors.queries.listForSurveys, surveyIds.length > 0 ? { surveyIds } : "skip")
   const { rateConfig, ratesLoading } = useTaxRatesForMunicipality(selectedMunicipalityId)
 
   const floorsBySurvey = useMemo(() => {

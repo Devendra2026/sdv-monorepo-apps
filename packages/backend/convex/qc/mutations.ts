@@ -21,6 +21,7 @@ export const addRemark = mutation({
     message: v.string(),
     taggedSections: v.optional(v.array(v.string())),
   },
+  returns: v.id("qcRemarks"),
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
     if (args.message.trim().length === 0) {
@@ -73,6 +74,7 @@ export const addRemark = mutation({
 
 export const resolveRemark = mutation({
   args: { id: v.id("qcRemarks") },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const [me, remark] = await Promise.all([requireUser(ctx), ctx.db.get(args.id)])
     if (!remark) clientError("NOT_FOUND", "Remark not found")
@@ -91,6 +93,7 @@ export const resolveRemark = mutation({
       entityId: args.id,
       metadata: { surveyId: remark.surveyId },
     })
+    return null
   },
 })
 
@@ -106,6 +109,7 @@ export const decide = mutation({
     comment: v.optional(v.string()),
     taggedSections: v.optional(v.array(v.string())),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const [me, survey] = await Promise.all([requireUser(ctx), ctx.db.get(args.surveyId)])
     await requireCapability(ctx, me, "qc.decide")
@@ -169,12 +173,14 @@ export const decide = mutation({
       entityId: args.surveyId,
       metadata: { taggedSections: args.taggedSections, comment: args.comment },
     })
+    return null
   },
 })
 
 /** Reopen an approved survey for further editing — admin or supervisor only. */
 export const reopen = mutation({
   args: { surveyId: v.id("surveys"), reason: v.optional(v.string()) },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const [me, survey] = await Promise.all([requireUser(ctx), ctx.db.get(args.surveyId)])
     await requireCapability(ctx, me, "qc.reopen")
@@ -202,5 +208,6 @@ export const reopen = mutation({
     ])
     const reopened = await ctx.db.get(args.surveyId)
     if (reopened) await recordSurveyStatsUpdate(ctx, survey, reopened)
+    return null
   },
 })
