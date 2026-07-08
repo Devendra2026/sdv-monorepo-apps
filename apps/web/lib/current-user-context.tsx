@@ -3,7 +3,7 @@
 import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
 import type { Role } from "@/lib/permissions"
 import { api } from "@workspace/backend/convex/_generated/api.js"
-import { useMutation, useQuery } from "convex/react"
+import { useMutation, usePreloadedQuery, useQuery, type Preloaded } from "convex/react"
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 
 export type CurrentUser = {
@@ -37,9 +37,7 @@ type CurrentUserContextValue = {
 
 const CurrentUserContext = createContext<CurrentUserContextValue | null>(null)
 
-function useCurrentUserState(): CurrentUserContextValue {
-  const ready = useConvexAuthReady()
-  const user = useQuery(api.users.queries.currentUser, ready ? {} : "skip") as CurrentUser | null | undefined
+function useProvisionFlow(user: CurrentUser | null | undefined) {
   const provision = useMutation(api.users.mutations.provisionCurrentUser)
   const provisioned = useRef(false)
   const [provisionFailed, setProvisionFailed] = useState(false)
@@ -71,23 +69,63 @@ function useCurrentUserState(): CurrentUserContextValue {
   }, [runProvision])
 
   return {
+    isProvisioning: user === null && (isProvisioning || !provisionFailed),
+    provisionFailed: user === null && provisionFailed,
+    retryProvision,
+  }
+}
+
+function buildContextValue(
+  user: CurrentUser | null | undefined,
+  provision: ReturnType<typeof useProvisionFlow>
+): CurrentUserContextValue {
+  return {
     user: user ?? null,
     role: (user?.role ?? undefined) as Role | undefined,
     capabilities: user?.capabilities,
     roleName: user?.roleName,
     isLoading: user === undefined,
-    isProvisioning: user === null && (isProvisioning || !provisionFailed),
-    provisionFailed: user === null && provisionFailed,
-    retryProvision,
+    isProvisioning: provision.isProvisioning,
+    provisionFailed: provision.provisionFailed,
+    retryProvision: provision.retryProvision,
     isActive: user?.status === "active",
     isPending: user?.status === "pending_approval",
     isDisabled: user?.status === "disabled",
   }
 }
 
-export function CurrentUserProvider({ children }: { children: ReactNode }) {
-  const value = useCurrentUserState()
+function CurrentUserProviderPreloaded({
+  children,
+  preloadedUser,
+}: {
+  children: ReactNode
+  preloadedUser: Preloaded<typeof api.users.queries.currentUser>
+}) {
+  const user = usePreloadedQuery(preloadedUser) as CurrentUser | null | undefined
+  const provision = useProvisionFlow(user)
+  const value = buildContextValue(user, provision)
   return <CurrentUserContext.Provider value={value}>{children}</CurrentUserContext.Provider>
+}
+
+function CurrentUserProviderClient({ children }: { children: ReactNode }) {
+  const ready = useConvexAuthReady()
+  const user = useQuery(api.users.queries.currentUser, ready ? {} : "skip") as CurrentUser | null | undefined
+  const provision = useProvisionFlow(user)
+  const value = buildContextValue(user, provision)
+  return <CurrentUserContext.Provider value={value}>{children}</CurrentUserContext.Provider>
+}
+
+export function CurrentUserProvider({
+  children,
+  preloadedUser,
+}: {
+  children: ReactNode
+  preloadedUser?: Preloaded<typeof api.users.queries.currentUser>
+}) {
+  if (preloadedUser) {
+    return <CurrentUserProviderPreloaded preloadedUser={preloadedUser}>{children}</CurrentUserProviderPreloaded>
+  }
+  return <CurrentUserProviderClient>{children}</CurrentUserProviderClient>
 }
 
 export function useCurrentUser(): CurrentUserContextValue {

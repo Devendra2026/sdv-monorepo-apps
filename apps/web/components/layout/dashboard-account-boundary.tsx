@@ -35,7 +35,7 @@ function StatusScreen({
 export function DashboardAccountBoundary({ children }: { children: React.ReactNode }) {
   const { user, isLoading, isPending, isDisabled, isProvisioning, provisionFailed, retryProvision } = useCurrentUser()
 
-  if (isLoading) {
+  if (isLoading && user === undefined) {
     return <DashboardMainSkeleton />
   }
 

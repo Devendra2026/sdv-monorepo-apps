@@ -6,24 +6,27 @@ const labelTransition = "transition-all duration-300 ease-[cubic-bezier(0.4,0,0.
 
 export function SidebarBrand({ collapsed }: { collapsed?: boolean }) {
   return (
-    <div className="flex h-14 shrink-0 items-center justify-center overflow-hidden border-b border-sidebar-border px-2">
+    <div className="flex h-20 shrink-0 items-center justify-center overflow-hidden border-b border-sidebar-border px-2">
       <Link
         href="/dashboard"
         className="flex cursor-pointer items-center justify-center rounded-lg p-1.5 transition-opacity duration-200 hover:opacity-90"
         aria-label="Home"
       >
-        <Image
-          src="/sdv-logo.png"
-          alt="SDV"
-          width={132}
-          height={40}
-          style={{ width: "auto", height: "auto" }}
+        <span
           className={cn(
-            "object-contain transition-all duration-300 ease-in-out motion-reduce:transition-none",
-            collapsed ? "h-8 w-8" : "h-8 w-auto max-w-28"
+            "relative block h-8 shrink-0 transition-all duration-300 ease-in-out motion-reduce:transition-none",
+            collapsed ? "w-8" : "w-33 max-w-33"
           )}
-          priority
-        />
+        >
+          <Image
+            src="/images/sdv-logo.png"
+            alt="SDV"
+            fill
+            sizes="132px"
+            priority
+            className="object-contain drop-shadow-sm"
+          />
+        </span>
       </Link>
     </div>
   )

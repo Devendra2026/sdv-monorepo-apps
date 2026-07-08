@@ -5,9 +5,11 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+const APP_LOCALE = "en-IN"
+
 export function fmtDate(ms?: number | null): string {
   if (!ms) return "—"
-  return new Date(ms).toLocaleString(undefined, {
+  return new Date(ms).toLocaleString(APP_LOCALE, {
     year: "numeric",
     month: "short",
     day: "2-digit",
@@ -18,5 +20,9 @@ export function fmtDate(ms?: number | null): string {
 
 export function fmtDay(ms?: number | null): string {
   if (!ms) return "—"
-  return new Date(ms).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" })
+  return new Date(ms).toLocaleDateString(APP_LOCALE, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  })
 }

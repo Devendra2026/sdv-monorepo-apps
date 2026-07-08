@@ -11,7 +11,8 @@
     "./analytics": "./src/analytics/index.ts",
     "./surveys": "./src/surveys/index.ts",
     "./surveys/input": "./src/surveys/input.ts",
-    "./surveys/responses": "./src/surveys/responses.ts"
+    "./surveys/responses": "./src/surveys/responses.ts",
+    "./audit": "./src/audit/index.ts"
   },
   "dependencies": {
     "zod": "^4.4.3"

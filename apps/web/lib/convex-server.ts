@@ -89,6 +89,11 @@ export const preloadDashboardActivity = cache(async () => {
   return preloadConvexQuery(api.analytics.queries.recentActivity, {})
 })
 
+/** Deduped per-request preload for the signed-in user's Convex row. */
+export const preloadCurrentUser = cache(async () => {
+  return preloadConvexQuery(api.users.queries.currentUser, {})
+})
+
 export type SurveyCommandCenterPreloadFilters = {
   districtId?: Id<"districts">
   municipalityId?: Id<"municipalities">

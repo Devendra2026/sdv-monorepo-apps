@@ -15,6 +15,7 @@ import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import { useQuery as useConvexQuery, useMutation, usePreloadedQuery, type Preloaded } from "convex/react"
 import type { FunctionArgs } from "convex/server"
 import { useCallback, useMemo } from "react"
+import { toast } from "sonner"
 
 let saveDraftQueue: Promise<unknown> = Promise.resolve()
 
@@ -142,7 +143,18 @@ export function usePreloadedSurvey(preloaded: Preloaded<typeof api.surveys.queri
 }
 
 export function useSubmitSurvey() {
-  return useMutation(api.surveys.mutations.submit)
+  return useMutation(api.surveys.mutations.submit).withOptimisticUpdate((localStore, args) => {
+    const current = localStore.getQuery(api.surveys.queries.get, { id: args.id })
+    if (!current) return
+    localStore.setQuery(
+      api.surveys.queries.get,
+      { id: args.id },
+      {
+        ...current,
+        status: "submitted",
+      }
+    )
+  })
 }
 export function useRemoveSurvey() {
   return useMutation(api.surveys.mutations.remove)
@@ -151,11 +163,29 @@ function useUpsertSurvey() {
   return useMutation(api.surveys.mutations.upsert)
 }
 export function useSaveDraft() {
-  const mutate = useMutation(api.surveys.mutations.saveDraft)
+  const mutate = useMutation(api.surveys.mutations.saveDraft).withOptimisticUpdate((localStore, args) => {
+    if (!args.id) return
+    const current = localStore.getQuery(api.surveys.queries.get, { id: args.id })
+    if (!current) return
+    const { id, localId: _localId, municipalityId: _municipalityId, clientUpdatedAt, ...patch } = args
+    localStore.setQuery(
+      api.surveys.queries.get,
+      { id: args.id },
+      {
+        ...current,
+        ...patch,
+        clientUpdatedAt,
+      }
+    )
+  })
 
   return useCallback(
     (args: FunctionArgs<typeof api.surveys.mutations.saveDraft>) => {
-      const run = () => runSaveDraftWithRetry(() => mutate(args))
+      const run = () =>
+        runSaveDraftWithRetry(() => mutate(args)).catch((error) => {
+          toast.error(error instanceof Error ? error.message : "Failed to save draft")
+          throw error
+        })
       const result = saveDraftQueue.then(run, run)
       saveDraftQueue = result.catch(() => undefined)
       return result
@@ -164,7 +194,18 @@ export function useSaveDraft() {
   )
 }
 export function useSetGps() {
-  return useMutation(api.surveys.mutations.setGps)
+  return useMutation(api.surveys.mutations.setGps).withOptimisticUpdate((localStore, args) => {
+    const current = localStore.getQuery(api.surveys.queries.get, { id: args.id })
+    if (!current) return
+    localStore.setQuery(
+      api.surveys.queries.get,
+      { id: args.id },
+      {
+        ...current,
+        gps: args.gps,
+      }
+    )
+  })
 }
 
 /** QC registry search — property ID, owner name, parcel number, and ward number. */

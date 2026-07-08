@@ -16,9 +16,13 @@ import { enrichServerSurveyWardStats, type SurveyWardRow } from "@/lib/surveys/w
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import { useQuery as useConvexQuery } from "convex/react"
+import type { FunctionReturnType } from "convex/server"
 import { useCallback, useMemo, useState } from "react"
 
 const pageSize = 20
+
+type CommandCenterStats = FunctionReturnType<typeof api.surveys.queries.commandCenterStats>
+type RegistryPage = FunctionReturnType<typeof api.surveys.queries.listPaginated>
 
 export type SurveyQueueStats = {
   total: number
@@ -45,6 +49,10 @@ const EMPTY_STATS: SurveyQueueStats = {
 export type UseSurveyQueueOptions = {
   initialTab?: string
   mode?: "command" | "registry"
+  /** Hydrated command-center stats from a server preload (default filters only). */
+  seedStats?: CommandCenterStats
+  /** Hydrated registry page from a server preload (default filters only). */
+  seedRegistryPage?: RegistryPage
 }
 
 export function useSurveyQueue(options: UseSurveyQueueOptions = {}) {
@@ -128,7 +136,7 @@ export function useSurveyQueue(options: UseSurveyQueueOptions = {}) {
 
   const serverStats = useConvexQuery(
     api.surveys.queries.commandCenterStats,
-    authReady && scopeReady
+    authReady && scopeReady && mode === "command"
       ? {
           wardNo: scopeFilters.wardNo,
           districtId: scopeFilters.districtId as Id<"districts"> | undefined,
@@ -142,6 +150,8 @@ export function useSurveyQueue(options: UseSurveyQueueOptions = {}) {
       : "skip"
   )
 
+  const resolvedStats = serverStats ?? (mode === "command" ? options.seedStats : undefined)
+
   const paginated = useSurveyListPaginated(
     {
       ...scopeFilters,
@@ -154,35 +164,46 @@ export function useSurveyQueue(options: UseSurveyQueueOptions = {}) {
     scopeReady && mode === "registry"
   )
 
-  const isLoading = mode === "registry" ? paginated.isLoading : scopeReady ? serverStats === undefined : false
+  const isLoading =
+    mode === "registry"
+      ? paginated.isLoading && options.seedRegistryPage === undefined
+      : scopeReady
+        ? resolvedStats === undefined
+        : false
 
   const filteredByTab = useMemo((): SurveyDataTableRow[] => {
-    if (mode === "registry") return (paginated.surveys ?? []) as SurveyDataTableRow[]
+    if (mode === "registry") {
+      const rows = paginated.surveys ?? options.seedRegistryPage?.page
+      return (rows ?? []) as SurveyDataTableRow[]
+    }
     return []
-  }, [mode, paginated.surveys])
+  }, [mode, paginated.surveys, options.seedRegistryPage])
 
   const stats = useMemo((): SurveyQueueStats => {
-    if (!serverStats) return EMPTY_STATS
+    if (!resolvedStats) return EMPTY_STATS
     return {
-      total: serverStats.total,
-      drafts: serverStats.drafts,
-      submitted: serverStats.submitted,
-      submittedToday: serverStats.submittedToday,
-      qcApproved: serverStats.qcApproved,
-      qcPending: serverStats.qcPending,
-      qcRejected: serverStats.qcRejected,
-      surveyCompletionPct: serverStats.surveyCompletionPct,
+      total: resolvedStats.total,
+      drafts: resolvedStats.drafts,
+      submitted: resolvedStats.submitted,
+      submittedToday: resolvedStats.submittedToday,
+      qcApproved: resolvedStats.qcApproved,
+      qcPending: resolvedStats.qcPending,
+      qcRejected: resolvedStats.qcRejected,
+      surveyCompletionPct: resolvedStats.surveyCompletionPct,
     }
-  }, [serverStats])
+  }, [resolvedStats])
 
   const wardStats = useMemo((): SurveyWardRow[] => {
-    if (serverStats?.wardStats) {
-      return enrichServerSurveyWardStats(serverStats.wardStats, wardLabels)
+    if (resolvedStats?.wardStats) {
+      return enrichServerSurveyWardStats(resolvedStats.wardStats, wardLabels)
     }
     return []
-  }, [serverStats, wardLabels])
+  }, [resolvedStats, wardLabels])
 
-  const filteredCount = mode === "registry" ? (paginated.totalCount ?? filteredByTab.length) : filteredByTab.length
+  const filteredCount =
+    mode === "registry"
+      ? (paginated.totalCount ?? options.seedRegistryPage?.totalCount ?? filteredByTab.length)
+      : filteredByTab.length
 
   return {
     scope,

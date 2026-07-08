@@ -17,13 +17,8 @@ function KpiCardSkeleton() {
 
 export function DashboardHeaderSkeleton() {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between" aria-hidden>
-      <div className="space-y-2">
-        <Skeleton className="h-3 w-36 rounded" />
-        <Skeleton className="h-7 w-64 max-w-full rounded-lg" />
-        <Skeleton className="h-4 w-full max-w-xl rounded" />
-        <Skeleton className="h-3 w-48 rounded" />
-      </div>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" aria-hidden>
+      <Skeleton className="h-7 w-48 max-w-full rounded-lg" />
       <div className="flex gap-2">
         <Skeleton className="h-9 w-28 rounded-lg" />
         <Skeleton className="h-9 w-24 rounded-lg" />

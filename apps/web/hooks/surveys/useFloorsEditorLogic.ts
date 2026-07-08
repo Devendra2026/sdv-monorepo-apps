@@ -12,6 +12,7 @@ import {
   plinthSqftFromFloors,
   plotPlinthConflict,
 } from "@/lib/survey/area"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import type { FloorRow } from "@workspace/schemas"
 import { useRouter } from "next/navigation"
 import { useCallback, useMemo, useRef, useState } from "react"
@@ -40,7 +41,7 @@ export function useFloorsEditorLogic({
   const floors = useFloors(surveyId) as FloorRow[] | undefined
   const survey = useSurvey(surveyId)
   const upsert = useUpsertFloor()
-  const remove = useRemoveFloor()
+  const remove = useRemoveFloor(surveyId as Id<"surveys">)
   const saveDraft = useSaveDraft()
   const { masters } = useMasters({ includeTenantCatalog: false })
   const [draft, setDraft] = useState<FloorDraft | null>(null)

@@ -1,0 +1,141 @@
+"use client"
+
+import { PageTransition } from "@/components/design-system/motion"
+import { TablePagination } from "@/components/shared/table-pagination"
+import { SurveyExcelActions } from "@/components/surveys/survey-excel-actions"
+import { SurveyRegistryHero, SurveyScopeBanner } from "@/components/surveys/survey-queue-sections"
+import { SurveyReassignDialog } from "@/components/surveys/survey-reassign-dialog"
+import { SurveyReviewRegistry } from "@/components/surveys/survey-registry-sections"
+import { useSurveyQueue } from "@/hooks/surveys/useSurveyQueue"
+import { useHasCapability } from "@/hooks/use-capability"
+import { QC_TABLE_PAGE_SIZE_OPTIONS } from "@/lib/table-pagination"
+import { api } from "@workspace/backend/convex/_generated/api.js"
+import { Button } from "@workspace/ui/components/button"
+import type { FunctionReturnType } from "convex/server"
+import { ArrowRightLeft, Plus } from "lucide-react"
+import Link from "next/link"
+import { useSearchParams } from "next/navigation"
+import { useEffect, useMemo, useState } from "react"
+
+export function SurveyRegistryContent({
+  seedRegistryPage,
+}: {
+  seedRegistryPage?: FunctionReturnType<typeof api.surveys.queries.listPaginated>
+}) {
+  const searchParams = useSearchParams()
+  const wardFromUrl = searchParams.get("wardNo") ?? undefined
+  const muniFromUrl = searchParams.get("municipalityId") ?? undefined
+  const districtFromUrl = searchParams.get("districtId") ?? undefined
+  const tabFromUrl = searchParams.get("tab") ?? undefined
+
+  const canReassign = useHasCapability("surveys.reassign")
+  const [reassignOpen, setReassignOpen] = useState(false)
+
+  const {
+    scope,
+    activeTab,
+    pageNumber,
+    pageSize,
+    pageStart,
+    isLoading,
+    stats,
+    filteredCount,
+    pagedRows,
+    surveyorSearch,
+    canViewAll,
+    patchScope,
+    handleSurveyorSearchChange,
+    handleTabChange,
+    handlePageSizeChange,
+    canGoPrev,
+    canGoNext,
+    goNext,
+    goPrev,
+  } = useSurveyQueue({ mode: "registry", initialTab: tabFromUrl ?? "all", seedRegistryPage })
+
+  useEffect(() => {
+    if (!wardFromUrl && !muniFromUrl && !districtFromUrl) return
+    patchScope({
+      wardNo: wardFromUrl ?? scope.wardNo,
+      municipalityId: muniFromUrl ?? scope.municipalityId,
+      districtId: districtFromUrl ?? scope.districtId,
+    })
+  }, [wardFromUrl, muniFromUrl, districtFromUrl, patchScope, scope.districtId, scope.municipalityId, scope.wardNo])
+
+  useEffect(() => {
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      handleTabChange(tabFromUrl)
+    }
+  }, [tabFromUrl, activeTab, handleTabChange])
+
+  const listFilters = useMemo(
+    () => ({
+      wardNo: scope.wardNo,
+      districtId: scope.districtId,
+      municipalityId: scope.municipalityId,
+      searchTerm: surveyorSearch.trim() || undefined,
+    }),
+    [scope, surveyorSearch]
+  )
+
+  return (
+    <PageTransition className="space-y-6 lg:space-y-8">
+      <SurveyRegistryHero />
+      <SurveyScopeBanner scope={scope} />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <SurveyExcelActions filters={listFilters} disabled={isLoading} canImport={canViewAll} />
+        {canReassign && (
+          <Button
+            type="button"
+            variant="outline"
+            className="cursor-pointer rounded-xl"
+            onClick={() => setReassignOpen(true)}
+          >
+            <ArrowRightLeft className="h-4 w-4" aria-hidden /> Reassign drafts
+          </Button>
+        )}
+        <Button asChild className="cursor-pointer rounded-xl">
+          <Link href="/surveys/new">
+            <Plus className="h-4 w-4" aria-hidden /> New survey
+          </Link>
+        </Button>
+      </div>
+
+      <SurveyReviewRegistry
+        stats={stats}
+        activeTab={activeTab}
+        filteredCount={filteredCount}
+        isLoading={isLoading}
+        rows={pagedRows}
+        pageStart={pageStart}
+        surveyorSearch={surveyorSearch}
+        onSurveyorSearchChange={handleSurveyorSearchChange}
+        onTabChange={handleTabChange}
+        showSurveyor={canViewAll}
+      />
+
+      <TablePagination
+        pageNumber={pageNumber}
+        pageSize={pageSize}
+        itemCount={pagedRows?.length ?? 0}
+        canGoPrev={canGoPrev}
+        canGoNext={canGoNext}
+        onPrev={goPrev}
+        onNext={goNext}
+        pageSizeOptions={[...QC_TABLE_PAGE_SIZE_OPTIONS]}
+        onPageSizeChange={handlePageSizeChange}
+      />
+
+      <SurveyReassignDialog
+        open={reassignOpen}
+        onOpenChange={setReassignOpen}
+        scope={{
+          districtId: scope.districtId,
+          municipalityId: scope.municipalityId,
+          wardNo: scope.wardNo,
+        }}
+      />
+    </PageTransition>
+  )
+}
