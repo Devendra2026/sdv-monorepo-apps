@@ -31,18 +31,18 @@ pnpm dev
 
 **Web app** (`apps/web/.env.local`):
 
-| Variable                            | Dev                         | Prod                          |
-| ----------------------------------- | --------------------------- | ----------------------------- |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | `pk_test_...`               | `pk_live_...`                 |
-| `CLERK_SECRET_KEY`                  | `sk_test_...` (server only) | `sk_live_...` (server only)   |
-| `NEXT_PUBLIC_CONVEX_URL`            | from `npx convex dev`       | `https://api.sdvedutech.in`   |
+| Variable                            | Dev                         | Prod                        |
+| ----------------------------------- | --------------------------- | --------------------------- |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | `pk_test_...`               | `pk_live_...`               |
+| `CLERK_SECRET_KEY`                  | `sk_test_...` (server only) | `sk_live_...` (server only) |
+| `NEXT_PUBLIC_CONVEX_URL`            | from `npx convex dev`       | `https://api.sdvedutech.in` |
 
 **Convex deployment** (set via Dashboard or CLI — not in web `.env.local`):
 
-| Variable                  | Dev                          | Prod                          |
-| ------------------------- | ---------------------------- | ----------------------------- |
-| `CLERK_JWT_ISSUER_DOMAIN` | dev Clerk Frontend API URL   | prod Clerk Frontend API URL   |
-| `CLERK_WEBHOOK_SECRET`      | dev webhook signing secret   | prod webhook signing secret   |
+| Variable                  | Dev                        | Prod                        |
+| ------------------------- | -------------------------- | --------------------------- |
+| `CLERK_JWT_ISSUER_DOMAIN` | dev Clerk Frontend API URL | prod Clerk Frontend API URL |
+| `CLERK_WEBHOOK_SECRET`    | dev webhook signing secret | prod webhook signing secret |
 
 `CONVEX_DEPLOYMENT` in `packages/backend/.env.local` is auto-written by `npx convex dev`.
 
@@ -103,11 +103,11 @@ cd packages/backend && npx convex env set CLERK_WEBHOOK_SECRET "whsec_..."
 
 Set build-time env vars on the web deployment:
 
-| Variable                            | Value                         |
-| ----------------------------------- | ----------------------------- |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | `pk_live_...`                 |
-| `CLERK_SECRET_KEY`                  | `sk_live_...`                 |
-| `NEXT_PUBLIC_CONVEX_URL`            | `https://api.sdvedutech.in`   |
+| Variable                            | Value                       |
+| ----------------------------------- | --------------------------- |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | `pk_live_...`               |
+| `CLERK_SECRET_KEY`                  | `sk_live_...`               |
+| `NEXT_PUBLIC_CONVEX_URL`            | `https://api.sdvedutech.in` |
 
 Rebuild after changing `NEXT_PUBLIC_*` variables. If the production site still points at `.convex.cloud`, the browser console will log a warning from [`apps/web/lib/convex.ts`](apps/web/lib/convex.ts).
 
@@ -125,14 +125,14 @@ Use the **production** Clerk app's Convex integration page and webhook secret �
 
 ### Route protection
 
-[`apps/web/proxy.ts`](apps/web/proxy.ts) uses protected-first Clerk middleware: all routes require sign-in except `/sign-in` and `/sign-up`. The dashboard layout also calls `auth.protect()` for server-side preloads.
+[`apps/web/proxy.ts`](apps/web/proxy.ts) runs `clerkMiddleware()` for session propagation only (no path-based auth gating). Protected routes are enforced at the resource level: [`apps/web/app/(dashboard)/layout.tsx`](<apps/web/app/(dashboard)/layout.tsx>) calls `auth.protect()` for all dashboard pages. Auth pages (`/sign-in`, `/sign-up`) remain public. Add `auth.protect()` to any new API routes, Route Handlers, or Server Actions.
 
 ### Post-deploy verification
 
 1. Sign out completely, then sign in fresh (old sessions may carry tokens Convex rejects after issuer changes)
 2. Confirm the dashboard loads and Convex queries succeed (`useConvexAuth` reaches authenticated state)
 3. Confirm no `[Convex] Production site is connected to Convex Cloud` error in the browser console
-4. Visit `/dashboard` without a session — you should be redirected to `/sign-in` at the proxy layer
+4. Visit `/dashboard` without a session — you should be redirected to `/sign-in` by the dashboard layout
 5. New sign-ups should provision via webhook (or the client retry in the dashboard account boundary)
 
 ### Debug token mismatches

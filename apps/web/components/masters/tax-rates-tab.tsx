@@ -20,7 +20,7 @@ export function TaxRatesTab() {
   const [selectedDistrictId, setSelectedDistrictId] = useState("")
   const [selectedMuniId, setSelectedMuniId] = useState("")
 
-  const { data: allRates } = useQuery(api.taxRates.listAll, ready ? {} : "skip")
+  const allRates = useQuery(api.taxation.queries.listAll, ready ? {} : "skip")
 
   const rateStatusByMuni = useMemo(() => {
     if (!allRates) return new Map<string, { published: boolean; wardCount: number }>()

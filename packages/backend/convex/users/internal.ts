@@ -1,5 +1,6 @@
 import { v } from "convex/values"
 import { internalMutation } from "../_generated/server"
+import { ensureRbacSeededIfEmpty } from "../rbac/helpers"
 import { writeAudit } from "../shared/helpers"
 import { upsertUserRecord } from "./helpers"
 
@@ -13,6 +14,7 @@ export const upsertFromClerk = internalMutation({
     requestedReason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await ensureRbacSeededIfEmpty(ctx)
     return await upsertUserRecord(ctx, args, {
       fillSignupMetadataOnlyIfEmpty: false,
     })

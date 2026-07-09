@@ -33,37 +33,30 @@ function istTrendBuckets<T>(days: number, nowMs: number, empty: () => T): { star
   return { startMs, buckets }
 }
 
-async function paginateSurveysBySurveyor(ctx: QueryCtx, surveyorId: Id<"users">): Promise<Doc<"surveys">[]> {
-  const rows: Doc<"surveys">[] = []
-  let cursor: string | null = null
-  while (true) {
-    const page = await ctx.db
-      .query("surveys")
-      .withIndex("by_surveyor", (q) => q.eq("surveyorId", surveyorId))
-      .paginate({ numItems: 500, cursor })
-    rows.push(...page.page)
-    if (page.isDone) break
-    cursor = page.continueCursor
-  }
-  return rows
+/** Bounded survey load by surveyor (no .paginate — safe inside bundled dashboard queries). */
+async function loadSurveysBySurveyor(
+  ctx: QueryCtx,
+  surveyorId: Id<"users">,
+  maxRows = DASHBOARD_BOUNDED_ROW_CAP
+): Promise<Doc<"surveys">[]> {
+  return ctx.db
+    .query("surveys")
+    .withIndex("by_surveyor", (q) => q.eq("surveyorId", surveyorId))
+    .order("desc")
+    .take(maxRows)
 }
 
-async function paginateSurveysByMunicipality(
+/** Bounded survey load by municipality (no .paginate — safe when called per-municipality in one query). */
+async function loadSurveysByMunicipality(
   ctx: QueryCtx,
-  municipalityId: Id<"municipalities">
+  municipalityId: Id<"municipalities">,
+  maxRows = DASHBOARD_BOUNDED_ROW_CAP
 ): Promise<Doc<"surveys">[]> {
-  const rows: Doc<"surveys">[] = []
-  let cursor: string | null = null
-  while (true) {
-    const page = await ctx.db
-      .query("surveys")
-      .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId))
-      .paginate({ numItems: 500, cursor })
-    rows.push(...page.page)
-    if (page.isDone) break
-    cursor = page.continueCursor
-  }
-  return rows
+  return ctx.db
+    .query("surveys")
+    .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId))
+    .order("desc")
+    .take(maxRows)
 }
 
 function toStatsSlice(row: Doc<"surveys">): SurveyStatsSlice {
@@ -285,7 +278,7 @@ export async function loadDashboardCountsForHome(
 
   if (access === "own") {
     const muniIds = tenantMunicipalityIds(await resolveDashboardTenantScope(ctx, me))
-    const rows = await paginateSurveysBySurveyor(ctx, me._id)
+    const rows = await loadSurveysBySurveyor(ctx, me._id)
     const scoped = rows.filter((r) => muniIds.has(r.municipalityId) && canReadWard(me, r.municipalityId, r.wardNo))
     return computeDashboardCountsFromSlice(scoped.map(toStatsSlice), todayMs)
   }
@@ -730,7 +723,7 @@ async function computeLiveMunicipalitySnapshot(
 ): Promise<MunicipalityStatsRollup & { todayCreated: number; submittedToday: number }> {
   const muniIds = tenantMunicipalityIds(await resolveDashboardTenantScope(ctx, me))
   const dayEnd = dayEndMs(todayMs)
-  const rows = await paginateSurveysByMunicipality(ctx, municipalityId)
+  const rows = await loadSurveysByMunicipality(ctx, municipalityId)
 
   const rollup: MunicipalityStatsRollup & { todayCreated: number; submittedToday: number } = {
     municipalityId,

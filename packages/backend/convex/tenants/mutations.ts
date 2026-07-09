@@ -1,15 +1,16 @@
 /**
  * Tenant hierarchy — districts → ULBs (municipalities) → wards.
  */
-import { v } from "convex/values";
-import type { Id } from "../_generated/dataModel";
-import { mutation } from "../_generated/server";
-import { seedAreaMasters } from "../lib/masters/areaMasters";
-import { seedServiceMasters } from "../lib/masters/serviceMasters";
-import { seedTaxationMasters } from "../lib/masters/taxationMasters";
-import { seedSystemRbac } from "../rbac/helpers";
-import { clientError, requireRole, requireUser, writeAudit } from "../shared/helpers";
-import { ulbBodyType } from "../schema";
+import { v } from "convex/values"
+import type { Id } from "../_generated/dataModel"
+import { mutation } from "../_generated/server"
+import { seedAreaMasters } from "../lib/masters/areaMasters"
+import { seedServiceMasters } from "../lib/masters/serviceMasters"
+import { seedTaxationMasters } from "../lib/masters/taxationMasters"
+import { seedSystemRbac } from "../rbac/helpers"
+import { ulbBodyType } from "../schema"
+import { requireCapability } from "../shared/capabilities"
+import { clientError, requireUser, writeAudit } from "../shared/helpers"
 
 export const upsertDistrict = mutation({
   args: {
@@ -20,18 +21,18 @@ export const upsertDistrict = mutation({
     isActive: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const me = await requireUser(ctx);
-    requireRole(me, "admin");
+    const me = await requireUser(ctx)
+    await requireCapability(ctx, me, "tenants.manage")
 
-    const code = args.code.trim().toUpperCase();
-    if (!code) clientError("BAD_REQUEST", "District code is required");
+    const code = args.code.trim().toUpperCase()
+    if (!code) clientError("BAD_REQUEST", "District code is required")
 
     const dup = await ctx.db
       .query("districts")
       .withIndex("by_code", (q) => q.eq("code", code))
-      .unique();
+      .unique()
     if (dup && dup._id !== args.id) {
-      clientError("BAD_REQUEST", "District code already exists");
+      clientError("BAD_REQUEST", "District code already exists")
     }
 
     if (args.id) {
@@ -40,14 +41,14 @@ export const upsertDistrict = mutation({
         name: args.name.trim(),
         stateName: args.stateName.trim(),
         isActive: args.isActive,
-      });
+      })
       await writeAudit(ctx, {
         actorId: me._id,
         action: "district.updated",
         entity: "district",
         entityId: args.id,
-      });
-      return args.id;
+      })
+      return args.id
     }
 
     const id = await ctx.db.insert("districts", {
@@ -55,16 +56,16 @@ export const upsertDistrict = mutation({
       name: args.name.trim(),
       stateName: args.stateName.trim(),
       isActive: args.isActive,
-    });
+    })
     await writeAudit(ctx, {
       actorId: me._id,
       action: "district.created",
       entity: "district",
       entityId: id,
-    });
-    return id;
+    })
+    return id
   },
-});
+})
 
 export const upsertMunicipality = mutation({
   args: {
@@ -77,75 +78,75 @@ export const upsertMunicipality = mutation({
     isActive: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const me = await requireUser(ctx);
-    requireRole(me, "admin");
+    const me = await requireUser(ctx)
+    await requireCapability(ctx, me, "tenants.manage")
 
-    const district = await ctx.db.get(args.districtId);
-    if (!district) clientError("BAD_REQUEST", "Unknown district");
+    const district = await ctx.db.get(args.districtId)
+    if (!district) clientError("BAD_REQUEST", "Unknown district")
 
-    const code = args.code.trim().toUpperCase();
-    if (!code) clientError("BAD_REQUEST", "ULB code is required");
+    const code = args.code.trim().toUpperCase()
+    if (!code) clientError("BAD_REQUEST", "ULB code is required")
 
-    const postalCode = args.postalCode?.replace(/\D/g, "").slice(0, 6);
+    const postalCode = args.postalCode?.replace(/\D/g, "").slice(0, 6)
     if (postalCode && !/^[1-9]\d{5}$/.test(postalCode)) {
-      clientError("BAD_REQUEST", "Postal code must be 6 digits, not starting with 0");
+      clientError("BAD_REQUEST", "Postal code must be 6 digits, not starting with 0")
     }
     if (!args.id && !postalCode) {
-      clientError("BAD_REQUEST", "PIN code is required for each ULB");
+      clientError("BAD_REQUEST", "PIN code is required for each ULB")
     }
 
     const dup = await ctx.db
       .query("municipalities")
       .withIndex("by_code", (q) => q.eq("code", code))
-      .unique();
+      .unique()
     if (dup && dup._id !== args.id) {
-      clientError("BAD_REQUEST", "ULB code already exists");
+      clientError("BAD_REQUEST", "ULB code already exists")
     }
 
     const row: {
-      districtId: Id<"districts">;
-      code: string;
-      name: string;
-      bodyType: (typeof args)["bodyType"];
-      isActive: boolean;
-      postalCode?: string;
+      districtId: Id<"districts">
+      code: string
+      name: string
+      bodyType: (typeof args)["bodyType"]
+      isActive: boolean
+      postalCode?: string
     } = {
       districtId: args.districtId,
       code,
       name: args.name.trim(),
       bodyType: args.bodyType,
       isActive: args.isActive,
-    };
+    }
     if (postalCode) {
-      row.postalCode = postalCode;
+      row.postalCode = postalCode
     }
 
     if (args.id) {
-      const existing = await ctx.db.get(args.id);
-      if (!existing) clientError("BAD_REQUEST", "Unknown municipality");
+      const existing = await ctx.db.get(args.id)
+      if (!existing) clientError("BAD_REQUEST", "Unknown municipality")
       if (!row.postalCode && !existing.postalCode) {
-        clientError("BAD_REQUEST", "PIN code is required for each ULB");
+        clientError("BAD_REQUEST", "PIN code is required for each ULB")
       }
-      await ctx.db.patch(args.id, row);
+      await ctx.db.patch(args.id, row)
       await writeAudit(ctx, {
         actorId: me._id,
         action: "municipality.updated",
         entity: "municipality",
         entityId: args.id,
-      });
-      return args.id;
+      })
+      return args.id
     }
 
-    const id = await ctx.db.insert("municipalities", row);
+    const id = await ctx.db.insert("municipalities", row)
     await writeAudit(ctx, {
       actorId: me._id,
       action: "municipality.created",
       entity: "municipality",
       entityId: id,
-    });
-    return id;
+    })
+    return id
   },
-});
+})
 
 export const upsertWard = mutation({
   args: {
@@ -156,65 +157,65 @@ export const upsertWard = mutation({
     name: v.string(),
   },
   handler: async (ctx, args) => {
-    const me = await requireUser(ctx);
-    requireRole(me, "admin");
+    const me = await requireUser(ctx)
+    await requireCapability(ctx, me, "tenants.manage")
 
-    const muni = await ctx.db.get(args.municipalityId);
-    if (!muni) clientError("BAD_REQUEST", "Unknown municipality");
+    const muni = await ctx.db.get(args.municipalityId)
+    if (!muni) clientError("BAD_REQUEST", "Unknown municipality")
 
-    const wardNo = args.wardNo.trim();
-    const name = args.name.trim();
-    if (!wardNo) clientError("BAD_REQUEST", "Ward number is required");
-    if (!name) clientError("BAD_REQUEST", "Ward name is required");
+    const wardNo = args.wardNo.trim()
+    const name = args.name.trim()
+    if (!wardNo) clientError("BAD_REQUEST", "Ward number is required")
+    if (!name) clientError("BAD_REQUEST", "Ward name is required")
 
-    const wardCodeInput = (args.wardCode ?? "").trim().toUpperCase();
-    const wardCode = wardCodeInput || `${muni.code}-W${wardNo}`.toUpperCase();
+    const wardCodeInput = (args.wardCode ?? "").trim().toUpperCase()
+    const wardCode = wardCodeInput || `${muni.code}-W${wardNo}`.toUpperCase()
 
     const dupNo = await ctx.db
       .query("wards")
       .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", args.municipalityId).eq("wardNo", wardNo))
-      .unique();
+      .unique()
     if (dupNo && dupNo._id !== args.id) {
-      clientError("BAD_REQUEST", "Ward number already exists for this ULB");
+      clientError("BAD_REQUEST", "Ward number already exists for this ULB")
     }
 
     const dupCode = await ctx.db
       .query("wards")
       .withIndex("by_municipality_ward_code", (q) =>
-        q.eq("municipalityId", args.municipalityId).eq("wardCode", wardCode),
+        q.eq("municipalityId", args.municipalityId).eq("wardCode", wardCode)
       )
-      .unique();
+      .unique()
     if (dupCode && dupCode._id !== args.id) {
-      clientError("BAD_REQUEST", "Ward code already exists for this ULB");
+      clientError("BAD_REQUEST", "Ward code already exists for this ULB")
     }
 
-    const row = { wardNo, wardCode, name };
+    const row = { wardNo, wardCode, name }
 
     if (args.id) {
-      await ctx.db.patch(args.id, row);
+      await ctx.db.patch(args.id, row)
       await writeAudit(ctx, {
         actorId: me._id,
         action: "ward.updated",
         entity: "ward",
         entityId: args.id,
-      });
-      return args.id;
+      })
+      return args.id
     }
 
     const id = await ctx.db.insert("wards", {
       municipalityId: args.municipalityId,
       ...row,
-    });
+    })
     await writeAudit(ctx, {
       actorId: me._id,
       action: "ward.created",
       entity: "ward",
       entityId: id,
       metadata: { municipalityId: args.municipalityId, wardCode },
-    });
-    return id;
+    })
+    return id
   },
-});
+})
 
 export const upsertAssessmentYear = mutation({
   args: {
@@ -224,13 +225,13 @@ export const upsertAssessmentYear = mutation({
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const me = await requireUser(ctx);
-    requireRole(me, "admin");
+    const me = await requireUser(ctx)
+    await requireCapability(ctx, me, "tenants.manage")
 
-    const value = args.value.trim();
-    const label = args.label.trim();
-    if (!value) clientError("BAD_REQUEST", "Assessment year value is required");
-    if (!label) clientError("BAD_REQUEST", "Assessment year label is required");
+    const value = args.value.trim()
+    const label = args.label.trim()
+    if (!value) clientError("BAD_REQUEST", "Assessment year value is required")
+    if (!label) clientError("BAD_REQUEST", "Assessment year label is required")
 
     const [existing, activeYears] = await Promise.all([
       ctx.db
@@ -241,14 +242,13 @@ export const upsertAssessmentYear = mutation({
         .query("masters")
         .withIndex("by_category_position", (q) => q.eq("category", "assessment_year").eq("isActive", true))
         .collect(),
-    ]);
-    const position =
-      args.position ?? (activeYears.length > 0 ? Math.max(...activeYears.map((r) => r.position)) + 1 : 1);
-    const isActive = args.isActive ?? true;
+    ])
+    const position = args.position ?? (activeYears.length > 0 ? Math.max(...activeYears.map((r) => r.position)) + 1 : 1)
+    const isActive = args.isActive ?? true
 
     if (existing) {
-      await ctx.db.patch(existing._id, { label, position, isActive });
-      return existing._id;
+      await ctx.db.patch(existing._id, { label, position, isActive })
+      return existing._id
     }
 
     const id = await ctx.db.insert("masters", {
@@ -257,37 +257,37 @@ export const upsertAssessmentYear = mutation({
       label,
       position,
       isActive,
-    });
+    })
     await writeAudit(ctx, {
       actorId: me._id,
       action: "master.assessment_year.created",
       entity: "masters",
       entityId: id,
       metadata: { value },
-    });
-    return id;
+    })
+    return id
   },
-});
+})
 
 /** Idempotent seed / refresh for dev and admin setup (UP districts + sample ULBs). */
 export const seedReferenceData = mutation({
   args: {},
   handler: async (ctx) => {
-    const me = await requireUser(ctx);
-    requireRole(me, "admin");
+    const me = await requireUser(ctx)
+    await requireCapability(ctx, me, "tenants.manage")
 
     const assessmentYears = [
       { value: "2025-26", label: "2025-26", position: 1 },
       { value: "2026-27", label: "2026-27", position: 2 },
-    ];
+    ]
     await Promise.all(
       assessmentYears.map(async (y) => {
         const row = await ctx.db
           .query("masters")
           .withIndex("by_category_value", (q) => q.eq("category", "assessment_year").eq("value", y.value))
-          .unique();
+          .unique()
         if (row) {
-          await ctx.db.patch(row._id, { label: y.label, position: y.position, isActive: true });
+          await ctx.db.patch(row._id, { label: y.label, position: y.position, isActive: true })
         } else {
           await ctx.db.insert("masters", {
             category: "assessment_year",
@@ -295,23 +295,23 @@ export const seedReferenceData = mutation({
             label: y.label,
             position: y.position,
             isActive: true,
-          });
+          })
         }
-      }),
-    );
+      })
+    )
 
     type UlbSeed = {
-      code: string;
-      name: string;
-      bodyType: "municipal_council" | "town_panchayat";
-      postalCode: string;
-      wards: Array<{ wardNo: string; wardCode: string; name: string }>;
-    };
+      code: string
+      name: string
+      bodyType: "municipal_council" | "town_panchayat"
+      postalCode: string
+      wards: Array<{ wardNo: string; wardCode: string; name: string }>
+    }
 
     const districtSeeds: Array<{
-      code: string;
-      name: string;
-      ulbs: UlbSeed[];
+      code: string
+      name: string
+      ulbs: UlbSeed[]
     }> = [
       {
         code: "MTH",
@@ -468,47 +468,47 @@ export const seedReferenceData = mutation({
           },
         ],
       },
-    ];
+    ]
 
     for (const d of districtSeeds) {
-      let districtId: Id<"districts">;
+      let districtId: Id<"districts">
       const existingDistrict = await ctx.db
         .query("districts")
         .withIndex("by_code", (q) => q.eq("code", d.code))
-        .unique();
+        .unique()
 
       if (existingDistrict) {
-        districtId = existingDistrict._id;
+        districtId = existingDistrict._id
         await ctx.db.patch(districtId, {
           name: d.name,
           stateName: "Uttar Pradesh",
           isActive: true,
-        });
+        })
       } else {
         districtId = await ctx.db.insert("districts", {
           code: d.code,
           name: d.name,
           stateName: "Uttar Pradesh",
           isActive: true,
-        });
+        })
       }
 
       for (const u of d.ulbs) {
-        let muniId: Id<"municipalities">;
+        let muniId: Id<"municipalities">
         const existingMuni = await ctx.db
           .query("municipalities")
           .withIndex("by_code", (q) => q.eq("code", u.code))
-          .unique();
+          .unique()
 
         if (existingMuni) {
-          muniId = existingMuni._id;
+          muniId = existingMuni._id
           await ctx.db.patch(muniId, {
             districtId,
             name: u.name,
             bodyType: u.bodyType,
             postalCode: u.postalCode,
             isActive: true,
-          });
+          })
         } else {
           muniId = await ctx.db.insert("municipalities", {
             code: u.code,
@@ -517,7 +517,7 @@ export const seedReferenceData = mutation({
             districtId,
             postalCode: u.postalCode,
             isActive: true,
-          });
+          })
         }
 
         await Promise.all(
@@ -525,31 +525,31 @@ export const seedReferenceData = mutation({
             const existingWard = await ctx.db
               .query("wards")
               .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", muniId).eq("wardNo", w.wardNo))
-              .unique();
+              .unique()
             if (existingWard) {
-              await ctx.db.patch(existingWard._id, { name: w.name, wardCode: w.wardCode });
+              await ctx.db.patch(existingWard._id, { name: w.name, wardCode: w.wardCode })
             } else {
               await ctx.db.insert("wards", {
                 municipalityId: muniId,
                 wardNo: w.wardNo,
                 wardCode: w.wardCode,
                 name: w.name,
-              });
+              })
             }
-          }),
-        );
+          })
+        )
       }
     }
 
-    await Promise.all([seedSystemRbac(ctx), seedTaxationMasters(ctx), seedAreaMasters(ctx), seedServiceMasters(ctx)]);
+    await Promise.all([seedSystemRbac(ctx), seedTaxationMasters(ctx), seedAreaMasters(ctx), seedServiceMasters(ctx)])
 
     await writeAudit(ctx, {
       actorId: me._id,
       action: "tenants.seeded",
       entity: "tenants",
       metadata: { districts: districtSeeds.length },
-    });
+    })
 
-    return { ok: true as const };
+    return { ok: true as const }
   },
-});
+})

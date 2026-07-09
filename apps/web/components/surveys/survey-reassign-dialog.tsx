@@ -42,7 +42,7 @@ export function SurveyReassignDialog({
   const reassign = useReassignDrafts()
   const { page: fieldUserPage } =
     useQuery(
-      api.admin.listUsers,
+      api.admin.queries.listUsers,
       ready && canReassign && open
         ? {
             paginationOpts: { numItems: 200, cursor: null },

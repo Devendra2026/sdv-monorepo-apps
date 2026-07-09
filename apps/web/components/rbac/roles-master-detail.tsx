@@ -1,6 +1,7 @@
 "use client"
 
 import { PermissionPicker, type PermissionOption } from "@/components/rbac/permission-picker"
+import { api } from "@workspace/backend/convex/_generated/api.js"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -9,6 +10,7 @@ import { Label } from "@workspace/ui/components/label"
 import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { cn } from "@workspace/ui/lib/utils"
+import type { FunctionReturnType } from "convex/server"
 import {
   AlertTriangle,
   ArrowLeft,
@@ -28,15 +30,7 @@ import { useMemo, useReducer, useState } from "react"
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
-export type RoleRow = {
-  _id: Id<"roles">
-  key: string
-  name: string
-  isSystem: boolean
-  isActive: boolean
-  permissionKeys: string[]
-  description?: string
-}
+export type RoleRow = FunctionReturnType<typeof api.rbac.queries.listRoles>[number]
 
 type RolesMasterDetailProps = {
   systemRoles: RoleRow[]

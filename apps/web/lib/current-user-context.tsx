@@ -1,6 +1,7 @@
 "use client"
 
 import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
+import { parseConvexError } from "@/lib/errors"
 import type { Role } from "@/lib/permissions"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import { useMutation, usePreloadedQuery, useQuery, type Preloaded } from "convex/react"
@@ -29,6 +30,7 @@ type CurrentUserContextValue = {
   isLoading: boolean
   isProvisioning: boolean
   provisionFailed: boolean
+  provisionFailureCode: string | null
   retryProvision: () => void
   isActive: boolean
   isPending: boolean
@@ -38,18 +40,23 @@ type CurrentUserContextValue = {
 const CurrentUserContext = createContext<CurrentUserContextValue | null>(null)
 
 function useProvisionFlow(user: CurrentUser | null | undefined) {
+  const ready = useConvexAuthReady()
   const provision = useMutation(api.users.mutations.provisionCurrentUser)
   const provisioned = useRef(false)
   const [provisionFailed, setProvisionFailed] = useState(false)
+  const [provisionFailureCode, setProvisionFailureCode] = useState<string | null>(null)
   const [isProvisioning, setIsProvisioning] = useState(false)
 
   const runProvision = useCallback(async () => {
     setIsProvisioning(true)
     setProvisionFailed(false)
+    setProvisionFailureCode(null)
     try {
       await provision({})
-    } catch {
+    } catch (error) {
+      const { code } = parseConvexError(error)
       setProvisionFailed(true)
+      setProvisionFailureCode(code)
       provisioned.current = false
     } finally {
       setIsProvisioning(false)
@@ -57,20 +64,29 @@ function useProvisionFlow(user: CurrentUser | null | undefined) {
   }, [provision])
 
   useEffect(() => {
+    if (!ready) {
+      provisioned.current = false
+      setProvisionFailed(false)
+      setProvisionFailureCode(null)
+      return
+    }
     if (user === null && !provisioned.current && !isProvisioning) {
       provisioned.current = true
       void runProvision()
     }
-  }, [user, isProvisioning, runProvision])
+  }, [ready, user, isProvisioning, runProvision])
 
   const retryProvision = useCallback(() => {
+    if (!ready) return
     provisioned.current = true
     void runProvision()
-  }, [runProvision])
+  }, [ready, runProvision])
 
   return {
-    isProvisioning: user === null && (isProvisioning || !provisionFailed),
-    provisionFailed: user === null && provisionFailed,
+    ready,
+    isProvisioning: ready && user === null && (isProvisioning || !provisionFailed),
+    provisionFailed: ready && user === null && provisionFailed,
+    provisionFailureCode: provisionFailed ? provisionFailureCode : null,
     retryProvision,
   }
 }
@@ -84,9 +100,10 @@ function buildContextValue(
     role: (user?.role ?? undefined) as Role | undefined,
     capabilities: user?.capabilities,
     roleName: user?.roleName,
-    isLoading: user === undefined,
+    isLoading: user === undefined || (user === null && !provision.ready),
     isProvisioning: provision.isProvisioning,
     provisionFailed: provision.provisionFailed,
+    provisionFailureCode: provision.provisionFailureCode,
     retryProvision: provision.retryProvision,
     isActive: user?.status === "active",
     isPending: user?.status === "pending_approval",

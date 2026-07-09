@@ -1,21 +1,21 @@
 import { v } from "convex/values"
-import { mutation } from "../_generated/server"
-import { clientError, requireRole, requireUser, writeAudit } from "../shared/helpers"
+import { capabilityMutation } from "../lib/customFunctions"
 import { SYSTEM_ROLES } from "../lib/permissionCatalog"
+import { clientError, writeAudit } from "../shared/helpers"
 import { assertKnownPermissionKeys, seedSystemRbac } from "./helpers"
 
-export const seedSystem = mutation({
+const rolesManageMutation = capabilityMutation("roles.manage")
+
+export const seedSystem = rolesManageMutation({
   args: {},
   handler: async (ctx) => {
-    const me = await requireUser(ctx)
-    requireRole(me, "admin")
     await seedSystemRbac(ctx)
-    await writeAudit(ctx, { actorId: me._id, action: "rbac.seeded", entity: "rbac" })
+    await writeAudit(ctx, { actorId: ctx.user._id, action: "rbac.seeded", entity: "rbac" })
     return { ok: true as const }
   },
 })
 
-export const createRole = mutation({
+export const createRole = rolesManageMutation({
   args: {
     key: v.string(),
     name: v.string(),
@@ -23,9 +23,6 @@ export const createRole = mutation({
     permissionKeys: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    const me = await requireUser(ctx)
-    requireRole(me, "admin")
-
     const key = args.key.trim().toLowerCase().replace(/\s+/g, "_")
     if (!/^[a-z][a-z0-9_]{1,48}$/.test(key)) {
       clientError("BAD_REQUEST", "Role key must be 2–49 lowercase letters, numbers, or underscores")
@@ -53,7 +50,7 @@ export const createRole = mutation({
     await Promise.all([
       ...args.permissionKeys.map((permissionKey) => ctx.db.insert("rolePermissions", { roleId, permissionKey })),
       writeAudit(ctx, {
-        actorId: me._id,
+        actorId: ctx.user._id,
         action: "role.created",
         entity: "role",
         entityId: roleId,
@@ -64,7 +61,7 @@ export const createRole = mutation({
   },
 })
 
-export const updateRole = mutation({
+export const updateRole = rolesManageMutation({
   args: {
     roleId: v.id("roles"),
     name: v.optional(v.string()),
@@ -73,9 +70,6 @@ export const updateRole = mutation({
     permissionKeys: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
-    const me = await requireUser(ctx)
-    requireRole(me, "admin")
-
     const role = await ctx.db.get(args.roleId)
     if (!role) clientError("NOT_FOUND", "Role not found")
 
@@ -102,7 +96,7 @@ export const updateRole = mutation({
     }
 
     await writeAudit(ctx, {
-      actorId: me._id,
+      actorId: ctx.user._id,
       action: "role.updated",
       entity: "role",
       entityId: args.roleId,
@@ -111,16 +105,13 @@ export const updateRole = mutation({
   },
 })
 
-export const createPermission = mutation({
+export const createPermission = rolesManageMutation({
   args: {
     key: v.string(),
     label: v.string(),
     category: v.string(),
   },
   handler: async (ctx, args) => {
-    const me = await requireUser(ctx)
-    requireRole(me, "admin")
-
     const key = args.key.trim()
     const existing = await ctx.db
       .query("permissions")
@@ -135,7 +126,7 @@ export const createPermission = mutation({
       isActive: true,
     })
     await writeAudit(ctx, {
-      actorId: me._id,
+      actorId: ctx.user._id,
       action: "permission.created",
       entity: "permission",
       entityId: id,

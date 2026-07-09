@@ -20,7 +20,8 @@ import {
   TAX_RATE_ZONES,
 } from "../lib/masters/taxationMasters"
 import { loadDashboardCountsForHome } from "../lib/surveyScopeStats"
-import { filterWardsForUser, requireIdentity, requireRole, requireUser } from "../shared/helpers"
+import { requireCapability } from "../shared/capabilities"
+import { filterWardsForUser, requireIdentity, requireUser } from "../shared/helpers"
 import { assertMunicipalityInScope, resolveTenantScope } from "../shared/tenancy"
 import {
   addressTenantContext,
@@ -259,7 +260,7 @@ export const listByCategory = query({
   args: { category: v.string() },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "masters.manage")
     const storageCategory = resolveMasterCategory(args.category)
     const rows = await ctx.db
       .query("masters")

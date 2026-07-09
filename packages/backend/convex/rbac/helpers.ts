@@ -13,6 +13,14 @@ export async function assertKnownPermissionKeys(ctx: MutationCtx, permissionKeys
   }
 }
 
+/** Seeds the RBAC catalog only when no permissions exist yet. */
+export async function ensureRbacSeededIfEmpty(ctx: MutationCtx): Promise<boolean> {
+  const existing = await ctx.db.query("permissions").first()
+  if (existing) return false
+  await seedSystemRbac(ctx)
+  return true
+}
+
 /** Idempotent seed for permissions, system roles, and default grants. */
 export async function seedSystemRbac(ctx: MutationCtx) {
   await Promise.all(

@@ -1,7 +1,8 @@
 import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
 import { query } from "../_generated/server"
-import { requireRole, requireUser } from "../shared/helpers"
+import { requireCapability } from "../shared/capabilities"
+import { requireUser } from "../shared/helpers"
 import { auditQuery, hydrateAuditRows } from "./helpers"
 
 /**
@@ -18,7 +19,7 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "audit.view")
 
     const limit = Math.min(args.limit ?? 100, 500)
 
@@ -46,7 +47,7 @@ export const listPaginated = query({
   },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "audit.view")
 
     const page = await auditQuery(ctx, args).order("desc").paginate(args.paginationOpts)
     let rows = page.page
@@ -66,7 +67,7 @@ export const summary = query({
   args: { nowMs: v.number() },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "audit.view")
 
     const recent = await ctx.db.query("auditLogs").withIndex("by_creation_time").order("desc").take(1000)
     const dayMs = 86_400_000
@@ -86,7 +87,7 @@ export const actionFacets = query({
   args: {},
   handler: async (ctx) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "audit.view")
     const rows = await ctx.db.query("auditLogs").withIndex("by_creation_time").order("desc").take(1000)
     return {
       actions: Array.from(new Set(rows.map((r) => r.action))).sort(),

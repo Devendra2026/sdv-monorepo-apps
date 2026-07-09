@@ -1,7 +1,7 @@
 import { v } from "convex/values"
 import { mutation } from "../_generated/server"
-import { roleRequiresTenancy } from "../shared/capabilities"
-import { clientError, requireRole, requireUser, writeAudit } from "../shared/helpers"
+import { requireCapability, roleRequiresTenancy } from "../shared/capabilities"
+import { clientError, requireUser, writeAudit } from "../shared/helpers"
 import { replaceUserAllotments } from "./helpers"
 
 const allotmentInput = v.object({
@@ -18,7 +18,7 @@ export const setForUser = mutation({
   },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "users.assignTenant")
 
     const target = await ctx.db.get(args.userId)
     if (!target) clientError("NOT_FOUND", "User not found")
@@ -49,7 +49,7 @@ export const setActive = mutation({
   },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "users.assignTenant")
 
     const row = await ctx.db.get(args.allotmentId)
     if (!row) clientError("NOT_FOUND", "Allotment not found")

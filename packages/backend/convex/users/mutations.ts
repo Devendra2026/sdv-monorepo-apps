@@ -1,4 +1,5 @@
 import { v } from "convex/values"
+import { internal } from "../_generated/api"
 import { mutation } from "../_generated/server"
 import { clientError, requireIdentity } from "../shared/helpers"
 import { upsertUserRecord } from "./helpers"
@@ -18,6 +19,8 @@ export const provisionCurrentUser = mutation({
   },
   handler: async (ctx, args) => {
     const ident = await requireIdentity(ctx)
+
+    await ctx.runMutation(internal.rbac.internal.ensureSeeded, {})
 
     const email = (ident.email ?? "").trim()
     if (!email) {

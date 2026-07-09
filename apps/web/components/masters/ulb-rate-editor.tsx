@@ -26,11 +26,9 @@ import {
   matricesEqual,
   monthlyFormToAnnualMatrix,
 } from "@/lib/qc/tax-rate-matrix"
-import { convexQuery } from "@convex-dev/react-query"
-import { useQuery } from "@tanstack/react-query"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
-import { useMutation } from "convex/react"
+import { useMutation, useQuery } from "convex/react"
 import { Loader2 } from "lucide-react"
 import { useMemo, useReducer, useRef, type Dispatch, type SetStateAction } from "react"
 
@@ -46,10 +44,10 @@ export function UlbRateEditor({
   wards: WardInfo[]
 }) {
   const ready = useConvexAuthReady()
-  const { data: existing } = useQuery(convexQuery(api.taxRates.getForMunicipality, ready ? { municipalityId } : "skip"))
-  const upsert = useMutation(api.taxRates.upsert)
-  const saveWard = useMutation(api.taxRates.saveWard)
-  const reset = useMutation(api.taxRates.resetToDefaults)
+  const existing = useQuery(api.taxation.queries.getForMunicipality, ready ? { municipalityId } : "skip")
+  const upsert = useMutation(api.taxation.mutations.upsert)
+  const saveWard = useMutation(api.taxation.mutations.saveWard)
+  const reset = useMutation(api.taxation.mutations.resetToDefaults)
 
   const [ui, dispatch] = useReducer(editorUiReducer, initialEditorUiState)
   const activeWardNo = useMemo(() => {

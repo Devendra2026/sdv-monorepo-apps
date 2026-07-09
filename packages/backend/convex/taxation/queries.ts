@@ -10,8 +10,9 @@
  */
 import { v } from "convex/values"
 import { query } from "../_generated/server"
-import { requireRole, requireUser } from "../shared/helpers"
 import { normalizeStoredTaxRates } from "../lib/qc/normalizeTaxRates"
+import { requireCapability } from "../shared/capabilities"
+import { requireUser } from "../shared/helpers"
 import { assertMunicipalityInScope } from "../shared/tenancy"
 import { normalizedTaxRatesValidator } from "./helpers"
 
@@ -53,7 +54,7 @@ export const listAll = query({
   ),
   handler: async (ctx) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "masters.manage")
 
     const [municipalities, rates] = await Promise.all([
       ctx.db.query("municipalities").collect(),

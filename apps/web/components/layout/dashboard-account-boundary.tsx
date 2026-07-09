@@ -5,7 +5,7 @@ import { DashboardMainSkeleton } from "@/components/layout/dashboard-main-skelet
 import { ModuleGuard } from "@/components/layout/module-guard"
 import { useCurrentUser } from "@/lib/current-user-context"
 import { Button } from "@workspace/ui/components/button"
-import { Clock, RefreshCw, ShieldX } from "lucide-react"
+import { Clock, RefreshCw, ShieldAlert, ShieldX } from "lucide-react"
 
 function StatusScreen({
   icon: Icon,
@@ -33,20 +33,34 @@ function StatusScreen({
 }
 
 export function DashboardAccountBoundary({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, isPending, isDisabled, isProvisioning, provisionFailed, retryProvision } = useCurrentUser()
+  const {
+    user,
+    isLoading,
+    isPending,
+    isDisabled,
+    isProvisioning,
+    provisionFailed,
+    provisionFailureCode,
+    retryProvision,
+  } = useCurrentUser()
 
-  if (isLoading && user === undefined) {
+  if (isLoading) {
     return <DashboardMainSkeleton />
   }
 
   if (!user) {
     if (provisionFailed) {
+      const authNotReady = provisionFailureCode === "UNAUTHORIZED"
       return (
         <StatusScreen
-          icon={RefreshCw}
-          tone="text-warning"
-          title="Account setup delayed"
-          body="We couldn't finish setting up your account. This usually resolves when the Clerk webhook completes. Try again or contact your administrator."
+          icon={authNotReady ? ShieldAlert : RefreshCw}
+          tone={authNotReady ? "text-destructive" : "text-warning"}
+          title={authNotReady ? "Authentication not ready" : "Account setup delayed"}
+          body={
+            authNotReady
+              ? 'Convex could not verify your Clerk session. Confirm the Clerk Convex integration is enabled (JWT template named "convex") and that CLERK_JWT_ISSUER_DOMAIN on your Convex deployment matches your Clerk Frontend API URL.'
+              : "We couldn't finish setting up your account. This usually resolves when the Clerk webhook completes. Try again or contact your administrator."
+          }
           action={
             <Button type="button" variant="default" className="mt-4" onClick={retryProvision}>
               Retry setup

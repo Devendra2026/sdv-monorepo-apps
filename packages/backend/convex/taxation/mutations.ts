@@ -1,8 +1,9 @@
 import { v } from "convex/values"
 import { mutation } from "../_generated/server"
-import { clientError, requireRole, requireUser, writeAudit } from "../shared/helpers"
 import { normalizeStoredTaxRates } from "../lib/qc/normalizeTaxRates"
 import { DEFAULT_RATE_MATRIX } from "../lib/qc/taxRateDefaults"
+import { requireCapability } from "../shared/capabilities"
+import { clientError, requireUser, writeAudit } from "../shared/helpers"
 import { rateMatrixValidator } from "./helpers"
 
 /** Admin: save one ward's rate matrix (merges into existing ULB config). */
@@ -19,7 +20,7 @@ export const saveWard = mutation({
   returns: v.id("taxRates"),
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "masters.manage")
 
     const muni = await ctx.db.get(args.municipalityId)
     if (!muni) clientError("BAD_REQUEST", "Unknown municipality")
@@ -87,7 +88,7 @@ export const upsert = mutation({
   returns: v.id("taxRates"),
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "masters.manage")
 
     const muni = await ctx.db.get(args.municipalityId)
     if (!muni) clientError("BAD_REQUEST", "Unknown municipality")
@@ -144,7 +145,7 @@ export const migrateLegacyRows = mutation({
   returns: v.number(),
   handler: async (ctx) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "masters.manage")
 
     const all = await ctx.db.query("taxRates").collect()
     const toMigrate = all.filter((doc) => !(doc.rateMatrix && doc.wardRates))
@@ -176,7 +177,7 @@ export const resetToDefaults = mutation({
   returns: v.null(),
   handler: async (ctx, { municipalityId }) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "masters.manage")
 
     const existing = await ctx.db
       .query("taxRates")

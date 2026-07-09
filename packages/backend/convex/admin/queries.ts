@@ -7,14 +7,10 @@
 import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
 import { query } from "../_generated/server"
-import {
-  assertUserVisibleToCaller,
-  filterUsersToCallerScope,
-  requireRole,
-  requireUser,
-} from "../shared/helpers"
-import { resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from "../shared/tenancy"
 import { userRole } from "../schema"
+import { requireCapability } from "../shared/capabilities"
+import { assertUserVisibleToCaller, filterUsersToCallerScope, requireUser } from "../shared/helpers"
+import { resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from "../shared/tenancy"
 import { assertCanListUsers, hydrateUsersForAdmin } from "./helpers"
 
 /**
@@ -25,7 +21,7 @@ export const listPendingApprovals = query({
   args: {},
   handler: async (ctx) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "users.approve")
 
     const rows = await ctx.db
       .query("users")
@@ -50,7 +46,7 @@ export const pendingApprovalCount = query({
   args: {},
   handler: async (ctx) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "users.approve")
 
     const rows = await ctx.db
       .query("users")

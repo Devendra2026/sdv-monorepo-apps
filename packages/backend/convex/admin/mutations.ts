@@ -7,16 +7,10 @@
 import { ConvexError, v } from "convex/values"
 import { mutation } from "../_generated/server"
 import { replaceUserAllotments, upsertAllotmentForUser } from "../allotments/helpers"
-import { roleRequiresTenancy } from "../shared/capabilities"
-import {
-  assertUserVisibleToCaller,
-  clientError,
-  requireRole,
-  requireUser,
-  writeAudit,
-} from "../shared/helpers"
 import { resolveMasterCategory } from "../lib/masters/taxationMasters"
 import { userRole } from "../schema"
+import { requireCapability, roleRequiresTenancy } from "../shared/capabilities"
+import { assertUserVisibleToCaller, clientError, requireUser, writeAudit } from "../shared/helpers"
 import { allotmentInput, assertCanPatchUser } from "./helpers"
 
 /**
@@ -37,7 +31,7 @@ export const approveUser = mutation({
   },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "users.approve")
 
     const target = await ctx.db.get(args.userId)
     if (!target) clientError("NOT_FOUND", "User not found")
@@ -130,7 +124,7 @@ export const rejectUser = mutation({
   },
   handler: async (ctx, args) => {
     const [me, target] = await Promise.all([requireUser(ctx), ctx.db.get(args.userId)])
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "users.approve")
     if (!target) clientError("NOT_FOUND", "User not found")
 
     await Promise.all([
@@ -165,7 +159,7 @@ export const assignTenant = mutation({
   },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "users.assignTenant")
 
     const [target, muni] = await Promise.all([ctx.db.get(args.userId), ctx.db.get(args.municipalityId)])
     if (!target) clientError("NOT_FOUND", "User not found")
@@ -255,7 +249,7 @@ export const upsertMaster = mutation({
   },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "masters.manage")
     const category = resolveMasterCategory(args.category)
 
     const existing = await ctx.db
@@ -279,7 +273,7 @@ export const deleteMaster = mutation({
   args: { id: v.id("masters") },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    requireRole(me, "admin")
+    await requireCapability(ctx, me, "masters.manage")
     await ctx.db.delete(args.id)
   },
 })

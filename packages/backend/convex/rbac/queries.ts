@@ -1,15 +1,15 @@
 import { v } from "convex/values"
 import { query } from "../_generated/server"
+import { capabilityQuery } from "../lib/customFunctions"
 import { hasCapability, userCapabilities } from "../shared/capabilities"
-import { clientError, requireRole, requireUser } from "../shared/helpers"
+import { clientError, requireUser } from "../shared/helpers"
 import { listRolesWithPermissions } from "./helpers"
 
-export const listPermissions = query({
+const rolesManageQuery = capabilityQuery("roles.manage")
+
+export const listPermissions = rolesManageQuery({
   args: { includeInactive: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    const me = await requireUser(ctx)
-    requireRole(me, "admin")
-
     const rows = await ctx.db.query("permissions").collect()
     return rows
       .filter((p) => args.includeInactive || p.isActive)
@@ -17,11 +17,9 @@ export const listPermissions = query({
   },
 })
 
-export const listRoles = query({
+export const listRoles = rolesManageQuery({
   args: { includeInactive: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    const me = await requireUser(ctx)
-    requireRole(me, "admin")
     return await listRolesWithPermissions(ctx, args.includeInactive)
   },
 })
