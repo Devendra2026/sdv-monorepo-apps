@@ -9,6 +9,7 @@ allowBuilds:
   unrs-resolver: true
   msw: false
   esbuild: false
+  core-js: true
 
 minimumReleaseAgeExclude:
   - "@clerk/*"

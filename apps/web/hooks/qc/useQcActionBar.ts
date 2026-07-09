@@ -7,7 +7,7 @@ import { parseConvexError } from "@/lib/errors"
 import { buildNextQcHref } from "@/lib/qc/qc-nav"
 import { qcPerfMark, qcPerfMeasure } from "@/lib/qc/qc-perf"
 import { scopeFromSurveyRow } from "@/lib/qc/work-scope"
-import { toast } from "@workspace/ui/components/sonner"
+import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { SelectGroup, SelectItem, SelectLabel } from "@/components/ui/select";
+import { SelectGroup, SelectItem, SelectLabel } from "@workspace/ui/components/select";
 import { partitionRoles } from "@/lib/tenancy-ui";
 
 type RoleOption = {

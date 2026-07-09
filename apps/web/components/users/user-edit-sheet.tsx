@@ -1,10 +1,5 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Select, SelectContent, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RoleSelectItems } from "@/components/users/role-select-items"
 import { TenantScopeFields } from "@/components/users/tenant-scope-fields"
 import { UserSheetFooter, UserSheetHero, UserWorkspaceSection } from "@/components/users/user-sheet-layout"
@@ -14,8 +9,13 @@ import { useApproveUser, useAssignTenant, useRejectUser, useTenantCatalog, useUp
 import { parseConvexError } from "@/lib/errors"
 import { isDistrictScopedRole, isSystemRoleKey, roleRequiresTenancy } from "@/lib/tenancy-ui"
 import { tenantScopeIsComplete, tenantScopeToApproveArgs, type TenantScopeValue } from "@/lib/users/tenant-scope"
-import { cn } from "@/lib/utils"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { Button } from "@workspace/ui/components/button"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
+import { Select, SelectContent, SelectTrigger, SelectValue } from "@workspace/ui/components/select"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@workspace/ui/components/sheet"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
+import { cn } from "@workspace/ui/lib/utils"
 import {
   Ban,
   Building2,

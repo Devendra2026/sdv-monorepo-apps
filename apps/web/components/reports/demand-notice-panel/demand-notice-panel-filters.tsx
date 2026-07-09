@@ -1,22 +1,22 @@
-"use client";
+"use client"
 
-import { SectionHeader } from "@/components/design-system/executive-hero";
-import { GlassCard } from "@/components/design-system/glass-card";
-import { SurveyFilters, type FilterState } from "@/components/surveys/survey-filters";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { formatReportDocumentDate, reportDocumentTimestamp } from "@/lib/qc/report-dates";
-import { Building2, CalendarDays } from "lucide-react";
+import { SectionHeader } from "@/components/design-system/executive-hero"
+import { GlassCard } from "@/components/design-system/glass-card"
+import { SurveyFilters, type FilterState } from "@/components/surveys/survey-filters"
+import { formatReportDocumentDate, reportDocumentTimestamp } from "@/lib/qc/report-dates"
+import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert"
+import { Building2, CalendarDays } from "lucide-react"
 
 export function DemandNoticePanelFilters({
   value,
   onChange,
   requiresMunicipality,
 }: {
-  value: FilterState;
-  onChange: (next: FilterState) => void;
-  requiresMunicipality: boolean;
+  value: FilterState
+  onChange: (next: FilterState) => void
+  requiresMunicipality: boolean
 }) {
-  const reportDate = formatReportDocumentDate(reportDocumentTimestamp());
+  const reportDate = formatReportDocumentDate(reportDocumentTimestamp())
 
   return (
     <GlassCard padding="md">
@@ -43,5 +43,5 @@ export function DemandNoticePanelFilters({
         </Alert>
       ) : null}
     </GlassCard>
-  );
+  )
 }

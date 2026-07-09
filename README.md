@@ -8,30 +8,43 @@ Next.js web app (`apps/web`) with Convex backend (`packages/backend`) and shared
 
 ```bash
 pnpm install
-pnpm dev
 ```
 
-In a separate terminal, start the Convex dev server from the backend package:
+Copy env templates and fill in values:
+
+```bash
+cp apps/web/.env.example apps/web/.env.local
+cp packages/backend/.env.example packages/backend/.env.local
+```
+
+Start Convex and the web app (two terminals):
 
 ```bash
 cd packages/backend && npx convex dev
+```
+
+```bash
+pnpm dev
 ```
 
 ### 2. Environment variables
 
 **Web app** (`apps/web/.env.local`):
 
-| Variable                            | Purpose                   |
-| ----------------------------------- | ------------------------- |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk publishable key     |
-| `CLERK_SECRET_KEY`                  | Clerk secret key (server) |
-| `NEXT_PUBLIC_CONVEX_URL`            | Convex deployment URL     |
+| Variable                            | Dev                         | Prod                          |
+| ----------------------------------- | --------------------------- | ----------------------------- |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | `pk_test_...`               | `pk_live_...`                 |
+| `CLERK_SECRET_KEY`                  | `sk_test_...` (server only) | `sk_live_...` (server only)   |
+| `NEXT_PUBLIC_CONVEX_URL`            | from `npx convex dev`       | `https://api.sdvedutech.in`   |
 
-**Convex deployment** (set via Dashboard or CLI):
+**Convex deployment** (set via Dashboard or CLI — not in web `.env.local`):
 
-| Variable                  | Purpose                             |
-| ------------------------- | ----------------------------------- |
-| `CLERK_JWT_ISSUER_DOMAIN` | Clerk Frontend API URL (JWT issuer) |
+| Variable                  | Dev                          | Prod                          |
+| ------------------------- | ---------------------------- | ----------------------------- |
+| `CLERK_JWT_ISSUER_DOMAIN` | dev Clerk Frontend API URL   | prod Clerk Frontend API URL   |
+| `CLERK_WEBHOOK_SECRET`      | dev webhook signing secret   | prod webhook signing secret   |
+
+`CONVEX_DEPLOYMENT` in `packages/backend/.env.local` is auto-written by `npx convex dev`.
 
 Verify Convex env:
 
@@ -47,13 +60,17 @@ cd packages/backend && npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://<your
 
 Restart `npx convex dev` after changing Convex env vars.
 
+**Critical:** `CLERK_JWT_ISSUER_DOMAIN` on a Convex deployment must match the Clerk instance whose keys the web app uses. Dev Clerk keys require the dev issuer on the dev Convex deployment; prod keys require the prod issuer on prod Convex. Mixing them causes Convex to reject tokens.
+
 ### 3. Clerk + Convex auth (required)
 
 Server-side Convex preloads and authenticated queries need a Clerk JWT template named exactly **`convex`**.
 
+For **each** Clerk application (dev and prod):
+
 1. Open [Clerk Convex integration](https://dashboard.clerk.com/apps/setup/convex)
 2. Activate the integration (creates the `convex` JWT template)
-3. Copy the **Frontend API URL** and set it as `CLERK_JWT_ISSUER_DOMAIN` on your Convex deployment (see above)
+3. Copy the **Frontend API URL** and set it as `CLERK_JWT_ISSUER_DOMAIN` on the matching Convex deployment (see above)
 
 The template name must match [`apps/web/lib/clerk-convex.ts`](apps/web/lib/clerk-convex.ts) and `applicationID: "convex"` in [`packages/backend/convex/auth.config.ts`](packages/backend/convex/auth.config.ts).
 
@@ -64,6 +81,63 @@ Without this setup you will see:
 ```
 
 Authenticated server preloads fall back to client queries until the template exists.
+
+### 4. Clerk webhooks (user provisioning)
+
+Convex provisions domain users from Clerk webhooks at `/clerk-webhook`.
+
+For **each** Convex deployment (dev and prod):
+
+1. Get the site URL: `cd packages/backend && npx convex env get CONVEX_SITE_URL`
+2. In Clerk Dashboard → Webhooks, add endpoint: `<CONVEX_SITE_URL>/clerk-webhook`
+3. Subscribe to `user.created`, `user.updated`, `user.deleted`
+4. Copy the signing secret and set it on the same Convex deployment:
+
+```bash
+cd packages/backend && npx convex env set CLERK_WEBHOOK_SECRET "whsec_..."
+```
+
+## Production deployment
+
+### Web app (Dokploy / build)
+
+Set build-time env vars on the web deployment:
+
+| Variable                            | Value                         |
+| ----------------------------------- | ----------------------------- |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | `pk_live_...`                 |
+| `CLERK_SECRET_KEY`                  | `sk_live_...`                 |
+| `NEXT_PUBLIC_CONVEX_URL`            | `https://api.sdvedutech.in`   |
+
+Rebuild after changing `NEXT_PUBLIC_*` variables. If the production site still points at `.convex.cloud`, the browser console will log a warning from [`apps/web/lib/convex.ts`](apps/web/lib/convex.ts).
+
+### Convex production deployment
+
+On the **production** Convex deployment:
+
+```bash
+cd packages/backend && npx convex deploy
+cd packages/backend && npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://<prod-clerk-frontend-api>"
+cd packages/backend && npx convex env set CLERK_WEBHOOK_SECRET "whsec_..."
+```
+
+Use the **production** Clerk app's Convex integration page and webhook secret — not the dev values.
+
+### Route protection
+
+[`apps/web/proxy.ts`](apps/web/proxy.ts) uses protected-first Clerk middleware: all routes require sign-in except `/sign-in` and `/sign-up`. The dashboard layout also calls `auth.protect()` for server-side preloads.
+
+### Post-deploy verification
+
+1. Sign out completely, then sign in fresh (old sessions may carry tokens Convex rejects after issuer changes)
+2. Confirm the dashboard loads and Convex queries succeed (`useConvexAuth` reaches authenticated state)
+3. Confirm no `[Convex] Production site is connected to Convex Cloud` error in the browser console
+4. Visit `/dashboard` without a session — you should be redirected to `/sign-in` at the proxy layer
+5. New sign-ups should provision via webhook (or the client retry in the dashboard account boundary)
+
+### Debug token mismatches
+
+If Convex rejects auth, inspect the JWT `iss` claim vs Convex Dashboard → Settings → Authentication. Ensure `CLERK_JWT_ISSUER_DOMAIN` matches the Clerk Frontend API URL for the same Clerk app as your publishable key.
 
 ## Adding components
 

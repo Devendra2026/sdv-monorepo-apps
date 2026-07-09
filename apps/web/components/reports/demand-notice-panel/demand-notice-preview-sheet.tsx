@@ -1,25 +1,32 @@
-"use client";
+"use client"
 
-import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
-import type { DemandRegisterRow } from "@/hooks/qc/useDemandNoticePanel";
-import { useSurvey } from "@/hooks/surveys/useSurveys";
-import { buildSurveyAddress } from "@/lib/qc/demand-notice";
-import { formatAreaSqft } from "@/lib/survey/area";
-import { ExternalLink, Printer } from "lucide-react";
+import type { DemandRegisterRow } from "@/hooks/qc/useDemandNoticePanel"
+import { useSurvey } from "@/hooks/surveys/useSurveys"
+import { buildSurveyAddress } from "@/lib/qc/demand-notice"
+import { formatAreaSqft } from "@/lib/survey/area"
+import { Button } from "@workspace/ui/components/button"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@workspace/ui/components/sheet"
+import { Skeleton } from "@workspace/ui/components/skeleton"
+import { ExternalLink, Printer } from "lucide-react"
 
 export function DemandNoticePreviewSheet({
   row,
   open,
   onOpenChange,
 }: {
-  row: DemandRegisterRow | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  row: DemandRegisterRow | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }) {
-  const survey = useSurvey(open && row ? row.surveyId : undefined);
-  const href = row ? `/reports/demand-notices/${row.surveyId}` : "#";
+  const survey = useSurvey(open && row ? row.surveyId : undefined)
+  const href = row ? `/reports/demand-notices/${row.surveyId}` : "#"
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -92,5 +99,5 @@ export function DemandNoticePreviewSheet({
         </SheetFooter>
       </SheetContent>
     </Sheet>
-  );
+  )
 }

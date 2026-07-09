@@ -90,7 +90,7 @@ export function SidebarNavGroup({
       <CollapsibleContent id={submenuId} className="nav-submenu-grid">
         <div className="nav-submenu-inner">
           <div className="relative pt-0.5 pb-1">
-            <span className="absolute top-1 bottom-1 left-[1.125rem] w-px bg-border/50" aria-hidden />
+            <span className="absolute top-1 bottom-1 left-4.5 w-px bg-border/50" aria-hidden />
             <ul className="space-y-0.5" role="list">
               {group.children.map((child) => (
                 <li key={child.key}>

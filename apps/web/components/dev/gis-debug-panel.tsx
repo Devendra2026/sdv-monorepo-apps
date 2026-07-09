@@ -7,8 +7,8 @@ import {
   isGoogleMapsKeyConfigured,
 } from "@/lib/maps/google-maps-config"
 import { formatGpsDecimal } from "@/lib/surveys/gps-format"
-import { fmtDate } from "@workspace/ui/lib/utils"
 import type { GpsCapture } from "@workspace/schemas"
+import { fmtDate } from "@workspace/ui/lib/utils"
 
 export function GisDebugPanel({ surveyId, gps }: { surveyId: string; gps?: GpsCapture }) {
   if (process.env.NODE_ENV !== "development") return null

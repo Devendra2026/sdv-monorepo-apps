@@ -32,7 +32,7 @@ export function QcPageSkeleton({
     return (
       <div className="space-y-6" aria-busy="true" aria-label={`Loading QC ${variant}`}>
         <Skeleton className="h-9 w-40 rounded-xl" />
-        <Skeleton className="h-[700px] w-full rounded-2xl" />
+        <Skeleton className="h-175 w-full rounded-2xl" />
       </div>
     )
   }

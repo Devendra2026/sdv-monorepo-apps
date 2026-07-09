@@ -1,15 +1,15 @@
-"use client";
+"use client"
 
-import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { DemandRegisterRow } from "@/hooks/qc/useDemandNoticePanel";
-import { formatAreaSqft } from "@/lib/survey/area";
-import { ExternalLink, Eye, Printer } from "lucide-react";
+import type { DemandRegisterRow } from "@/hooks/qc/useDemandNoticePanel"
+import { formatAreaSqft } from "@/lib/survey/area"
+import { Button } from "@workspace/ui/components/button"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
+import { ExternalLink, Eye, Printer } from "lucide-react"
 
 type DemandNoticeRegisterTableProps = {
-  rows: DemandRegisterRow[];
-  onPreview: (row: DemandRegisterRow) => void;
-};
+  rows: DemandRegisterRow[]
+  onPreview: (row: DemandRegisterRow) => void
+}
 
 export function DemandNoticeRegisterTable({ rows, onPreview }: DemandNoticeRegisterTableProps) {
   if (rows.length === 0) {
@@ -17,7 +17,7 @@ export function DemandNoticeRegisterTable({ rows, onPreview }: DemandNoticeRegis
       <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
         No approved properties for this scope.
       </p>
-    );
+    )
   }
 
   return (
@@ -92,5 +92,5 @@ export function DemandNoticeRegisterTable({ rows, onPreview }: DemandNoticeRegis
         ))}
       </div>
     </>
-  );
+  )
 }

@@ -1,11 +1,11 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@workspace/ui/components/input";
+import { Label } from "@workspace/ui/components/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select";
 import { useTenantCatalog } from "@/hooks/users/useUsers";
 import type { TenantScopeValue } from "@/lib/users/tenant-scope";
-import { cn } from "@/lib/utils";
+import { cn } from "@workspace/ui/lib/utils";
 import { Building2, Check, MapPin, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 

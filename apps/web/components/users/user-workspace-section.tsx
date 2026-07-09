@@ -1,10 +1,10 @@
-"use client";
+"use client"
 
-import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card";
-import { FadeIn } from "@/components/design-system/motion";
-import { cn } from "@/lib/utils";
-import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card"
+import { FadeIn } from "@/components/design-system/motion"
+import { cn } from "@workspace/ui/lib/utils"
+import type { LucideIcon } from "lucide-react"
+import type { ReactNode } from "react"
 
 export function UserWorkspaceSection({
   title,
@@ -15,15 +15,15 @@ export function UserWorkspaceSection({
   className,
   delay = 0,
 }: {
-  title: string;
-  description?: string;
-  icon?: LucideIcon;
-  action?: ReactNode;
-  children: ReactNode;
-  className?: string;
-  delay?: number;
+  title: string
+  description?: string
+  icon?: LucideIcon
+  action?: ReactNode
+  children: ReactNode
+  className?: string
+  delay?: number
 }) {
-  const Icon = icon;
+  const Icon = icon
   return (
     <FadeIn delay={delay}>
       <GlassCard padding="sm" className={cn("border-border/70 shadow-premium-sm", className)}>
@@ -37,5 +37,5 @@ export function UserWorkspaceSection({
         {children}
       </GlassCard>
     </FadeIn>
-  );
+  )
 }

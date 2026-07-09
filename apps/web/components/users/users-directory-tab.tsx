@@ -3,13 +3,6 @@
 import { EmptyState } from "@/components/shared/empty-state"
 import { TableSkeleton } from "@/components/shared/loading"
 import { TablePagination } from "@/components/shared/table-pagination"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   ALL,
   avatarColor,
@@ -22,8 +15,15 @@ import {
   usersListHasActiveFilters,
   type UsersDirectoryTabModel,
 } from "@/components/users/users-page-shared"
-import { cn, fmtDate } from "@/lib/utils"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { Avatar, AvatarFallback } from "@workspace/ui/components/avatar"
+import { Badge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip"
+import { cn, fmtDate } from "@workspace/ui/lib/utils"
 import { Building2, Layers, MapPin, Search, SlidersHorizontal, UserCheck, X } from "lucide-react"
 
 export function AllUsersDirectoryTab({

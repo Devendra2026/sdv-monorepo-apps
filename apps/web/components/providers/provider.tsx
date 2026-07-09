@@ -10,6 +10,7 @@ import { ThemeProvider } from "./theme-provider"
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider
+      dynamic
       signInUrl="/sign-in"
       signUpUrl="/sign-up"
       signInFallbackRedirectUrl="/dashboard"

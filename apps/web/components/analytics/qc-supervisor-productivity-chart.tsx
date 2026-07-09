@@ -1,22 +1,22 @@
-"use client";
+"use client"
 
-import { CHART_HEIGHT_PX, ChartCard, ChartViewport } from "@/components/analytics/chart-shell";
-import { chartPalette, chartTooltipStyle } from "@/components/analytics/chart-theme";
-import dynamic from "next/dynamic";
+import { CHART_HEIGHT_PX, ChartCard, ChartViewport } from "@/components/analytics/chart-shell"
+import { chartPalette, chartTooltipStyle } from "@/components/analytics/chart-theme"
+import dynamic from "next/dynamic"
 
 export const QcSupervisorProductivityChart = dynamic(
   async () => {
     const { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } =
-      await import("recharts");
+      await import("recharts")
 
     return function QcSupervisorProductivityChart({
       data,
       title,
     }: {
-      data?: { name: string; approved: number; rejected: number }[];
-      title: string;
+      data?: { name: string; approved: number; rejected: number }[]
+      title: string
     }) {
-      const rows = (data ?? []).slice(0, 10);
+      const rows = (data ?? []).slice(0, 10)
 
       if (rows.length === 0) {
         return (
@@ -25,7 +25,7 @@ export const QcSupervisorProductivityChart = dynamic(
               No QC decisions recorded for active supervisors in scope.
             </div>
           </ChartCard>
-        );
+        )
       }
 
       return (
@@ -70,11 +70,11 @@ export const QcSupervisorProductivityChart = dynamic(
             </ResponsiveContainer>
           </ChartViewport>
         </ChartCard>
-      );
-    };
+      )
+    }
   },
   {
     ssr: false,
     loading: () => <div className="h-72 animate-pulse rounded-xl bg-muted/50" aria-hidden />,
-  },
-);
+  }
+)

@@ -1,17 +1,17 @@
-"use client";
+"use client"
 
-import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card";
-import type { RateForm, WardInfo } from "@/components/masters/tax-rates-types";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import type { NormalizedTaxRates } from "@/lib/qc/normalize-tax-rates";
-import { TAX_RATE_CONSTRUCTION_COLS, TAX_RATE_ZONE_ROWS } from "@/lib/qc/tax-rate-defaults";
-import { hasWardCustomRates } from "@/lib/qc/tax-rate-matrix";
-import { cn } from "@/lib/utils";
+import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card"
+import type { RateForm, WardInfo } from "@/components/masters/tax-rates-types"
+import type { NormalizedTaxRates } from "@/lib/qc/normalize-tax-rates"
+import { TAX_RATE_CONSTRUCTION_COLS, TAX_RATE_ZONE_ROWS } from "@/lib/qc/tax-rate-defaults"
+import { hasWardCustomRates } from "@/lib/qc/tax-rate-matrix"
+import { Badge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
+import { Label } from "@workspace/ui/components/label"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
+import { Separator } from "@workspace/ui/components/separator"
+import { cn } from "@workspace/ui/lib/utils"
 import {
   AlertCircle,
   CheckCircle2,
@@ -25,22 +25,22 @@ import {
   Save,
   Search,
   Settings2,
-} from "lucide-react";
-import type { ComponentType } from "react";
-import type { RateInputProps, WardRatePreviewProps } from "./ulb-rate-editor-widgets";
+} from "lucide-react"
+import type { ComponentType } from "react"
+import type { RateInputProps, WardRatePreviewProps } from "./ulb-rate-editor-widgets"
 
 type UlbRateEditorHeaderProps = {
-  municipalityName: string;
-  districtName: string;
-  wardCount: number;
-  configuredCount: number;
-  existing: NormalizedTaxRates | null;
-  saving: boolean;
-  saved: boolean;
-  resetting: boolean;
-  onResetAll: () => void;
-  onSaveAll: () => void;
-};
+  municipalityName: string
+  districtName: string
+  wardCount: number
+  configuredCount: number
+  existing: NormalizedTaxRates | null
+  saving: boolean
+  saved: boolean
+  resetting: boolean
+  onResetAll: () => void
+  onSaveAll: () => void
+}
 
 export function UlbRateEditorHeader({
   municipalityName,
@@ -57,7 +57,7 @@ export function UlbRateEditorHeader({
   return (
     <div className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-border/60 bg-card px-5 py-4 shadow-premium-sm">
       <div className="space-y-1">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="text-[10px] font-bold tracking-[0.18em] text-muted-foreground uppercase">
           Minimum Monthly Rental Rates
         </p>
         <h3 className="font-display text-xl font-bold tracking-tight text-foreground">{municipalityName}</h3>
@@ -108,18 +108,18 @@ export function UlbRateEditorHeader({
         </Button>
       </div>
     </div>
-  );
+  )
 }
 
 type UlbRateEditorWardRailProps = {
-  wardSearch: string;
-  onWardSearchChange: (value: string) => void;
-  filteredWards: WardInfo[];
-  activeWardNo: string;
-  onSelectWard: (wardNo: string) => void;
-  existing: NormalizedTaxRates | null;
-  dirtyWardNos: Set<string>;
-};
+  wardSearch: string
+  onWardSearchChange: (value: string) => void
+  filteredWards: WardInfo[]
+  activeWardNo: string
+  onSelectWard: (wardNo: string) => void
+  existing: NormalizedTaxRates | null
+  dirtyWardNos: Set<string>
+}
 
 export function UlbRateEditorWardRail({
   wardSearch,
@@ -133,10 +133,10 @@ export function UlbRateEditorWardRail({
   return (
     <GlassCard padding="none" className="overflow-hidden xl:max-h-[calc(100vh-14rem)]">
       <div className="border-b border-border/60 px-4 py-3">
-        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Wards</p>
+        <p className="text-xs font-bold tracking-widest text-muted-foreground uppercase">Wards</p>
         <div className="relative mt-2">
           <Search
-            className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+            className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
             aria-hidden
           />
           <Input
@@ -151,9 +151,9 @@ export function UlbRateEditorWardRail({
       <ScrollArea className="h-[min(420px,50vh)] xl:h-[calc(100vh-18rem)]">
         <ul className="p-2">
           {filteredWards.map((ward) => {
-            const active = ward.wardNo === activeWardNo;
-            const hasCustom = hasWardCustomRates(ward.wardNo, existing?.wardRates);
-            const isDirty = dirtyWardNos.has(ward.wardNo);
+            const active = ward.wardNo === activeWardNo
+            const hasCustom = hasWardCustomRates(ward.wardNo, existing?.wardRates)
+            const isDirty = dirtyWardNos.has(ward.wardNo)
             return (
               <li key={ward.wardNo}>
                 <button
@@ -161,14 +161,14 @@ export function UlbRateEditorWardRail({
                   onClick={() => onSelectWard(ward.wardNo)}
                   className={cn(
                     "mb-1 w-full cursor-pointer rounded-xl px-3 py-2.5 text-left transition-colors",
-                    active ? "bg-emerald-600 text-white shadow-sm" : "hover:bg-muted/60",
+                    active ? "bg-emerald-600 text-white shadow-sm" : "hover:bg-muted/60"
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span
                       className={cn(
                         "font-mono text-xs font-bold tabular-nums",
-                        active ? "text-white/90" : "text-primary",
+                        active ? "text-white/90" : "text-primary"
                       )}
                     >
                       Ward {ward.wardNo}
@@ -186,7 +186,7 @@ export function UlbRateEditorWardRail({
                             "rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase",
                             active
                               ? "bg-white/20 text-white"
-                              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+                              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
                           )}
                         >
                           Saved
@@ -204,34 +204,34 @@ export function UlbRateEditorWardRail({
                   </p>
                 </button>
               </li>
-            );
+            )
           })}
         </ul>
       </ScrollArea>
     </GlassCard>
-  );
+  )
 }
 
 type UlbRateEditorWardMatrixPanelProps = {
-  selectedWard: WardInfo;
-  wardMatrix: RateForm["wardMatrices"][string];
-  form: RateForm;
-  savingWard: boolean;
-  wardSaved: boolean;
-  selectedWardDirty: boolean;
-  ulbSettingsDirty: boolean;
-  previewZoneKey: string;
-  previewConstrKey: string;
-  onPreviewZoneChange: (key: string) => void;
-  onPreviewConstrChange: (key: string) => void;
-  onApplyDefault: () => void;
-  onResetSystemDefault: () => void;
-  onCopyToAll: () => void;
-  onSaveWard: () => void;
-  onCellChange: (zone: string, constr: string, val: string) => void;
-  WardRatePreview: ComponentType<WardRatePreviewProps>;
-  RateInput: ComponentType<RateInputProps>;
-};
+  selectedWard: WardInfo
+  wardMatrix: RateForm["wardMatrices"][string]
+  form: RateForm
+  savingWard: boolean
+  wardSaved: boolean
+  selectedWardDirty: boolean
+  ulbSettingsDirty: boolean
+  previewZoneKey: string
+  previewConstrKey: string
+  onPreviewZoneChange: (key: string) => void
+  onPreviewConstrChange: (key: string) => void
+  onApplyDefault: () => void
+  onResetSystemDefault: () => void
+  onCopyToAll: () => void
+  onSaveWard: () => void
+  onCellChange: (zone: string, constr: string, val: string) => void
+  WardRatePreview: ComponentType<WardRatePreviewProps>
+  RateInput: ComponentType<RateInputProps>
+}
 
 export function UlbRateEditorWardMatrixPanel({
   selectedWard,
@@ -257,7 +257,7 @@ export function UlbRateEditorWardMatrixPanel({
     <GlassCard padding="none" className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-5 py-4">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Editing</p>
+          <p className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">Editing</p>
           <h4 className="font-display text-lg font-bold text-foreground">
             Ward {selectedWard.wardNo} — {selectedWard.name}
           </h4>
@@ -305,7 +305,7 @@ export function UlbRateEditorWardMatrixPanel({
         <table className="w-full min-w-160 border-collapse text-sm">
           <thead>
             <tr className="border-b border-brand-navy/15 bg-brand-navy text-white">
-              <th className="sticky left-0 z-10 min-w-50 border-r border-white/10 bg-brand-navy px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wide">
+              <th className="sticky left-0 z-10 min-w-50 border-r border-white/10 bg-brand-navy px-4 py-3 text-left text-[10px] font-bold tracking-wide uppercase">
                 Road Width
               </th>
               {TAX_RATE_CONSTRUCTION_COLS.map((col) => (
@@ -351,14 +351,14 @@ export function UlbRateEditorWardMatrixPanel({
         </p>
       </div>
     </GlassCard>
-  );
+  )
 }
 
 type UlbRateEditorTaxSettingsProps = {
-  form: RateForm;
-  onFormPatch: (patch: Partial<RateForm>) => void;
-  combinedPctLabel: string;
-};
+  form: RateForm
+  onFormPatch: (patch: Partial<RateForm>) => void
+  combinedPctLabel: string
+}
 
 export function UlbRateEditorTaxSettings({ form, onFormPatch, combinedPctLabel }: UlbRateEditorTaxSettingsProps) {
   return (
@@ -385,7 +385,7 @@ export function UlbRateEditorTaxSettings({ form, onFormPatch, combinedPctLabel }
                 className="pr-6 text-right font-mono text-xs tabular-nums"
                 aria-label={label}
               />
-              <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
+              <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[10px] text-muted-foreground">
                 %
               </span>
             </div>
@@ -393,12 +393,12 @@ export function UlbRateEditorTaxSettings({ form, onFormPatch, combinedPctLabel }
         ))}
         <Separator />
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Combined</p>
+          <p className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">Combined</p>
           <p className="font-mono text-lg font-bold tabular-nums">{combinedPctLabel}</p>
         </div>
       </div>
     </GlassCard>
-  );
+  )
 }
 
 export function UlbRateEditorErrorBanner({ error }: { error: string }) {
@@ -407,7 +407,7 @@ export function UlbRateEditorErrorBanner({ error }: { error: string }) {
       <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
       {error}
     </div>
-  );
+  )
 }
 
 export function UlbRateEditorEmptyWards() {
@@ -417,5 +417,5 @@ export function UlbRateEditorEmptyWards() {
       <p className="font-medium text-foreground">No wards configured</p>
       <p className="mt-1 text-sm">Add wards under Tenants &amp; Wards before setting tax rates.</p>
     </div>
-  );
+  )
 }

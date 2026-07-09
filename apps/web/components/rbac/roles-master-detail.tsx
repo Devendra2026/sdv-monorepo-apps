@@ -1,14 +1,14 @@
 "use client"
 
 import { PermissionPicker, type PermissionOption } from "@/components/rbac/permission-picker"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Textarea } from "@/components/ui/textarea"
-import { cn } from "@/lib/utils"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { Badge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
+import { Label } from "@workspace/ui/components/label"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
+import { Textarea } from "@workspace/ui/components/textarea"
+import { cn } from "@workspace/ui/lib/utils"
 import {
   AlertTriangle,
   ArrowLeft,

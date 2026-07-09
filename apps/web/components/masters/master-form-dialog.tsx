@@ -1,12 +1,12 @@
-"use client";
+"use client"
 
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { Button } from "@workspace/ui/components/button"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@workspace/ui/components/dialog"
+import { Input } from "@workspace/ui/components/input"
+import { Label } from "@workspace/ui/components/label"
+import { Switch } from "@workspace/ui/components/switch"
 
-export type MasterEditRow = { _id?: string; value: string; label: string; position: number; isActive: boolean };
+export type MasterEditRow = { _id?: string; value: string; label: string; position: number; isActive: boolean }
 
 export function MasterFormDialog({
   row,
@@ -14,10 +14,10 @@ export function MasterFormDialog({
   onSave,
   onClose,
 }: {
-  row: MasterEditRow | null;
-  onChange: (row: MasterEditRow) => void;
-  onSave: () => void;
-  onClose: () => void;
+  row: MasterEditRow | null
+  onChange: (row: MasterEditRow) => void
+  onSave: () => void
+  onClose: () => void
 }) {
   return (
     <Dialog open={!!row} onOpenChange={(o) => !o && onClose()}>
@@ -69,5 +69,5 @@ export function MasterFormDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

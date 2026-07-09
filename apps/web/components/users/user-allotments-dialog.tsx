@@ -1,6 +1,10 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
+import { useSetUserAllotments, useUserAllotments } from "@/hooks/rbac/useRbac"
+import { useTenantCatalog } from "@/hooks/users/useUsers"
+import { parseConvexError } from "@/lib/errors"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { Button } from "@workspace/ui/components/button"
 import {
   Dialog,
   DialogContent,
@@ -8,15 +12,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
-import { useSetUserAllotments, useUserAllotments } from "@/hooks/rbac/useRbac"
-import { useTenantCatalog } from "@/hooks/users/useUsers"
-import { parseConvexError } from "@/lib/errors"
-import { cn } from "@/lib/utils"
-import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+} from "@workspace/ui/components/dialog"
+import { Label } from "@workspace/ui/components/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select"
+import { Switch } from "@workspace/ui/components/switch"
+import { cn } from "@workspace/ui/lib/utils"
 import { Building2, Layers, MapPin, Plus, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"

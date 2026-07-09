@@ -12,11 +12,11 @@ import { formatAreaSqMeter, surveyAreaMetrics } from "@/lib/survey/area"
 import { labelFromOptions } from "@/lib/survey/detail-labels"
 import { surveyCompletionPercent } from "@/lib/survey/progress"
 import { buildUlbCodeMap, resolveDisplayPropertyId } from "@/lib/survey/resolve-display-property-id"
-import { fmtDate } from "@/lib/utils"
-import type { QcRemarkWithAuthor } from "@/schema/qc/index"
 import type { FloorRow, OwnerEntry, SurveyDetail } from "@workspace/schemas"
+import type { QcRemarkWithAuthor } from "@workspace/schemas/qc/index"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
+import { fmtDate } from "@workspace/ui/lib/utils"
 import {
   Building2,
   Camera,

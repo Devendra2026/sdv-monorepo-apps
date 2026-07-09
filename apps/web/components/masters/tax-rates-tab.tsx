@@ -3,14 +3,14 @@
 import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card"
 import type { WardInfo } from "@/components/masters/tax-rates-types"
 import { UlbRateEditor } from "@/components/masters/ulb-rate-editor"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useTenantAdmin } from "@/hooks/tenants/useTenants"
 import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
-import { convexQuery } from "@convex-dev/react-query"
-import { useQuery } from "@tanstack/react-query"
+
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { Label } from "@workspace/ui/components/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select"
+import { useQuery } from "convex/react"
 import { IndianRupee, MapPin } from "lucide-react"
 import { useMemo, useState } from "react"
 
@@ -20,7 +20,7 @@ export function TaxRatesTab() {
   const [selectedDistrictId, setSelectedDistrictId] = useState("")
   const [selectedMuniId, setSelectedMuniId] = useState("")
 
-  const { data: allRates } = useQuery(convexQuery(api.taxRates.listAll, ready ? {} : "skip"))
+  const { data: allRates } = useQuery(api.taxRates.listAll, ready ? {} : "skip")
 
   const rateStatusByMuni = useMemo(() => {
     if (!allRates) return new Map<string, { published: boolean; wardCount: number }>()

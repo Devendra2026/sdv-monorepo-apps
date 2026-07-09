@@ -1,13 +1,13 @@
-"use client";
+"use client"
 
-import { ExecutiveHero, SectionHeader } from "@/components/design-system/executive-hero";
-import { GlassCard } from "@/components/design-system/glass-card";
-import { MetricCard } from "@/components/design-system/metric-card";
-import { FadeIn, StaggerGrid, StaggerItem } from "@/components/design-system/motion";
-import { Button } from "@/components/ui/button";
-import type { ListedUser, PendingUser } from "@/components/users/users-page-shared";
-import { Ban, Building2, CheckCircle2, Clock, Layers, MapPin, UserCheck, Users } from "lucide-react";
-import Link from "next/link";
+import { ExecutiveHero, SectionHeader } from "@/components/design-system/executive-hero"
+import { GlassCard } from "@/components/design-system/glass-card"
+import { MetricCard } from "@/components/design-system/metric-card"
+import { FadeIn, StaggerGrid, StaggerItem } from "@/components/design-system/motion"
+import type { ListedUser, PendingUser } from "@/components/users/users-page-shared"
+import { Button } from "@workspace/ui/components/button"
+import { Ban, Building2, CheckCircle2, Clock, Layers, MapPin, UserCheck, Users } from "lucide-react"
+import Link from "next/link"
 
 export function UsersHero() {
   return (
@@ -43,12 +43,12 @@ export function UsersHero() {
         }
       />
     </FadeIn>
-  );
+  )
 }
 
 export function UsersPendingAlert({ pending }: { pending: PendingUser[] | undefined }) {
-  const count = pending?.length ?? 0;
-  if (count <= 0) return null;
+  const count = pending?.length ?? 0
+  if (count <= 0) return null
 
   return (
     <FadeIn delay={0.04}>
@@ -76,7 +76,7 @@ export function UsersPendingAlert({ pending }: { pending: PendingUser[] | undefi
         </Button>
       </output>
     </FadeIn>
-  );
+  )
 }
 
 export function UsersTenancyGuide() {
@@ -119,7 +119,7 @@ export function UsersTenancyGuide() {
         </div>
       </GlassCard>
     </FadeIn>
-  );
+  )
 }
 
 export function UsersMetricsSection({
@@ -128,10 +128,10 @@ export function UsersMetricsSection({
   activeCount,
   disabledCount,
 }: {
-  pending: PendingUser[] | undefined;
-  users: ListedUser[] | undefined;
-  activeCount: number;
-  disabledCount: number;
+  pending: PendingUser[] | undefined
+  users: ListedUser[] | undefined
+  activeCount: number
+  disabledCount: number
 }) {
   return (
     <section aria-labelledby="users-kpi-heading">
@@ -174,5 +174,5 @@ export function UsersMetricsSection({
         </StaggerItem>
       </StaggerGrid>
     </section>
-  );
+  )
 }

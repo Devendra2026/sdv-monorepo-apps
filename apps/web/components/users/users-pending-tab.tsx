@@ -1,12 +1,9 @@
-"use client";
+"use client"
 
-import { EmptyState } from "@/components/shared/empty-state";
-import { TableSkeleton } from "@/components/shared/loading";
-import { RoleGate } from "@/components/shared/role-gate";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import type { SheetUser } from "@/components/users/user-edit-sheet";
+import { EmptyState } from "@/components/shared/empty-state"
+import { TableSkeleton } from "@/components/shared/loading"
+import { RoleGate } from "@/components/shared/role-gate"
+import type { SheetUser } from "@/components/users/user-edit-sheet"
 import {
   avatarColor,
   initials,
@@ -14,16 +11,19 @@ import {
   ROLE_COLORS,
   toPendingSheet,
   type PendingUser,
-} from "@/components/users/users-page-shared";
-import { cn } from "@/lib/utils";
-import { UserCheck } from "lucide-react";
+} from "@/components/users/users-page-shared"
+import { Avatar, AvatarFallback } from "@workspace/ui/components/avatar"
+import { Badge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
+import { cn } from "@workspace/ui/lib/utils"
+import { UserCheck } from "lucide-react"
 
 export function PendingApprovalsTab({
   pending,
   setSheetUser,
 }: {
-  pending: PendingUser[] | undefined;
-  setSheetUser: (user: SheetUser) => void;
+  pending: PendingUser[] | undefined
+  setSheetUser: (user: SheetUser) => void
 }) {
   return (
     <div>
@@ -42,7 +42,7 @@ export function PendingApprovalsTab({
       ) : (
         <div className="divide-y divide-border/60">
           {pending.map((u) => {
-            const age = pendingAge(u.createdAt);
+            const age = pendingAge(u.createdAt)
             return (
               <div
                 key={u._id}
@@ -59,7 +59,7 @@ export function PendingApprovalsTab({
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold leading-tight">{u.name}</p>
+                    <p className="leading-tight font-semibold">{u.name}</p>
                     <p className="truncate text-xs text-muted-foreground">{u.email}</p>
                   </div>
                 </button>
@@ -74,7 +74,7 @@ export function PendingApprovalsTab({
                       "rounded-full px-2 py-0.5 text-[11px] font-medium",
                       age.urgent
                         ? "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400"
-                        : "bg-muted text-muted-foreground",
+                        : "bg-muted text-muted-foreground"
                     )}
                   >
                     {age.label}
@@ -90,10 +90,10 @@ export function PendingApprovalsTab({
                   </RoleGate>
                 </div>
               </div>
-            );
+            )
           })}
         </div>
       )}
     </div>
-  );
+  )
 }

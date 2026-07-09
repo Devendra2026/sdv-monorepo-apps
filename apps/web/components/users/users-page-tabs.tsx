@@ -1,15 +1,15 @@
-"use client";
+"use client"
 
-import { ADMIN_TABS_LIST, AdminTabPill } from "@/components/admin/admin-tabs";
-import { SectionHeader } from "@/components/design-system/executive-hero";
-import { GlassCard } from "@/components/design-system/glass-card";
-import { FadeIn } from "@/components/design-system/motion";
-import { Tabs, TabsContent, TabsList } from "@/components/ui/tabs";
-import type { SheetUser } from "@/components/users/user-edit-sheet";
-import { AllUsersDirectoryTab } from "@/components/users/users-directory-tab";
-import { type ListedUser, type PendingUser, type UsersDirectoryTabModel } from "@/components/users/users-page-shared";
-import { Clock, Users } from "lucide-react";
-import { PendingApprovalsTab } from "./users-pending-tab";
+import { ADMIN_TABS_LIST, AdminTabPill } from "@/components/admin/admin-tabs"
+import { SectionHeader } from "@/components/design-system/executive-hero"
+import { GlassCard } from "@/components/design-system/glass-card"
+import { FadeIn } from "@/components/design-system/motion"
+import type { SheetUser } from "@/components/users/user-edit-sheet"
+import { AllUsersDirectoryTab } from "@/components/users/users-directory-tab"
+import { type ListedUser, type PendingUser, type UsersDirectoryTabModel } from "@/components/users/users-page-shared"
+import { Tabs, TabsContent, TabsList } from "@workspace/ui/components/tabs"
+import { Clock, Users } from "lucide-react"
+import { PendingApprovalsTab } from "./users-pending-tab"
 
 export function UsersPageTabs({
   pending,
@@ -17,10 +17,10 @@ export function UsersPageTabs({
   directory,
   setSheetUser,
 }: {
-  pending: PendingUser[] | undefined;
-  users: ListedUser[] | undefined;
-  directory: UsersDirectoryTabModel;
-  setSheetUser: (user: SheetUser) => void;
+  pending: PendingUser[] | undefined
+  users: ListedUser[] | undefined
+  directory: UsersDirectoryTabModel
+  setSheetUser: (user: SheetUser) => void
 }) {
   return (
     <FadeIn delay={0.08}>
@@ -62,5 +62,5 @@ export function UsersPageTabs({
         </GlassCard>
       </div>
     </FadeIn>
-  );
+  )
 }

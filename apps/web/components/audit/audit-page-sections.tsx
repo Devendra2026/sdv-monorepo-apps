@@ -1,19 +1,19 @@
-"use client";
+"use client"
 
-import { AuditTable } from "@/components/audit/audit-table";
-import { ExecutiveHero, SectionHeader } from "@/components/design-system/executive-hero";
-import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card";
-import { MetricCard } from "@/components/design-system/metric-card";
-import { FadeIn, StaggerGrid, StaggerItem } from "@/components/design-system/motion";
-import { TablePagination } from "@/components/shared/table-pagination";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { AuditEntry } from "@/schema/audit/index";
-import { Activity, Clock, Filter, Layers, ScrollText, Search, X, Zap } from "lucide-react";
+import { AuditTable } from "@/components/audit/audit-table"
+import { ExecutiveHero, SectionHeader } from "@/components/design-system/executive-hero"
+import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card"
+import { MetricCard } from "@/components/design-system/metric-card"
+import { FadeIn, StaggerGrid, StaggerItem } from "@/components/design-system/motion"
+import { TablePagination } from "@/components/shared/table-pagination"
+import type { AuditEntry } from "@workspace/schemas/audit/index"
+import { Badge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select"
+import { Activity, Clock, Filter, Layers, ScrollText, Search, X, Zap } from "lucide-react"
 
-const ALL = "__all__";
+const ALL = "__all__"
 
 export function AuditHero() {
   return (
@@ -26,7 +26,7 @@ export function AuditHero() {
         gradient="brand"
       />
     </FadeIn>
-  );
+  )
 }
 
 export function AuditMetricsSection({
@@ -35,10 +35,10 @@ export function AuditMetricsSection({
   entityTypes,
   todayCount,
 }: {
-  totalLabel: string;
-  actionTypes: number | string;
-  entityTypes: number | string;
-  todayCount: number | string;
+  totalLabel: string
+  actionTypes: number | string
+  entityTypes: number | string
+  todayCount: number | string
 }) {
   return (
     <section aria-labelledby="audit-kpi-heading">
@@ -63,7 +63,7 @@ export function AuditMetricsSection({
         </StaggerItem>
       </StaggerGrid>
     </section>
-  );
+  )
 }
 
 export function AuditFiltersSection({
@@ -78,16 +78,16 @@ export function AuditFiltersSection({
   hasFilters,
   onClear,
 }: {
-  search: string;
-  onSearchChange: (value: string) => void;
-  action: string | undefined;
-  onActionChange: (value: string | undefined) => void;
-  entity: string | undefined;
-  onEntityChange: (value: string | undefined) => void;
-  actionOptions: string[] | undefined;
-  entityOptions: string[] | undefined;
-  hasFilters: boolean;
-  onClear: () => void;
+  search: string
+  onSearchChange: (value: string) => void
+  action: string | undefined
+  onActionChange: (value: string | undefined) => void
+  entity: string | undefined
+  onEntityChange: (value: string | undefined) => void
+  actionOptions: string[] | undefined
+  entityOptions: string[] | undefined
+  hasFilters: boolean
+  onClear: () => void
 }) {
   return (
     <FadeIn delay={0.06}>
@@ -106,7 +106,7 @@ export function AuditFiltersSection({
         />
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
             <Input
               placeholder="Search action, actor, entity, or ID…"
               value={search}
@@ -151,7 +151,7 @@ export function AuditFiltersSection({
         </div>
       </GlassCard>
     </FadeIn>
-  );
+  )
 }
 
 export function AuditFeedSection({
@@ -166,16 +166,16 @@ export function AuditFeedSection({
   onNext,
   onPageSizeChange,
 }: {
-  rows: AuditEntry[] | undefined;
-  isLoading: boolean;
-  pageNumber: number;
-  pageSize: number;
-  filteredCount: number;
-  canGoPrev: boolean;
-  canGoNext: boolean;
-  onPrev: () => void;
-  onNext: () => void;
-  onPageSizeChange: (size: number) => void;
+  rows: AuditEntry[] | undefined
+  isLoading: boolean
+  pageNumber: number
+  pageSize: number
+  filteredCount: number
+  canGoPrev: boolean
+  canGoNext: boolean
+  onPrev: () => void
+  onNext: () => void
+  onPageSizeChange: (size: number) => void
 }) {
   return (
     <FadeIn delay={0.1}>
@@ -205,5 +205,5 @@ export function AuditFeedSection({
         )}
       </GlassCard>
     </FadeIn>
-  );
+  )
 }

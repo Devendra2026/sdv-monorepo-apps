@@ -1,11 +1,11 @@
-"use client";
+"use client"
 
-import { ExecutiveHero, SectionHeader } from "@/components/design-system/executive-hero";
-import { MetricCard } from "@/components/design-system/metric-card";
-import { FadeIn, StaggerGrid, StaggerItem } from "@/components/design-system/motion";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { Key, RefreshCw, Shield, ShieldCheck, Sparkles } from "lucide-react";
+import { ExecutiveHero, SectionHeader } from "@/components/design-system/executive-hero"
+import { MetricCard } from "@/components/design-system/metric-card"
+import { FadeIn, StaggerGrid, StaggerItem } from "@/components/design-system/motion"
+import { Button } from "@workspace/ui/components/button"
+import { cn } from "@workspace/ui/lib/utils"
+import { Key, RefreshCw, Shield, ShieldCheck, Sparkles } from "lucide-react"
 
 export function RolesHero({ onSeed, seeding }: { onSeed: () => void; seeding: boolean }) {
   return (
@@ -30,7 +30,7 @@ export function RolesHero({ onSeed, seeding }: { onSeed: () => void; seeding: bo
         }
       />
     </FadeIn>
-  );
+  )
 }
 
 export function RolesMetricsSection({
@@ -40,11 +40,11 @@ export function RolesMetricsSection({
   permCount,
   loaded,
 }: {
-  roleCount: number;
-  activeCount: number;
-  customCount: number;
-  permCount: number;
-  loaded: boolean;
+  roleCount: number
+  activeCount: number
+  customCount: number
+  permCount: number
+  loaded: boolean
 }) {
   return (
     <section aria-labelledby="roles-kpi-heading">
@@ -87,5 +87,5 @@ export function RolesMetricsSection({
         </StaggerItem>
       </StaggerGrid>
     </section>
-  );
+  )
 }

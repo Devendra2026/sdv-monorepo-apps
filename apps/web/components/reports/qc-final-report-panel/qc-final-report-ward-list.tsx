@@ -1,26 +1,26 @@
-"use client";
+"use client"
 
-import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { QcFinalReportRow } from "@/hooks/reports/useQcFinalReportPanel";
-import { formatWardTitle } from "@/lib/reports/group-by-ward";
-import { formatAreaSqft } from "@/lib/survey/area";
-import { cn } from "@/lib/utils";
-import { ChevronDown, ExternalLink, FileText } from "lucide-react";
-import Link from "next/link";
-import { useState } from "react";
+import type { QcFinalReportRow } from "@/hooks/reports/useQcFinalReportPanel"
+import { formatWardTitle } from "@/lib/reports/group-by-ward"
+import { formatAreaSqft } from "@/lib/survey/area"
+import { Button } from "@workspace/ui/components/button"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@workspace/ui/components/collapsible"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
+import { cn } from "@workspace/ui/lib/utils"
+import { ChevronDown, ExternalLink, FileText } from "lucide-react"
+import Link from "next/link"
+import { useState } from "react"
 
 type WardGroup = {
-  wardNo: string;
-  wardLabel?: string;
-  city: string;
-  rows: QcFinalReportRow[];
-};
+  wardNo: string
+  wardLabel?: string
+  city: string
+  rows: QcFinalReportRow[]
+}
 
 function WardSection({ group, defaultOpen }: { group: WardGroup; defaultOpen: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const title = formatWardTitle(group.wardNo, group.wardLabel);
+  const [open, setOpen] = useState(defaultOpen)
+  const title = formatWardTitle(group.wardNo, group.wardLabel)
 
   return (
     <Collapsible
@@ -98,7 +98,7 @@ function WardSection({ group, defaultOpen }: { group: WardGroup; defaultOpen: bo
         </div>
       </CollapsibleContent>
     </Collapsible>
-  );
+  )
 }
 
 export function QcFinalReportWardList({ wardGroups }: { wardGroups: WardGroup[] }) {
@@ -107,7 +107,7 @@ export function QcFinalReportWardList({ wardGroups }: { wardGroups: WardGroup[] 
       <p className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
         No QC-approved properties for this scope. Adjust district, ULB, or ward filters.
       </p>
-    );
+    )
   }
 
   return (
@@ -116,5 +116,5 @@ export function QcFinalReportWardList({ wardGroups }: { wardGroups: WardGroup[] 
         <WardSection key={`${group.wardNo}-${group.city}`} group={group} defaultOpen={index < 3} />
       ))}
     </div>
-  );
+  )
 }

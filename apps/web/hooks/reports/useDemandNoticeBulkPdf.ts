@@ -2,12 +2,13 @@
 
 import type { DemandNoticeBulkPdfJob } from "@/components/reports/demand-notice-panel/demand-notice-bulk-pdf-capture"
 import type { FilterState } from "@/components/surveys/survey-filters"
+import { DemandNoticeDocumentProps } from "@/lib/qc/demand-notice-document-types"
 import { reportDocumentTimestamp } from "@/lib/qc/report-dates"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import { useConvex, useMutation } from "convex/react"
 import { useCallback, useState } from "react"
-import { toast } from "@workspace/ui/components/sonner"
+import { toast } from "sonner"
 
 export function useDemandNoticeBulkPdf() {
   const convex = useConvex()
@@ -52,7 +53,7 @@ export function useDemandNoticeBulkPdf() {
         setProgress({ completed: 0, total: payloads.length })
         setJob({
           jobId,
-          payloads,
+          payloads: payloads as unknown as DemandNoticeDocumentProps[],
           filename: exportJob.filename,
           onUpload: async (blob: Blob) => {
             const uploadUrl = await generateUploadUrl({ jobId })
@@ -67,7 +68,7 @@ export function useDemandNoticeBulkPdf() {
             const { storageId } = (await response.json()) as { storageId: Id<"_storage"> }
             await completeExport({ jobId, storageId })
 
-            const completed = await convex.query(api.demandNotices.getExportJob, { jobId })
+            const completed = await convex.query(api.demandNotices.queries.getExportJob, { jobId })
             if (completed.downloadUrl) {
               const link = document.createElement("a")
               link.href = completed.downloadUrl
