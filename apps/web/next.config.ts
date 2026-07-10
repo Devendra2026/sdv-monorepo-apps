@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
   ...(process.env.NODE_ENV === "production" && {
     reactStrictMode: true,
   }),
+  output: "standalone",
 }
 
 export default nextConfig
