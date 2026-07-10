@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { Providers } from "@/components/providers/provider"
 import "@workspace/ui/globals.css"
 import { cn } from "@workspace/ui/lib/utils"
+import { Metadata } from "next"
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
 
@@ -10,6 +11,11 @@ const fontMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
 })
+
+export const metadata: Metadata = {
+  title: "Survey App",
+  description: "SDV Survey App",
+}
 
 export default function RootLayout({
   children,
