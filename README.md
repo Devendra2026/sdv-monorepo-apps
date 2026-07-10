@@ -111,17 +111,54 @@ Set build-time env vars on the web deployment:
 
 Rebuild after changing `NEXT_PUBLIC_*` variables. If the production site still points at `.convex.cloud`, the browser console will log a warning from [`apps/web/lib/convex.ts`](apps/web/lib/convex.ts).
 
-### Convex production deployment
+### Convex production deployment (self-hosted)
 
-On the **production** Convex deployment:
+Production uses a **self-hosted** Convex backend at `https://api.sdvedutech.in` — not Convex Cloud. Do not run `npx convex deploy` without the self-hosted env file while `CONVEX_DEPLOYMENT` in `.env.local` points at a cloud dev deployment.
+
+**One-time CLI setup** (local machine only):
 
 ```bash
-cd packages/backend && npx convex deploy
-cd packages/backend && npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://<prod-clerk-frontend-api>"
-cd packages/backend && npx convex env set CLERK_WEBHOOK_SECRET "whsec_..."
+cp packages/backend/.env.example packages/backend/.env.production
+```
+
+Edit `packages/backend/.env.production` and set:
+
+| Variable                       | Value                                           |
+| ------------------------------ | ----------------------------------------------- |
+| `CONVEX_SELF_HOSTED_URL`       | `https://api.sdvedutech.in`                     |
+| `CONVEX_SELF_HOSTED_ADMIN_KEY` | admin key from your self-hosted Convex instance |
+
+Never commit `.env.production`. Never put `CONVEX_SELF_HOSTED_ADMIN_KEY` in `NEXT_PUBLIC_*` variables.
+
+**Push functions** from the monorepo root:
+
+```bash
+pnpm convex:deploy:production
+```
+
+On PowerShell, if `CONVEX_DEPLOYMENT` is set in your shell session, clear it first:
+
+```powershell
+$env:CONVEX_DEPLOYMENT = $null
+pnpm convex:deploy:production
+```
+
+**Convex deployment env** (Clerk auth on the self-hosted instance — use `--env-file .env.production` with CLI env commands):
+
+```bash
+cd packages/backend && npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://<prod-clerk-frontend-api>" --env-file .env.production
+cd packages/backend && npx convex env set CLERK_WEBHOOK_SECRET "whsec_..." --env-file .env.production
 ```
 
 Use the **production** Clerk app's Convex integration page and webhook secret — not the dev values.
+
+**Verify functions** after deploy:
+
+```bash
+cd packages/backend && npx convex function-spec --env-file .env.production
+```
+
+Confirm `analytics/queries:homeBundle`, `analytics/queries:recentActivity`, and `users/queries:currentUser` appear in the output.
 
 ### Route protection
 

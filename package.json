@@ -9,7 +9,8 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "format": "turbo format",
-    "typecheck": "turbo typecheck"
+    "typecheck": "turbo typecheck",
+    "convex:deploy:production": "pnpm --filter @workspace/backend deploy:production"
   },
   "devDependencies": {
     "@workspace/backend": "workspace:*",
