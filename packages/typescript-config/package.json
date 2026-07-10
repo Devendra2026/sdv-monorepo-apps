@@ -7,6 +7,6 @@
     "access": "public"
   },
   "devDependencies": {
-    "typescript": "^7.0.2"
+    "typescript": "catalog:"
   }
 }

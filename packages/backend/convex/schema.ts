@@ -19,6 +19,19 @@ export const qcStatus = v.union(v.literal("pending"), v.literal("approved"), v.l
 
 export const photoSlot = v.union(v.literal("front"), v.literal("inside"), v.literal("side"), v.literal("document"))
 
+export const qcSection = v.union(
+  v.literal("address"),
+  v.literal("property"),
+  v.literal("floors"),
+  v.literal("photos"),
+  v.literal("owner"),
+  v.literal("taxation"),
+  v.literal("services"),
+  v.literal("gis")
+)
+
+export const qcSections = v.array(qcSection)
+
 /** ULB body types shown in admin setup and survey start. */
 export const ulbBodyType = v.union(v.literal("municipal_council"), v.literal("town_panchayat"))
 
@@ -266,7 +279,7 @@ export default defineSchema({
     authorId: v.id("users"),
     authorRole: v.string(), // snapshot at write-time
     message: v.string(),
-    taggedSections: v.array(v.string()),
+    taggedSections: qcSections,
     status: v.union(v.literal("open"), v.literal("resolved")),
   }).index("by_survey", ["surveyId"]),
 
@@ -276,7 +289,7 @@ export default defineSchema({
     reviewerId: v.id("users"),
     decision: v.union(v.literal("approve"), v.literal("reject")),
     comment: v.optional(v.string()),
-    taggedSections: v.array(v.string()),
+    taggedSections: qcSections,
     decidedAt: v.number(),
   })
     .index("by_survey", ["surveyId"])

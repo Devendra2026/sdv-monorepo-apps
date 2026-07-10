@@ -12,6 +12,7 @@ import { formatRegistryParcelNo, formatRegistryWardNo } from "@/lib/survey/forma
 import { buildUlbCodeMap, resolveDisplayPropertyId } from "@/lib/survey/resolve-display-property-id"
 import { resolveOwnerDisplayName } from "@/lib/survey/resolve-owner-name"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import type { QcSection } from "@workspace/schemas"
 import { Button } from "@workspace/ui/components/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { cn } from "@workspace/ui/lib/utils"
@@ -47,7 +48,7 @@ export type QcConflictPanelProps = {
   cardClassName: string
   rows: QcConflictRow[]
   rejectComment: string
-  taggedSections: string[]
+  taggedSections: QcSection[]
 }
 
 export function QcConflictPanel({

@@ -2,6 +2,10 @@ packages:
   - "apps/*"
   - "packages/*"
 
+catalog:
+  typescript: 5.9.3
+  eslint: 9.39.4
+
 minimumReleaseAge: 0
 
 allowBuilds:

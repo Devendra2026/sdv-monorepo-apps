@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@workspace/ui/components/button"
+import Link from "next/link"
 import { useEffect } from "react"
 
 export default function SurveysError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
@@ -19,7 +20,7 @@ export default function SurveysError({ error, reset }: { error: Error & { digest
           Try again
         </Button>
         <Button type="button" className="cursor-pointer rounded-xl" asChild>
-          <a href="/surveys/registry">Go to registry</a>
+          <Link href="/surveys/registry">Go to registry</Link>
         </Button>
       </div>
     </div>

@@ -12,10 +12,9 @@ const DUPLICATE_REJECT_COMMENT =
 
 export function QcPropertyIdConflictPanel({ surveyId, propertyId }: { surveyId: string; propertyId?: string }) {
   const conflicts = usePropertyIdConflicts(surveyId)
+  const rows: QcConflictRow[] = useMemo(() => (conflicts ?? []) as unknown as QcConflictRow[], [conflicts])
   if (conflicts === undefined) return null
   if (conflicts.length === 0) return null
-
-  const rows: QcConflictRow[] = useMemo(() => conflicts as unknown as QcConflictRow[], [conflicts])
 
   return (
     <QcConflictPanel

@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { qcSectionSchema } from "../qc/index"
 import { PHOTO_SLOTS, QC_STATUS_VALUES, SURVEY_STATUS_VALUES } from "./constants"
 
 const convexIdSchema = <T extends string>() => z.string() as unknown as z.ZodType<string & { __tableName: T }>
@@ -115,7 +116,7 @@ export const surveyRemarkSchema = z.object({
   _creationTime: z.number(),
   message: z.string(),
   authorRole: z.string(),
-  taggedSections: z.array(z.string()),
+  taggedSections: z.array(qcSectionSchema),
   status: z.enum(["open", "resolved"]),
 })
 

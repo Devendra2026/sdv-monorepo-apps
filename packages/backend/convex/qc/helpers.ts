@@ -1,5 +1,5 @@
 import { v } from "convex/values"
-import { qcStatus, surveyStatus } from "../schema"
+import { qcSections, qcStatus, surveyStatus } from "../schema"
 
 export const COMMAND_CENTER_WARD_SCAN_LIMIT = 2500
 
@@ -47,7 +47,7 @@ export const qcRemarkWithAuthorShape = {
   authorId: v.id("users"),
   authorRole: v.string(),
   message: v.string(),
-  taggedSections: v.array(v.string()),
+  taggedSections: qcSections,
   status: v.union(v.literal("open"), v.literal("resolved")),
   author: v.union(
     v.object({

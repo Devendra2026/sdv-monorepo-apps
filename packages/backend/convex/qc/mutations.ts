@@ -10,6 +10,7 @@
 import { v } from "convex/values"
 import { mutation } from "../_generated/server"
 import { recordSurveyStatsUpdate } from "../lib/surveyScopeStats"
+import { qcSections } from "../schema"
 import { requireCapability } from "../shared/capabilities"
 import { isOwnScopeSurveyor } from "../shared/fieldAccess"
 import { assertCanReadWard, clientError, requireUser, writeAudit } from "../shared/helpers"
@@ -19,7 +20,7 @@ export const addRemark = mutation({
   args: {
     surveyId: v.id("surveys"),
     message: v.string(),
-    taggedSections: v.optional(v.array(v.string())),
+    taggedSections: v.optional(qcSections),
   },
   returns: v.id("qcRemarks"),
   handler: async (ctx, args) => {
@@ -107,7 +108,7 @@ export const decide = mutation({
     surveyId: v.id("surveys"),
     decision: v.union(v.literal("approve"), v.literal("reject")),
     comment: v.optional(v.string()),
-    taggedSections: v.optional(v.array(v.string())),
+    taggedSections: v.optional(qcSections),
   },
   returns: v.null(),
   handler: async (ctx, args) => {

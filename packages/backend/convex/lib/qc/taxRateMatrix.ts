@@ -5,14 +5,14 @@ function normalizeTaxZoneToken(value: string): string {
     .replace(/[\u2013\u2014-]/g, "_")
     .replace(/\s+/g, "_")
     .replace(/_+/g, "_")
-    .replace(/^_|_$/g, "");
+    .replace(/^_|_$/g, "")
 }
 
 export function resolveTaxRateZoneKey(value?: string): string {
-  const trimmed = value?.trim() ?? "";
-  if (!trimmed) return "";
+  const trimmed = value?.trim() ?? ""
+  if (!trimmed) return ""
 
-  const normalized = normalizeTaxZoneToken(trimmed);
+  const normalized = normalizeTaxZoneToken(trimmed)
 
   const aliases: Record<string, string> = {
     below_9m: "below_9m",
@@ -39,7 +39,12 @@ export function resolveTaxRateZoneKey(value?: string): string {
     "24_meter_above": "above_24m",
     "24_metre_above": "above_24m",
     "24m_above": "above_24m",
-  };
+    rate_zone_1: "below_9m",
+    rate_zone_2: "9_to_12m",
+    rate_zone_3: "12_to_24m",
+    rate_zone_4: "above_24m",
+    rate_zone_5: "above_24m",
+  }
 
-  return aliases[normalized] ?? trimmed;
+  return aliases[normalized] ?? trimmed
 }

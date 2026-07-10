@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit"
   },
@@ -41,7 +42,8 @@
     "@types/react-dom": "^19.2.3",
     "@workspace/eslint-config": "workspace:^",
     "@workspace/typescript-config": "workspace:*",
-    "eslint": "^10.6.0",
-    "typescript": "^7.0.2"
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^4.1.10"
   }
 }

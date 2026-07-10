@@ -1,7 +1,6 @@
-import type { Id, TableNames } from "@workspace/backend/convex/_generated/dataModel.js"
 import { z } from "zod"
 
-const convexId = <T extends TableNames>() => z.custom<Id<T>>((value) => typeof value === "string")
+const convexIdSchema = <T extends string>() => z.string() as unknown as z.ZodType<string & { __tableName: T }>
 
 /**
  * Analytics survey counts.
@@ -39,7 +38,7 @@ export type DashboardCounts = z.infer<typeof dashboardCountsSchema>
  * District analytics breakdown.
  */
 export const districtBreakdownSchema = surveyCountsSchema.extend({
-  districtId: convexId<"districts">(),
+  districtId: convexIdSchema<"districts">(),
   code: z.string(),
   name: z.string(),
 })
@@ -50,13 +49,13 @@ export type DistrictBreakdown = z.infer<typeof districtBreakdownSchema>
  * Municipality / ULB analytics breakdown.
  */
 export const ulbBreakdownSchema = surveyCountsSchema.extend({
-  municipalityId: convexId<"municipalities">(),
+  municipalityId: convexIdSchema<"municipalities">(),
 
   code: z.string(),
 
   name: z.string(),
 
-  districtId: convexId<"districts">(),
+  districtId: convexIdSchema<"districts">(),
 
   districtName: z.string(),
 })
@@ -65,7 +64,7 @@ export const ulbBreakdownSchema = surveyCountsSchema.extend({
  * Surveyor analytics breakdown.
  */
 export const surveyorBreakdownSchema = surveyCountsSchema.extend({
-  surveyorId: convexId<"users">(),
+  surveyorId: convexIdSchema<"users">(),
 
   name: z.string(),
 
@@ -84,7 +83,7 @@ export type SurveyorBreakdown = z.infer<typeof surveyorBreakdownSchema>
  * QC supervisor analytics breakdown.
  */
 export const qcSupervisorBreakdownSchema = z.object({
-  reviewerId: convexId<"users">(),
+  reviewerId: convexIdSchema<"users">(),
 
   name: z.string(),
 
@@ -103,20 +102,20 @@ export type QcSupervisorBreakdown = z.infer<typeof qcSupervisorBreakdownSchema>
  * Analytics filter options.
  */
 export const districtFilterOptionSchema = z.object({
-  _id: convexId<"districts">(),
+  _id: convexIdSchema<"districts">(),
   code: z.string(),
   name: z.string(),
 })
 
 export const municipalityFilterOptionSchema = z.object({
-  _id: convexId<"municipalities">(),
+  _id: convexIdSchema<"municipalities">(),
   code: z.string(),
   name: z.string(),
-  districtId: convexId<"districts">(),
+  districtId: convexIdSchema<"districts">(),
 })
 
 export const userFilterOptionSchema = z.object({
-  _id: convexId<"users">(),
+  _id: convexIdSchema<"users">(),
   name: z.string(),
   email: z.string().email(),
 })
@@ -169,7 +168,7 @@ export type DailyTrendPoint = z.infer<typeof dailyTrendPointSchema>
  * Ward coverage analytics row.
  */
 export const wardCoverageRowSchema = z.object({
-  municipalityId: convexId<"municipalities">(),
+  municipalityId: convexIdSchema<"municipalities">(),
 
   municipalityName: z.string(),
 

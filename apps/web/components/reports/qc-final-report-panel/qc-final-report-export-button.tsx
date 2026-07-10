@@ -36,7 +36,7 @@ export function QcFinalReportExportButton({ filters, disabled }: QcFinalReportEx
     const unique = [...new Set(municipalityIds)]
     await Promise.all(
       unique.map(async (municipalityId) => {
-        const rates = await convex.query(api.taxRates.getForMunicipality, {
+        const rates = await convex.query(api.taxation.queries.getForMunicipality, {
           municipalityId: municipalityId as Id<"municipalities">,
         })
         map.set(municipalityId, rates)
