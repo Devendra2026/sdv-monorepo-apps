@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "packages": {
+    "node": "24"
+  },
+  "steps": {
+    "build": {
+      "commands": [
+        "pnpm --filter web build"
+      ]
+    }
+  },
+  "deploy": {
+    "startCommand": "pnpm --filter web start",
+    "variables": {
+      "HOSTNAME": "0.0.0.0",
+      "PORT": "3000"
+    }
+  }
+}
