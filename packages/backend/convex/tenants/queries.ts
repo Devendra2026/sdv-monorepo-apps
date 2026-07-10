@@ -7,47 +7,52 @@
  *   - municipalityId on user: single ULB (+ its district for display)
  *   - surveyor ward checks remain in helpers.assertCanReadWard
  */
-import { query } from "../_generated/server"
-import { requireCapability } from "../shared/capabilities"
-import { requireUser } from "../shared/helpers"
+import { capabilityQuery } from "../lib/customFunctions"
+
+const tenantsManageQuery = capabilityQuery("tenants.manage")
 
 /** Admin inbox — full tenant tree for setup screens. */
-export const listForAdmin = query({
+export const listForAdmin = tenantsManageQuery({
   args: {},
   handler: async (ctx) => {
-    const me = await requireUser(ctx)
-    await requireCapability(ctx, me, "tenants.manage")
+    const districts = await ctx.db
+      .query("districts")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .collect()
 
-    const [districts, municipalities, wards] = await Promise.all([
-      ctx.db.query("districts").collect(),
-      ctx.db.query("municipalities").collect(),
-      ctx.db.query("wards").collect(),
-    ])
+    const sortedDistricts = districts.sort((a, b) => a.name.localeCompare(b.name))
 
-    return districts
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((d) => ({
-        ...d,
-        ulbs: municipalities
-          .filter((m) => m.districtId === d._id)
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map((m) => ({
+    return Promise.all(
+      sortedDistricts.map(async (d) => {
+        const ulbs = (
+          await ctx.db
+            .query("municipalities")
+            .withIndex("by_district_active", (q) => q.eq("districtId", d._id).eq("isActive", true))
+            .collect()
+        ).sort((a, b) => a.name.localeCompare(b.name))
+
+        const ulbsWithWards = await Promise.all(
+          ulbs.map(async (m) => ({
             ...m,
-            wards: wards
-              .filter((w) => w.municipalityId === m._id)
-              .sort((a, b) => a.wardNo.localeCompare(b.wardNo, undefined, { numeric: true })),
-          })),
-      }))
+            wards: (
+              await ctx.db
+                .query("wards")
+                .withIndex("by_municipality", (q) => q.eq("municipalityId", m._id))
+                .collect()
+            ).sort((a, b) => a.wardNo.localeCompare(b.wardNo, undefined, { numeric: true })),
+          }))
+        )
+
+        return { ...d, ulbs: ulbsWithWards }
+      })
+    )
   },
 })
 
 /** Assessment years for admin tenant setup (global masters, category assessment_year). */
-export const listAssessmentYears = query({
+export const listAssessmentYears = tenantsManageQuery({
   args: {},
   handler: async (ctx) => {
-    const me = await requireUser(ctx)
-    await requireCapability(ctx, me, "tenants.manage")
-
     const rows = await ctx.db
       .query("masters")
       .withIndex("by_category_position", (q) => q.eq("category", "assessment_year").eq("isActive", true))

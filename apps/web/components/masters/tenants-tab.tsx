@@ -4,7 +4,13 @@ import { TenantDialogs } from "@/components/masters/tenant-dialogs"
 import { EmptyState } from "@/components/shared/empty-state"
 import { TableSkeleton } from "@/components/shared/loading"
 import { TablePagination } from "@/components/shared/table-pagination"
-import { useTenantAdmin, useUpsertDistrict, useUpsertMunicipality, useUpsertWard } from "@/hooks/tenants/useTenants"
+import {
+  useTenantAdmin,
+  useUpsertDistrict,
+  useUpsertMunicipality,
+  useUpsertWard,
+  type TenantAdminTree,
+} from "@/hooks/tenants/useTenants"
 import { parseConvexError } from "@/lib/errors"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import { Badge } from "@workspace/ui/components/badge"
@@ -495,8 +501,9 @@ function DistrictList({
 
 // ─── main tab ────────────────────────────────────────────────────────────────
 
-export function TenantsTab() {
-  const tenants = useTenantAdmin()
+export function TenantsTab({ tenants: tenantsProp }: { tenants?: TenantAdminTree }) {
+  const liveTenants = useTenantAdmin({ enabled: tenantsProp === undefined })
+  const tenants = tenantsProp ?? liveTenants
   const upsertDistrict = useUpsertDistrict()
   const upsertMunicipality = useUpsertMunicipality()
   const upsertWard = useUpsertWard()

@@ -136,3 +136,56 @@ export const preloadSurveyRegistryPage = cache(async (nowMs: number, pageSize = 
     nowMs,
   })
 })
+
+/** Preload users directory first page for admin Users route. */
+export const preloadAdminUsersPage = cache(async (pageSize = 15) => {
+  return preloadConvexQuery(api.admin.queries.listUsers, {
+    paginationOpts: { numItems: pageSize, cursor: null },
+  })
+})
+
+/** Preload pending approvals for Users route KPIs. */
+export const preloadAdminPendingApprovals = cache(async () => {
+  return preloadConvexQuery(api.admin.queries.listPendingApprovals, {})
+})
+
+/** Preload assignable roles for Users filters and forms. */
+export const preloadAdminAssignableRoles = cache(async () => {
+  return preloadConvexQuery(api.rbac.queries.listAssignableRoles, { includeInactive: false })
+})
+
+/** Preload active user count for directory KPIs. */
+export const preloadAdminActiveUserCount = cache(async () => {
+  return preloadConvexQuery(api.admin.queries.countActiveUsers, {})
+})
+
+/** Preload disabled user count for directory KPIs. */
+export const preloadAdminDisabledUserCount = cache(async () => {
+  return preloadConvexQuery(api.admin.queries.countDisabledUsers, {})
+})
+
+/** Preload roles + permissions for Roles admin route. */
+export const preloadAdminRolesPage = cache(async () => {
+  const [preloadedRoles, preloadedPermissions] = await Promise.all([
+    preloadConvexQuery(api.rbac.queries.listRoles, { includeInactive: true }),
+    preloadConvexQuery(api.rbac.queries.listPermissions, {}),
+  ])
+  return { preloadedRoles, preloadedPermissions }
+})
+
+/** Preload tenant tree for Masters admin route. */
+export const preloadAdminTenants = cache(async () => {
+  return preloadConvexQuery(api.tenants.queries.listForAdmin, {})
+})
+
+/** Preload audit feed first page + summary + facets. */
+export const preloadAdminAuditPage = cache(async (nowMs: number, pageSize = 15) => {
+  const [preloadedRows, preloadedSummary, preloadedFacets] = await Promise.all([
+    preloadConvexQuery(api.audit.queries.listPaginated, {
+      paginationOpts: { numItems: pageSize, cursor: null },
+    }),
+    preloadConvexQuery(api.audit.queries.summary, { nowMs }),
+    preloadConvexQuery(api.audit.queries.actionFacets, {}),
+  ])
+  return { preloadedRows, preloadedSummary, preloadedFacets }
+})

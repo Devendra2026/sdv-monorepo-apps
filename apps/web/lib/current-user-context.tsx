@@ -5,7 +5,7 @@ import { parseConvexError } from "@/lib/errors"
 import type { Role } from "@/lib/permissions"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import { useMutation, usePreloadedQuery, useQuery, type Preloaded } from "convex/react"
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
 export type CurrentUser = {
   _id: string
@@ -120,7 +120,7 @@ function CurrentUserProviderPreloaded({
 }) {
   const user = usePreloadedQuery(preloadedUser) as CurrentUser | null | undefined
   const provision = useProvisionFlow(user)
-  const value = buildContextValue(user, provision)
+  const value = useMemo(() => buildContextValue(user, provision), [user, provision])
   return <CurrentUserContext.Provider value={value}>{children}</CurrentUserContext.Provider>
 }
 
@@ -128,7 +128,7 @@ function CurrentUserProviderClient({ children }: { children: ReactNode }) {
   const ready = useConvexAuthReady()
   const user = useQuery(api.users.queries.currentUser, ready ? {} : "skip") as CurrentUser | null | undefined
   const provision = useProvisionFlow(user)
-  const value = buildContextValue(user, provision)
+  const value = useMemo(() => buildContextValue(user, provision), [user, provision])
   return <CurrentUserContext.Provider value={value}>{children}</CurrentUserContext.Provider>
 }
 

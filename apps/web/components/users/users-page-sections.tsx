@@ -127,12 +127,15 @@ export function UsersMetricsSection({
   users,
   activeCount,
   disabledCount,
+  loaded = false,
 }: {
   pending: PendingUser[] | undefined
   users: ListedUser[] | undefined
   activeCount: number
   disabledCount: number
+  loaded?: boolean
 }) {
+  const metricsReady = loaded || users !== undefined
   return (
     <section aria-labelledby="users-kpi-heading">
       <SectionHeader
@@ -157,8 +160,8 @@ export function UsersMetricsSection({
         <StaggerItem>
           <MetricCard
             label="Active"
-            value={users ? activeCount : "—"}
-            hint="can sign in today"
+            value={metricsReady ? activeCount : "—"}
+            hint="across your scope"
             icon={CheckCircle2}
             tone="success"
           />
@@ -166,7 +169,7 @@ export function UsersMetricsSection({
         <StaggerItem>
           <MetricCard
             label="Disabled"
-            value={users ? disabledCount : "—"}
+            value={metricsReady ? disabledCount : "—"}
             hint="access revoked"
             icon={Ban}
             tone="destructive"

@@ -3,7 +3,7 @@
 import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card"
 import type { WardInfo } from "@/components/masters/tax-rates-types"
 import { UlbRateEditor } from "@/components/masters/ulb-rate-editor"
-import { useTenantAdmin } from "@/hooks/tenants/useTenants"
+import { useTenantAdmin, type TenantAdminTree } from "@/hooks/tenants/useTenants"
 import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
 
 import { api } from "@workspace/backend/convex/_generated/api.js"
@@ -14,9 +14,10 @@ import { useQuery } from "convex/react"
 import { IndianRupee, MapPin } from "lucide-react"
 import { useMemo, useState } from "react"
 
-export function TaxRatesTab() {
+export function TaxRatesTab({ tenants: tenantsProp }: { tenants?: TenantAdminTree }) {
   const ready = useConvexAuthReady()
-  const tenants = useTenantAdmin()
+  const liveTenants = useTenantAdmin({ enabled: tenantsProp === undefined })
+  const tenants = tenantsProp ?? liveTenants
   const [selectedDistrictId, setSelectedDistrictId] = useState("")
   const [selectedMuniId, setSelectedMuniId] = useState("")
 

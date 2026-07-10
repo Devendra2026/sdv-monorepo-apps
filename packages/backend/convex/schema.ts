@@ -84,7 +84,9 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_role_status", ["role", "status"])
     .index("by_municipality", ["municipalityId"])
-    .index("by_district", ["districtId"]),
+    .index("by_district", ["districtId"])
+    .index("by_municipality_status", ["municipalityId", "status"])
+    .index("by_district_status", ["districtId", "status"]),
 
   /**
    * Tenants — districts → municipalities (ULB) → wards.
@@ -122,6 +124,7 @@ export default defineSchema({
     wardCode: v.string(),
     name: v.string(),
   })
+    .index("by_municipality", ["municipalityId"])
     .index("by_municipality_ward", ["municipalityId", "wardNo"])
     .index("by_municipality_ward_code", ["municipalityId", "wardCode"]),
 
@@ -310,7 +313,9 @@ export default defineSchema({
     metadata: v.optional(v.any()), // JSON snapshot — before/after, IP, etc.
   })
     .index("by_entity", ["entity", "entityId"])
-    .index("by_actor", ["actorId"]),
+    .index("by_actor", ["actorId"])
+    .index("by_action", ["action"])
+    .index("by_entity_action", ["entity", "action"]),
 
   /**
    * notifications — destined for the mobile bell icon + in-app banners.
@@ -335,7 +340,9 @@ export default defineSchema({
     label: v.string(),
     category: v.string(),
     isActive: v.boolean(),
-  }).index("by_key", ["key"]),
+  })
+    .index("by_key", ["key"])
+    .index("by_active", ["isActive"]),
 
   /** Dynamic roles — system roles are seeded; admin may add custom roles. */
   roles: defineTable({
@@ -344,7 +351,9 @@ export default defineSchema({
     description: v.optional(v.string()),
     isSystem: v.boolean(),
     isActive: v.boolean(),
-  }).index("by_key", ["key"]),
+  })
+    .index("by_key", ["key"])
+    .index("by_active", ["isActive"]),
 
   rolePermissions: defineTable({
     roleId: v.id("roles"),

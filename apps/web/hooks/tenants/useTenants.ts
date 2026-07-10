@@ -3,9 +3,12 @@
 import { useHasCapability } from "@/hooks/use-capability"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import { useMutation, useQuery } from "convex/react"
+import type { FunctionReturnType } from "convex/server"
 
-export function useTenantAdmin() {
-  const allowed = useHasCapability("masters.manage")
+export type TenantAdminTree = FunctionReturnType<typeof api.tenants.queries.listForAdmin>
+
+export function useTenantAdmin(opts?: { enabled?: boolean }) {
+  const allowed = useHasCapability("masters.manage") && (opts?.enabled ?? true)
   return useQuery(api.tenants.queries.listForAdmin, allowed ? {} : "skip")
 }
 

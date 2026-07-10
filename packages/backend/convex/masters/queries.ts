@@ -5,6 +5,7 @@
 import { v } from "convex/values"
 import type { Id } from "../_generated/dataModel"
 import { query } from "../_generated/server"
+import { capabilityQuery } from "../lib/customFunctions"
 import { CONSTRUCTION_TYPES, FLOOR_NAMES, FLOOR_USAGE_FACTORS, FLOOR_USAGE_TYPES } from "../lib/masters/areaMasters"
 import { RESPONDENT_RELATIONSHIPS } from "../lib/masters/ownerConstants"
 import { mergeMasterOptions, SANITATION_TYPES, WATER_SOURCES } from "../lib/masters/serviceMasters"
@@ -20,7 +21,6 @@ import {
   TAX_RATE_ZONES,
 } from "../lib/masters/taxationMasters"
 import { loadDashboardCountsForHome } from "../lib/surveyScopeStats"
-import { requireCapability } from "../shared/capabilities"
 import { filterWardsForUser, requireIdentity, requireUser } from "../shared/helpers"
 import { assertMunicipalityInScope, resolveTenantScope } from "../shared/tenancy"
 import {
@@ -29,6 +29,8 @@ import {
   loadWardsForMunicipalities,
   MAX_SURVEY_OWNERS,
 } from "./helpers"
+
+const mastersManageQuery = capabilityQuery("masters.manage")
 
 /**
  * Returns every active dropdown grouped by category, plus the full set of
@@ -93,7 +95,6 @@ export const bundle = query({
     }
 
     return {
-      updatedAt: Date.now(),
       districts: districtsOut,
       ulbs,
       wards: wardOut,
@@ -256,11 +257,9 @@ export const dashboardCounts = query({
  * The web Masters CRUD screen needs the raw rows (including inactive ones, with
  * `position` and `_id`) to render a sortable, toggleable table.
  */
-export const listByCategory = query({
+export const listByCategory = mastersManageQuery({
   args: { category: v.string() },
   handler: async (ctx, args) => {
-    const me = await requireUser(ctx)
-    await requireCapability(ctx, me, "masters.manage")
     const storageCategory = resolveMasterCategory(args.category)
     const rows = await ctx.db
       .query("masters")

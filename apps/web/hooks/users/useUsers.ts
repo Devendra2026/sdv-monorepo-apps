@@ -3,7 +3,6 @@
 import { useHasCapability } from "@/hooks/use-capability"
 import { useCursorPagination } from "@/hooks/use-cursor-pagination"
 import { api } from "@workspace/backend/convex/_generated/api.js"
-import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import { useQuery as useConvexQuery, useMutation } from "convex/react"
 import { useMemo } from "react"
 
@@ -67,11 +66,6 @@ export function useAssignTenant() {
 }
 export function useUpdateUser() {
   return useMutation(api.admin.mutations.updateUser)
-}
-/** Disable = updateUser({ status: 'disabled' }). */
-function useDisableUser() {
-  const update = useMutation(api.admin.mutations.updateUser)
-  return (userId: string) => update({ userId: userId as Id<"users">, status: "disabled" })
 }
 /** Catalog of districts/ULBs/wards for the approval & assignment forms. */
 export function useTenantCatalog() {

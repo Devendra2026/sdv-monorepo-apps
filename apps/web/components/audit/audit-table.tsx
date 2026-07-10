@@ -1,13 +1,17 @@
 import { actionStyle, avatarColor, entityColor, initials, relativeTime } from "@/components/audit/audit-helpers"
 import { EmptyState } from "@/components/shared/empty-state"
 import { TableSkeleton } from "@/components/shared/loading"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import type { AuditEntry } from "@workspace/schemas/audit/index"
 import { Avatar, AvatarFallback } from "@workspace/ui/components/avatar"
 import { Badge } from "@workspace/ui/components/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { cn, fmtDate } from "@workspace/ui/lib/utils"
 import { Bot, ScrollText } from "lucide-react"
-import { memo } from "react"
+import { memo, useRef } from "react"
+
+const VIRTUALIZE_ROW_THRESHOLD = 50
+const TIMELINE_ROW_HEIGHT = 132
 
 const AuditRow = memo(function AuditRow({ entry, isLast }: { entry: AuditEntry; isLast: boolean }) {
   const style = actionStyle(entry.action)
@@ -77,6 +81,36 @@ const AuditRow = memo(function AuditRow({ entry, isLast }: { entry: AuditEntry; 
   )
 })
 
+function VirtualizedAuditTimeline({ rows }: { rows: AuditEntry[] }) {
+  const parentRef = useRef<HTMLDivElement>(null)
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => TIMELINE_ROW_HEIGHT,
+    overscan: 8,
+  })
+
+  return (
+    <div ref={parentRef} className="max-h-[min(70vh,960px)] overflow-y-auto">
+      <div className="relative divide-y divide-border" style={{ height: virtualizer.getTotalSize() }}>
+        {virtualizer.getVirtualItems().map((virtualRow) => {
+          const entry = rows[virtualRow.index]
+          if (!entry) return null
+          return (
+            <div
+              key={entry._id}
+              className="absolute top-0 left-0 w-full"
+              style={{ transform: `translateY(${virtualRow.start}px)` }}
+            >
+              <AuditRow entry={entry} isLast={virtualRow.index === rows.length - 1} />
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 /** Renders an audit feed. Reused by the Audit page and the survey detail
  *  "Audit History" tab. */
 export function AuditTable({
@@ -119,6 +153,10 @@ export function AuditTable({
         </TableBody>
       </Table>
     )
+  }
+
+  if (rows.length >= VIRTUALIZE_ROW_THRESHOLD) {
+    return <VirtualizedAuditTimeline rows={rows} />
   }
 
   return (

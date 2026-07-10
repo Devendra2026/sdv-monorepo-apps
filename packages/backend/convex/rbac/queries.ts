@@ -10,10 +10,13 @@ const rolesManageQuery = capabilityQuery("roles.manage")
 export const listPermissions = rolesManageQuery({
   args: { includeInactive: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    const rows = await ctx.db.query("permissions").collect()
-    return rows
-      .filter((p) => args.includeInactive || p.isActive)
-      .sort((a, b) => a.category.localeCompare(b.category) || a.key.localeCompare(b.key))
+    const rows = args.includeInactive
+      ? await ctx.db.query("permissions").collect()
+      : await ctx.db
+          .query("permissions")
+          .withIndex("by_active", (q) => q.eq("isActive", true))
+          .collect()
+    return rows.sort((a, b) => a.category.localeCompare(b.category) || a.key.localeCompare(b.key))
   },
 })
 

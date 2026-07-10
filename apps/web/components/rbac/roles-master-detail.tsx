@@ -1,6 +1,7 @@
 "use client"
 
 import { PermissionPicker, type PermissionOption } from "@/components/rbac/permission-picker"
+import { TableSkeleton } from "@/components/shared/loading"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import { Badge } from "@workspace/ui/components/badge"
@@ -51,6 +52,7 @@ type RolesMasterDetailProps = {
   onToggleActive: (role: RoleRow) => void
   onSaveEdit: (patch: { name: string; description: string; permissionKeys: string[] }) => Promise<void>
   onCreateRole: (data: { key: string; name: string; description: string; permissionKeys: string[] }) => Promise<void>
+  isLoading?: boolean
 }
 
 // ─── constants ────────────────────────────────────────────────────────────────
@@ -629,6 +631,7 @@ export function RolesMasterDetail({
   onToggleActive,
   onSaveEdit,
   onCreateRole,
+  isLoading = false,
 }: RolesMasterDetailProps) {
   return (
     <div className="premium-card flex gap-4 overflow-hidden rounded-2xl shadow-premium-lg" style={{ minHeight: 600 }}>
@@ -653,67 +656,73 @@ export function RolesMasterDetail({
         </div>
 
         <ScrollArea className="flex-1 px-3 py-2">
-          {systemRoles.length > 0 && (
-            <div className="mb-4">
-              <div className="mb-2 flex items-center justify-between rounded-md bg-slate-100 px-2.5 py-1.5 dark:bg-slate-800/60">
-                <div className="flex items-center gap-1.5">
-                  <Lock className="h-3 w-3 text-slate-500 dark:text-slate-400" />
-                  <p className="text-[10px] font-bold tracking-wider text-slate-600 uppercase dark:text-slate-300">
-                    System Roles
-                  </p>
+          {isLoading ? (
+            <TableSkeleton rows={8} />
+          ) : (
+            <>
+              {systemRoles.length > 0 && (
+                <div className="mb-4">
+                  <div className="mb-2 flex items-center justify-between rounded-md bg-slate-100 px-2.5 py-1.5 dark:bg-slate-800/60">
+                    <div className="flex items-center gap-1.5">
+                      <Lock className="h-3 w-3 text-slate-500 dark:text-slate-400" />
+                      <p className="text-[10px] font-bold tracking-wider text-slate-600 uppercase dark:text-slate-300">
+                        System Roles
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-500 dark:bg-slate-700 dark:text-slate-400">
+                      {systemRoles.length}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    {systemRoles.map((r) => (
+                      <RoleItem
+                        key={r._id}
+                        role={r}
+                        selected={selectedId === r._id && mode !== "create"}
+                        onClick={() => onSelectRole(r._id)}
+                      />
+                    ))}
+                  </div>
                 </div>
-                <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-500 dark:bg-slate-700 dark:text-slate-400">
-                  {systemRoles.length}
-                </span>
-              </div>
-              <div className="space-y-1">
-                {systemRoles.map((r) => (
-                  <RoleItem
-                    key={r._id}
-                    role={r}
-                    selected={selectedId === r._id && mode !== "create"}
-                    onClick={() => onSelectRole(r._id)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+              )}
 
-          <div>
-            <div className="mb-2 flex items-center justify-between rounded-md bg-violet-50 px-2.5 py-1.5 dark:bg-violet-500/10">
-              <div className="flex items-center gap-1.5">
-                <Sparkles className="h-3 w-3 text-violet-500" />
-                <p className="text-[10px] font-bold tracking-wider text-violet-600 uppercase dark:text-violet-400">
-                  Custom Roles
-                </p>
+              <div>
+                <div className="mb-2 flex items-center justify-between rounded-md bg-violet-50 px-2.5 py-1.5 dark:bg-violet-500/10">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="h-3 w-3 text-violet-500" />
+                    <p className="text-[10px] font-bold tracking-wider text-violet-600 uppercase dark:text-violet-400">
+                      Custom Roles
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-600 dark:bg-violet-500/20 dark:text-violet-400">
+                    {customRoles.length}
+                  </span>
+                </div>
+                {customRoles.length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={onStartCreate}
+                    className="w-full rounded-lg border border-dashed border-violet-200 px-3 py-4 text-center text-xs text-violet-400 transition-colors hover:border-violet-400 hover:bg-violet-50/50 hover:text-violet-600 dark:border-violet-800 dark:hover:bg-violet-500/5"
+                  >
+                    <Sparkles className="mx-auto mb-1.5 h-4 w-4" />
+                    <p className="font-medium">No custom roles yet</p>
+                    <p className="mt-0.5 text-[11px]">Click &ldquo;+ New role&rdquo; to create one</p>
+                  </button>
+                ) : (
+                  <div className="space-y-1">
+                    {customRoles.map((r) => (
+                      <RoleItem
+                        key={r._id}
+                        role={r}
+                        selected={selectedId === r._id && mode !== "create"}
+                        onClick={() => onSelectRole(r._id)}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-              <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-600 dark:bg-violet-500/20 dark:text-violet-400">
-                {customRoles.length}
-              </span>
-            </div>
-            {customRoles.length === 0 ? (
-              <button
-                type="button"
-                onClick={onStartCreate}
-                className="w-full rounded-lg border border-dashed border-violet-200 px-3 py-4 text-center text-xs text-violet-400 transition-colors hover:border-violet-400 hover:bg-violet-50/50 hover:text-violet-600 dark:border-violet-800 dark:hover:bg-violet-500/5"
-              >
-                <Sparkles className="mx-auto mb-1.5 h-4 w-4" />
-                <p className="font-medium">No custom roles yet</p>
-                <p className="mt-0.5 text-[11px]">Click &ldquo;+ New role&rdquo; to create one</p>
-              </button>
-            ) : (
-              <div className="space-y-1">
-                {customRoles.map((r) => (
-                  <RoleItem
-                    key={r._id}
-                    role={r}
-                    selected={selectedId === r._id && mode !== "create"}
-                    onClick={() => onSelectRole(r._id)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+            </>
+          )}
         </ScrollArea>
 
         <div className="border-t border-border px-3 py-2">
@@ -725,7 +734,11 @@ export function RolesMasterDetail({
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {mode === "create" ? (
+        {isLoading ? (
+          <div className="flex flex-1 flex-col gap-4 p-5">
+            <TableSkeleton rows={6} />
+          </div>
+        ) : mode === "create" ? (
           <CreateRolePanel
             permissionOptions={permissionOptions}
             onCreate={onCreateRole}

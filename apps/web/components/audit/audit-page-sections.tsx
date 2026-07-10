@@ -34,12 +34,15 @@ export function AuditMetricsSection({
   actionTypes,
   entityTypes,
   todayCount,
+  loaded = true,
 }: {
   totalLabel: string
   actionTypes: number | string
   entityTypes: number | string
   todayCount: number | string
+  loaded?: boolean
 }) {
+  const display = (value: number | string) => (loaded ? value : "—")
   return (
     <section aria-labelledby="audit-kpi-heading">
       <SectionHeader
@@ -50,16 +53,34 @@ export function AuditMetricsSection({
       />
       <StaggerGrid className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         <StaggerItem>
-          <MetricCard label="Recent Entries" value={totalLabel} hint="indexed events" icon={ScrollText} tone="info" />
+          <MetricCard
+            label="Recent Entries"
+            value={display(totalLabel)}
+            hint="indexed events"
+            icon={ScrollText}
+            tone="info"
+          />
         </StaggerItem>
         <StaggerItem>
-          <MetricCard label="Action Types" value={actionTypes} hint="distinct verbs" icon={Zap} tone="ai" />
+          <MetricCard label="Action Types" value={display(actionTypes)} hint="distinct verbs" icon={Zap} tone="ai" />
         </StaggerItem>
         <StaggerItem>
-          <MetricCard label="Entity Types" value={entityTypes} hint="tables & resources" icon={Layers} tone="muted" />
+          <MetricCard
+            label="Entity Types"
+            value={display(entityTypes)}
+            hint="tables & resources"
+            icon={Layers}
+            tone="muted"
+          />
         </StaggerItem>
         <StaggerItem>
-          <MetricCard label="Last 24 Hours" value={todayCount} hint="recent mutations" icon={Clock} tone="success" />
+          <MetricCard
+            label="Last 24 Hours"
+            value={display(todayCount)}
+            hint="recent mutations"
+            icon={Clock}
+            tone="success"
+          />
         </StaggerItem>
       </StaggerGrid>
     </section>
@@ -77,6 +98,7 @@ export function AuditFiltersSection({
   entityOptions,
   hasFilters,
   onClear,
+  loaded = true,
 }: {
   search: string
   onSearchChange: (value: string) => void
@@ -88,6 +110,7 @@ export function AuditFiltersSection({
   entityOptions: string[] | undefined
   hasFilters: boolean
   onClear: () => void
+  loaded?: boolean
 }) {
   return (
     <FadeIn delay={0.06}>
@@ -115,7 +138,11 @@ export function AuditFiltersSection({
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={action ?? ALL} onValueChange={(v) => onActionChange(v === ALL ? undefined : v)}>
+            <Select
+              value={action ?? ALL}
+              onValueChange={(v) => onActionChange(v === ALL ? undefined : v)}
+              disabled={!loaded}
+            >
               <SelectTrigger className="w-full sm:w-52">
                 <SelectValue placeholder="Filter by action" />
               </SelectTrigger>
@@ -128,7 +155,11 @@ export function AuditFiltersSection({
                 ))}
               </SelectContent>
             </Select>
-            <Select value={entity ?? ALL} onValueChange={(v) => onEntityChange(v === ALL ? undefined : v)}>
+            <Select
+              value={entity ?? ALL}
+              onValueChange={(v) => onEntityChange(v === ALL ? undefined : v)}
+              disabled={!loaded}
+            >
               <SelectTrigger className="w-full sm:w-40">
                 <SelectValue placeholder="Entity type" />
               </SelectTrigger>

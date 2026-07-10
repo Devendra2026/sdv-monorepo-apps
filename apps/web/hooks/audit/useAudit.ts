@@ -94,8 +94,8 @@ export function useAuditFacets() {
   return useMemo(() => normalizeFacets(raw), [raw])
 }
 
-export function useAuditSummary() {
+export function useAuditSummary(nowMs?: number) {
   const allowed = useHasCapability("audit.view")
-  const nowMs = useClientNowMs()
-  return useConvexQuery(api.audit.queries.summary, allowed ? { nowMs } : "skip")
+  const clock = useClientNowMs(nowMs)
+  return useConvexQuery(api.audit.queries.summary, allowed ? { nowMs: clock } : "skip")
 }

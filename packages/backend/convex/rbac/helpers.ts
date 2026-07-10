@@ -85,21 +85,25 @@ export async function seedSystemRbac(ctx: MutationCtx) {
 }
 
 export async function listRolesWithPermissions(ctx: QueryCtx, includeInactive: boolean | undefined) {
-  const roles = await ctx.db.query("roles").collect()
-  const filtered = roles.filter((r) => includeInactive || r.isActive)
+  const roles = includeInactive
+    ? await ctx.db.query("roles").collect()
+    : await ctx.db
+        .query("roles")
+        .withIndex("by_active", (q) => q.eq("isActive", true))
+        .collect()
 
-  return Promise.all(
-    filtered
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map(async (role) => {
-        const permRows = await ctx.db
-          .query("rolePermissions")
-          .withIndex("by_role", (q) => q.eq("roleId", role._id))
-          .collect()
-        return {
-          ...role,
-          permissionKeys: permRows.map((p) => p.permissionKey).sort(),
-        }
-      })
-  )
+  const permRows = await ctx.db.query("rolePermissions").collect()
+  const permsByRole = new Map<string, string[]>()
+  for (const row of permRows) {
+    const existing = permsByRole.get(row.roleId) ?? []
+    existing.push(row.permissionKey)
+    permsByRole.set(row.roleId, existing)
+  }
+
+  return roles
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((role) => ({
+      ...role,
+      permissionKeys: (permsByRole.get(role._id) ?? []).sort(),
+    }))
 }

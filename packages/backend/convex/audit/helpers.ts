@@ -51,7 +51,18 @@ export async function hydrateAuditRows(ctx: QueryCtx, rows: Doc<"auditLogs">[]) 
   })
 }
 
-export function auditQuery(ctx: QueryCtx, args: { entity?: string; entityId?: string; actorId?: Id<"users"> }) {
+export function auditQuery(
+  ctx: QueryCtx,
+  args: { entity?: string; entityId?: string; actorId?: Id<"users">; action?: string }
+) {
+  if (args.entity && args.action) {
+    return ctx.db
+      .query("auditLogs")
+      .withIndex("by_entity_action", (q) => q.eq("entity", args.entity!).eq("action", args.action!))
+  }
+  if (args.action) {
+    return ctx.db.query("auditLogs").withIndex("by_action", (q) => q.eq("action", args.action!))
+  }
   if (args.entity) {
     return ctx.db
       .query("auditLogs")
