@@ -1,6 +1,7 @@
 import { v } from "convex/values"
 import type { Doc } from "../_generated/dataModel"
 import { mutation, type MutationCtx } from "../_generated/server"
+import { validateGps } from "../lib/gpsValidation"
 import {
   derivePlotSqftForSubmit,
   normalizeFloorFields,
@@ -9,25 +10,20 @@ import {
   validateAreaSection,
   validateFloorRow,
 } from "../lib/masters/areaMasters"
-import { hasCapability, requireCapability } from "../shared/capabilities"
-import { canInsertSurveyDraft, isOwnScopeSurveyor } from "../shared/fieldAccess"
-import { assertCanReadWard, clientError, requireUser, writeAudit } from "../shared/helpers"
+import { loadAllowedTaxZoneSet, normalizeTaxationFields } from "../lib/masters/taxationMasters"
 import {
   completionPctForSurvey,
   computeSurveyCompletionPercent,
   refreshSurveyCompletionPct,
 } from "../lib/surveyProgress"
-import {
-  recordSurveyStatsInsert,
-  recordSurveyStatsRemove,
-  recordSurveyStatsUpdate,
-} from "../lib/surveyScopeStats"
+import { recordSurveyStatsInsert, recordSurveyStatsRemove, recordSurveyStatsUpdate } from "../lib/surveyScopeStats"
 import { assertUniqueSurveySlot, surveyIdentifyingSlotChanged } from "../lib/surveyUniqueness"
-import { validateGps } from "../lib/gpsValidation"
 import { addressTenantContext, normalizeAddressFields } from "../masters/helpers"
-import { loadAllowedTaxZoneSet, normalizeTaxationFields } from "../lib/masters/taxationMasters"
-import { assertMunicipalityInScope } from "../shared/tenancy"
 import { gpsCapture } from "../schema"
+import { hasCapability, requireCapability } from "../shared/capabilities"
+import { canInsertSurveyDraft, isOwnScopeSurveyor } from "../shared/fieldAccess"
+import { assertCanReadWard, clientError, requireUser, writeAudit } from "../shared/helpers"
+import { assertMunicipalityInScope } from "../shared/tenancy"
 import {
   assertSurveyWritable,
   auditActionForSave,
@@ -503,7 +499,10 @@ export const submit = mutation({
       ...addressTenantContext(muni, district),
       configuredPostalCode: muni.postalCode,
     }
-    validateBusinessRules(survey as unknown as Record<string, unknown>, addressCtx, "submit")
+    const allowedTaxZones = await loadAllowedTaxZoneSet(ctx)
+    validateBusinessRules(survey as unknown as Record<string, unknown>, addressCtx, "submit", {
+      allowedTaxZones,
+    })
 
     await ctx.db.patch(args.id, {
       status: "submitted",

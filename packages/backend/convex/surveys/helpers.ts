@@ -13,10 +13,13 @@
 import { ConvexError } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "../_generated/server"
+import { validateGps } from "../lib/gpsValidation"
+import { validateServicesSection } from "../lib/masters/serviceMasters"
+import { validateTaxationSection } from "../lib/masters/taxationMasters"
+import { comparePropertyIds, compareWardThenParcel, resolvePropertyId } from "../lib/propertyId"
+import { matchesSurveySearch } from "../lib/surveySearch"
 import {
-  addressTenantContext,
   isValidIndianOwnerMobile,
-  normalizeAddressFields,
   normalizeOwners,
   primaryOwnerMobile,
   validateAddressSection,
@@ -25,11 +28,6 @@ import {
 import { hasCapability } from "../shared/capabilities"
 import { fieldSurveyAccess, isOwnScopeSurveyor } from "../shared/fieldAccess"
 import { canReadWard, clientError } from "../shared/helpers"
-import { validateGps } from "../lib/gpsValidation"
-import { matchesSurveySearch } from "../lib/surveySearch"
-import { comparePropertyIds, compareWardThenParcel, resolvePropertyId } from "../lib/propertyId"
-import { validateServicesSection } from "../lib/masters/serviceMasters"
-import { loadAllowedTaxZoneSet, normalizeTaxationFields, validateTaxationSection } from "../lib/masters/taxationMasters"
 import { assertMunicipalityInScope, resolveTenantScope } from "../shared/tenancy"
 import { DRAFT_SURVEY_DEFAULTS } from "./validators"
 
@@ -184,7 +182,10 @@ export async function loadMunicipalityCodes(
   return codes
 }
 
-export function enrichSurveyPropertyIds(rows: Doc<"surveys">[], codes: Map<Id<"municipalities">, string>): Doc<"surveys">[] {
+export function enrichSurveyPropertyIds(
+  rows: Doc<"surveys">[],
+  codes: Map<Id<"municipalities">, string>
+): Doc<"surveys">[] {
   return rows.map((row) => ({
     ...row,
     propertyId: resolvePropertyId(row, codes.get(row.municipalityId) ?? "") ?? row.propertyId,
@@ -558,7 +559,7 @@ export function wardNumbersMatch(rowWard: string, filterWard: string): boolean {
   return !Number.isNaN(a) && !Number.isNaN(b) && a === b
 }
 
-function applySurveyListFilters(
+export function applySurveyListFilters(
   rows: Doc<"surveys">[],
   args: {
     status?: Doc<"surveys">["status"]
@@ -603,7 +604,56 @@ function applySurveyListFilters(
 
 /** Max rows loaded before in-memory filter + manual pagination (matches export scope). */
 export const LIST_PAGINATED_SCOPE_LIMIT = 5000
+export const LIST_PAGINATED_PAGE_BUFFER = 100
 export const COMMAND_CENTER_WARD_SCAN_LIMIT = 2500
+
+export type SurveyListFilterArgs = {
+  status?: Doc<"surveys">["status"]
+  qcStatus?: Doc<"surveys">["qcStatus"]
+  qcStatuses?: Doc<"surveys">["qcStatus"][]
+  wardNo?: string
+  districtId?: Id<"districts">
+  municipalityId?: Id<"municipalities">
+  surveyorId?: Id<"users">
+  fromMs?: number
+  toMs?: number
+  searchTerm?: string
+  parcelSharedOnly?: boolean
+  sortBy?: "propertyId" | "updated"
+}
+
+export function listPaginatedRequiresFullScan(args: SurveyListFilterArgs): boolean {
+  return Boolean(
+    args.searchTerm?.trim() ||
+    args.parcelSharedOnly ||
+    args.fromMs !== undefined ||
+    args.toMs !== undefined ||
+    (args.qcStatuses && args.qcStatuses.length > 0)
+  )
+}
+
+/** True when a single-ULB updated sort can use index order + take instead of a wide collect. */
+export function listPaginatedUsesIndexedTake(args: SurveyListFilterArgs): boolean {
+  return Boolean(
+    args.municipalityId && !listPaginatedRequiresFullScan(args) && !args.wardNo && resolveListSort(args) === "updated"
+  )
+}
+
+export function resolveListPaginatedScanLimit(options: {
+  offset: number
+  numItems: number
+  statsTotal: number | null
+  requiresFullScan: boolean
+}): number {
+  const needed = options.offset + options.numItems + LIST_PAGINATED_PAGE_BUFFER
+  if (options.requiresFullScan) {
+    return LIST_PAGINATED_SCOPE_LIMIT
+  }
+  if (options.statsTotal !== null) {
+    return Math.min(LIST_PAGINATED_SCOPE_LIMIT, needed)
+  }
+  return Math.min(LIST_PAGINATED_SCOPE_LIMIT, needed)
+}
 
 export function parseListOffset(cursor: string | null | undefined): number {
   if (!cursor) return 0
@@ -645,18 +695,6 @@ async function querySurveysByDistrict(
     .query("surveys")
     .withIndex("by_district_status", (q) => q.eq("districtId", districtId))
     .take(maxRows)
-}
-
-export type SurveyListFilterArgs = {
-  status?: Doc<"surveys">["status"]
-  qcStatus?: Doc<"surveys">["qcStatus"]
-  qcStatuses?: Doc<"surveys">["qcStatus"][]
-  wardNo?: string
-  districtId?: Id<"districts">
-  municipalityId?: Id<"municipalities">
-  surveyorId?: Id<"users">
-  fromMs?: number
-  toMs?: number
 }
 
 /** Load rows matching list filters using indexes, then scope + filter in memory. */

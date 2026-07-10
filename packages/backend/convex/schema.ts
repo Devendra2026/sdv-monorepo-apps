@@ -286,6 +286,8 @@ export default defineSchema({
   /** qcDecisions — formal approve/reject events. One row per decision. */
   qcDecisions: defineTable({
     surveyId: v.id("surveys"),
+    /** Denormalized for scoped QC trend queries without hydrating surveys. */
+    municipalityId: v.optional(v.id("municipalities")),
     reviewerId: v.id("users"),
     decision: v.union(v.literal("approve"), v.literal("reject")),
     comment: v.optional(v.string()),
@@ -294,7 +296,8 @@ export default defineSchema({
   })
     .index("by_survey", ["surveyId"])
     .index("by_reviewer", ["reviewerId"])
-    .index("by_reviewer_decided", ["reviewerId", "decidedAt"]),
+    .index("by_reviewer_decided", ["reviewerId", "decidedAt"])
+    .index("by_municipality_decided", ["municipalityId", "decidedAt"]),
 
   /**
    * masters — every dropdown the mobile shows. Categorised so the bundle
@@ -456,6 +459,9 @@ export default defineSchema({
     qcApproved: v.number(),
     qcRejected: v.number(),
     qcPending: v.number(),
+    /** Sum of completionPct across surveys — for avg without full scan. */
+    completionPctSum: v.optional(v.number()),
+    completionPctCount: v.optional(v.number()),
   }).index("by_municipality", ["municipalityId"]),
 
   /** Per-municipality daily rollups for "today" and "submitted today" KPIs. */
@@ -465,4 +471,37 @@ export default defineSchema({
     created: v.number(),
     submitted: v.number(),
   }).index("by_municipality_date", ["municipalityId", "dateKey"]),
+
+  /** Per-ward survey counters for command-center ward tables. */
+  surveyWardStats: defineTable({
+    municipalityId: v.id("municipalities"),
+    wardNo: v.string(),
+    city: v.string(),
+    total: v.number(),
+    drafts: v.number(),
+    submitted: v.number(),
+    qcApproved: v.number(),
+    qcRejected: v.number(),
+    qcPending: v.number(),
+    activeSurveyorIds: v.array(v.id("users")),
+    /** First pending submitted survey in ward (QC registry deep-link). */
+    firstPendingSurveyId: v.optional(v.id("surveys")),
+  })
+    .index("by_municipality", ["municipalityId"])
+    .index("by_municipality_ward", ["municipalityId", "wardNo"]),
+
+  /** Per-surveyor survey counters for analytics breakdown. */
+  surveySurveyorStats: defineTable({
+    surveyorId: v.id("users"),
+    municipalityId: v.id("municipalities"),
+    districtId: v.id("districts"),
+    total: v.number(),
+    drafts: v.number(),
+    submitted: v.number(),
+    qcApproved: v.number(),
+    qcRejected: v.number(),
+  })
+    .index("by_surveyor", ["surveyorId"])
+    .index("by_municipality", ["municipalityId"])
+    .index("by_surveyor_municipality", ["surveyorId", "municipalityId"]),
 })

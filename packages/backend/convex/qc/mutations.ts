@@ -127,6 +127,7 @@ export const decide = mutation({
     await Promise.all([
       ctx.db.insert("qcDecisions", {
         surveyId: args.surveyId,
+        municipalityId: survey.municipalityId,
         reviewerId: me._id,
         decision: args.decision,
         comment: args.comment,

@@ -6,6 +6,7 @@ import type { Doc } from "../_generated/dataModel"
 import { query } from "../_generated/server"
 import { normalizeParcelKey, resolvePropertyId } from "../lib/propertyId"
 import { computeQcWardAggregates } from "../lib/qcWardStats"
+import { loadWardStatsForScope } from "../lib/surveyRollupStats"
 import { loadScopeStatsSummary } from "../lib/surveyScopeStats"
 import { requireCapability } from "../shared/capabilities"
 import { assertCanAccessSurvey, fieldSurveyAccess } from "../shared/fieldAccess"
@@ -16,11 +17,10 @@ import {
   tenantDistrictIds,
   tenantMunicipalityIds,
 } from "../shared/tenancy"
-import { collectSurveysForListPaginated } from "../surveys/helpers"
+import { collectSurveysForListPaginated, COMMAND_CENTER_WARD_SCAN_LIMIT } from "../surveys/helpers"
 import {
-  COMMAND_CENTER_WARD_SCAN_LIMIT,
-  MAX_PARCEL_SIBLING_RESULTS,
   commandCenterStatsShape,
+  MAX_PARCEL_SIBLING_RESULTS,
   parcelSiblingEntry,
   qcRemarkWithAuthorShape,
   wardNumbersMatch,
@@ -60,6 +60,51 @@ export const commandCenterStats = query({
     })()
 
     const useStatsFastPath = !args.wardNo && args.fromMs === undefined && args.toMs === undefined
+    const useWardRollup = args.fromMs === undefined && args.toMs === undefined
+
+    const wardStatsFromRollup = useWardRollup
+      ? (
+          await loadWardStatsForScope(ctx, me, {
+            districtId: args.districtId,
+            municipalityId: args.municipalityId,
+            wardNo: args.wardNo,
+          })
+        ).map((w) => {
+          const decided = w.qcPending + w.qcApproved + w.qcRejected
+          return {
+            wardNo: w.wardNo,
+            municipalityId: w.municipalityId,
+            city: w.city,
+            pending: w.qcPending,
+            approved: w.qcApproved,
+            rejected: w.qcRejected,
+            drafts: w.drafts,
+            total: w.total,
+            qcCompletionPct: decided > 0 ? Math.round((w.qcApproved / decided) * 100) : 0,
+            firstPendingId: w.firstPendingSurveyId,
+          }
+        })
+      : null
+
+    if (useStatsFastPath) {
+      const summary = await loadScopeStatsSummary(ctx, me, todayMs, {
+        districtId: args.districtId,
+        municipalityId: args.municipalityId,
+      })
+      if (summary && wardStatsFromRollup) {
+        const decided = summary.qcPending + summary.qcApproved + summary.qcRejected
+        return {
+          pending: summary.qcPending,
+          approved: summary.qcApproved,
+          rejected: summary.qcRejected,
+          drafts: summary.drafts,
+          submittedToday: summary.submittedToday,
+          submitted: summary.submitted,
+          qcCompletionPct: decided > 0 ? Math.round((summary.qcApproved / decided) * 100) : 0,
+          wardStats: wardStatsFromRollup,
+        }
+      }
+    }
 
     const rows = await collectSurveysForListPaginated(
       ctx,
@@ -83,7 +128,7 @@ export const commandCenterStats = query({
     }
 
     const filtered = rows.filter((r) => inDateRange(r.submittedAt, r._creationTime))
-    const wardStats = computeQcWardAggregates(filtered)
+    const resolvedWardStats = wardStatsFromRollup ?? computeQcWardAggregates(filtered)
 
     if (useStatsFastPath) {
       const summary = await loadScopeStatsSummary(ctx, me, todayMs, {
@@ -100,7 +145,7 @@ export const commandCenterStats = query({
           submittedToday: summary.submittedToday,
           submitted: summary.submitted,
           qcCompletionPct: decided > 0 ? Math.round((summary.qcApproved / decided) * 100) : 0,
-          wardStats,
+          wardStats: resolvedWardStats,
         }
       }
     }
@@ -123,7 +168,7 @@ export const commandCenterStats = query({
       ).length,
       submitted: filtered.filter((r) => r.status === "submitted").length,
       qcCompletionPct,
-      wardStats,
+      wardStats: resolvedWardStats,
     }
   },
 })

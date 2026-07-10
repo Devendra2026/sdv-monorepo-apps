@@ -5,7 +5,13 @@ import { query } from "../_generated/server"
 import { presentFloorRow } from "../lib/masters/areaMasters"
 import { normalizeParcelKey, resolvePropertyId } from "../lib/propertyId"
 import { normalizeWardNo } from "../lib/qcWardStats"
-import { loadScopeStatsSummary, resolveListTotalFromStats, scopeStatsFastPathEligible } from "../lib/surveyScopeStats"
+import { loadWardStatsForScope } from "../lib/surveyRollupStats"
+import {
+  loadScopeCompletionPct,
+  loadScopeStatsSummary,
+  resolveListTotalFromStats,
+  scopeStatsFastPathEligible,
+} from "../lib/surveyScopeStats"
 import { computeSurveyWardAggregates } from "../lib/surveyWardStats"
 import { qcStatus, surveyStatus } from "../schema"
 import { assertCanAccessSurvey, fieldSurveyAccess, querySurveysInFieldScope } from "../shared/fieldAccess"
@@ -18,13 +24,17 @@ import {
 } from "../shared/tenancy"
 import {
   COMMAND_CENTER_WARD_SCAN_LIMIT,
-  LIST_PAGINATED_SCOPE_LIMIT,
+  LIST_PAGINATED_PAGE_BUFFER,
+  applySurveyListFilters,
   collectSurveysForListPaginated,
   enrichSurveyPropertyIds,
   enrichSurveyorNames,
   filterRowsBySearchTerm,
+  listPaginatedRequiresFullScan,
+  listPaginatedUsesIndexedTake,
   loadMunicipalityCodes,
   parseListOffset,
+  resolveListPaginatedScanLimit,
   resolveListSort,
   sortSurveyRows,
   wardNumbersMatch,
@@ -157,6 +167,7 @@ export const listPaginated = query({
 
     const offset = parseListOffset(args.paginationOpts.cursor)
     const numItems = args.paginationOpts.numItems
+    const requiresFullScan = listPaginatedRequiresFullScan(args)
     const statsTotal =
       !args.parcelSharedOnly && scopeStatsFastPathEligible(args)
         ? await resolveListTotalFromStats(ctx, me, args.nowMs, {
@@ -166,12 +177,34 @@ export const listPaginated = query({
             qcStatus: args.qcStatus,
           })
         : null
-    const scanLimit =
-      statsTotal !== null
-        ? Math.min(LIST_PAGINATED_SCOPE_LIMIT, Math.max(statsTotal, offset + numItems + 50))
-        : LIST_PAGINATED_SCOPE_LIMIT
+    const scanLimit = resolveListPaginatedScanLimit({
+      offset,
+      numItems,
+      statsTotal,
+      requiresFullScan,
+    })
 
-    let filtered = await collectSurveysForListPaginated(ctx, me, args, scope, muniIds, access, scanLimit)
+    let filtered: Doc<"surveys">[]
+
+    if (listPaginatedUsesIndexedTake(args) && args.municipalityId) {
+      const takeCount = Math.min(scanLimit, offset + numItems + LIST_PAGINATED_PAGE_BUFFER)
+      const rows = args.status
+        ? await ctx.db
+            .query("surveys")
+            .withIndex("by_municipality_status", (q) =>
+              q.eq("municipalityId", args.municipalityId!).eq("status", args.status!)
+            )
+            .order("desc")
+            .take(takeCount)
+        : await ctx.db
+            .query("surveys")
+            .withIndex("by_municipality_status", (q) => q.eq("municipalityId", args.municipalityId!))
+            .order("desc")
+            .take(takeCount)
+      filtered = applySurveyListFilters(rows, args, me, muniIds)
+    } else {
+      filtered = await collectSurveysForListPaginated(ctx, me, args, scope, muniIds, access, scanLimit)
+    }
 
     if (args.parcelSharedOnly) {
       filtered = filterParcelSharedSurveys(filtered)
@@ -252,16 +285,72 @@ export const commandCenterStats = query({
 
     const useStatsFastPath =
       !args.wardNo && args.fromMs === undefined && args.toMs === undefined && !args.status && !args.qcStatus
+    const useWardRollup = args.fromMs === undefined && args.toMs === undefined && !args.status && !args.qcStatus
 
-    const rows = await collectSurveysForListPaginated(
-      ctx,
-      me,
-      listArgs,
-      scope,
-      muniIds,
-      access,
-      COMMAND_CENTER_WARD_SCAN_LIMIT
-    )
+    async function buildWardStatsFromRollup() {
+      const wardRows = await loadWardStatsForScope(ctx, me, {
+        districtId: args.districtId,
+        municipalityId: args.municipalityId,
+        wardNo: args.wardNo,
+      })
+      const allSurveyorIds = [...new Set(wardRows.flatMap((w) => w.activeSurveyorIds))]
+      const surveyors = await Promise.all(allSurveyorIds.map((id) => ctx.db.get("users", id)))
+      const nameById = new Map<Id<"users">, string>()
+      for (const s of surveyors) {
+        if (s) nameById.set(s._id, s.name)
+      }
+      return wardRows.map((w) => {
+        const names = w.activeSurveyorIds.map((id) => nameById.get(id)).filter((n): n is string => Boolean(n))
+        return {
+          wardNo: w.wardNo,
+          municipalityId: w.municipalityId,
+          city: w.city,
+          total: w.total,
+          drafts: w.drafts,
+          submitted: w.submitted,
+          qcApproved: w.qcApproved,
+          activeSurveyorCount: w.activeSurveyorIds.length,
+          activeSurveyorNames: names.slice(0, 5),
+        }
+      })
+    }
+
+    async function buildWardStatsFromLiveScan() {
+      const rows = await collectSurveysForListPaginated(
+        ctx,
+        me,
+        listArgs,
+        scope,
+        muniIds,
+        access,
+        COMMAND_CENTER_WARD_SCAN_LIMIT
+      )
+      const filtered = rows.filter((r) => inDateRange(r.submittedAt, r._creationTime))
+      const wardAggregates = computeSurveyWardAggregates(filtered)
+      const allSurveyorIds = [...new Set(wardAggregates.flatMap((w) => w.activeSurveyorIds))]
+      const surveyors = await Promise.all(allSurveyorIds.map((id) => ctx.db.get("users", id)))
+      const nameById = new Map<Id<"users">, string>()
+      for (const s of surveyors) {
+        if (s) nameById.set(s._id, s.name)
+      }
+      return {
+        wardStats: wardAggregates.map((w) => {
+          const names = w.activeSurveyorIds.map((id) => nameById.get(id)).filter((n): n is string => Boolean(n))
+          return {
+            wardNo: w.wardNo,
+            municipalityId: w.municipalityId,
+            city: w.city,
+            total: w.total,
+            drafts: w.drafts,
+            submitted: w.submitted,
+            qcApproved: w.qcApproved,
+            activeSurveyorCount: w.activeSurveyorIds.length,
+            activeSurveyorNames: names.slice(0, 5),
+          }
+        }),
+        filtered,
+      }
+    }
 
     const inDateRange = (submittedAt: number | undefined, creationTime: number) => {
       const ts = submittedAt ?? creationTime
@@ -270,30 +359,42 @@ export const commandCenterStats = query({
       return true
     }
 
-    const filtered = rows.filter((r) => inDateRange(r.submittedAt, r._creationTime))
-
-    const wardAggregates = computeSurveyWardAggregates(filtered)
-    const allSurveyorIds = [...new Set(wardAggregates.flatMap((w) => w.activeSurveyorIds))]
-    const surveyors = await Promise.all(allSurveyorIds.map((id) => ctx.db.get(id)))
-    const nameById = new Map<Id<"users">, string>()
-    for (const s of surveyors) {
-      if (s) nameById.set(s._id, s.name)
+    if (useStatsFastPath && useWardRollup) {
+      const [summary, wardStats, surveyCompletionPct] = await Promise.all([
+        loadScopeStatsSummary(ctx, me, todayMs, {
+          districtId: args.districtId,
+          municipalityId: args.municipalityId,
+        }),
+        buildWardStatsFromRollup(),
+        loadScopeCompletionPct(ctx, me, {
+          districtId: args.districtId,
+          municipalityId: args.municipalityId,
+        }),
+      ])
+      if (summary) {
+        return {
+          total: summary.total,
+          drafts: summary.drafts,
+          submitted: summary.submitted,
+          submittedToday: summary.submittedToday,
+          qcApproved: summary.qcApproved,
+          qcPending: summary.qcPending,
+          qcRejected: summary.qcRejected,
+          surveyCompletionPct: surveyCompletionPct ?? 0,
+          wardStats,
+        }
+      }
     }
 
-    const wardStats = wardAggregates.map((w) => {
-      const names = w.activeSurveyorIds.map((id) => nameById.get(id)).filter((n): n is string => Boolean(n))
-      return {
-        wardNo: w.wardNo,
-        municipalityId: w.municipalityId,
-        city: w.city,
-        total: w.total,
-        drafts: w.drafts,
-        submitted: w.submitted,
-        qcApproved: w.qcApproved,
-        activeSurveyorCount: w.activeSurveyorIds.length,
-        activeSurveyorNames: names.slice(0, 5),
-      }
-    })
+    let wardStats
+    let filtered: Doc<"surveys">[] = []
+    if (useWardRollup) {
+      wardStats = await buildWardStatsFromRollup()
+    } else {
+      const live = await buildWardStatsFromLiveScan()
+      wardStats = live.wardStats
+      filtered = live.filtered
+    }
 
     if (useStatsFastPath) {
       const summary = await loadScopeStatsSummary(ctx, me, todayMs, {
@@ -314,6 +415,19 @@ export const commandCenterStats = query({
           wardStats,
         }
       }
+    }
+
+    if (filtered.length === 0) {
+      const rows = await collectSurveysForListPaginated(
+        ctx,
+        me,
+        listArgs,
+        scope,
+        muniIds,
+        access,
+        COMMAND_CENTER_WARD_SCAN_LIMIT
+      )
+      filtered = rows.filter((r) => inDateRange(r.submittedAt, r._creationTime))
     }
 
     let drafts = 0

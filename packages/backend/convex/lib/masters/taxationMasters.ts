@@ -135,21 +135,28 @@ export function normalizeTaxRateZone(value?: string): string {
   return resolveTaxRateZoneKey(trimmed)
 }
 
-/** Allowed tax zone keys: defaults, DB masters, and their canonical aliases. */
-export function buildAllowedTaxZoneSet(masterValues?: string[]): Set<string> {
+/** Allowed tax zone keys: defaults, DB masters, labels, and their canonical aliases. */
+export function buildAllowedTaxZoneSet(masterValues?: string[], masterLabels?: string[]): Set<string> {
   const allowed = new Set(TAX_RATE_ZONES.map((o) => o.value))
   const values = masterValues?.length ? masterValues : TAX_RATE_ZONES.map((o) => o.value)
+  const labels = masterLabels?.length ? masterLabels : TAX_RATE_ZONES.map((o) => o.label)
   for (const value of values) {
     allowed.add(value)
     allowed.add(normalizeTaxRateZone(value))
+  }
+  for (const label of labels) {
+    allowed.add(label)
+    allowed.add(normalizeTaxRateZone(label))
   }
   return allowed
 }
 
 export async function loadAllowedTaxZoneSet(ctx: QueryCtx | MutationCtx): Promise<Set<string>> {
   const rows = await loadActiveMastersByCategory(ctx, "tax_rate_zone")
-  const dbValues = rows.map((m) => m.value)
-  return buildAllowedTaxZoneSet(dbValues)
+  return buildAllowedTaxZoneSet(
+    rows.map((m) => m.value),
+    rows.map((m) => m.label)
+  )
 }
 
 export function normalizeTaxationFields<
@@ -219,9 +226,12 @@ export function validateTaxationSection(
   }
 
   const taxRateZone = normalizeTaxRateZone(input.taxRateZone)
-  if (strict && (!taxRateZone || !taxZoneSet.has(taxRateZone))) {
+  const rawTaxRateZone = input.taxRateZone?.trim() ?? ""
+  const taxZoneValid =
+    !!taxRateZone && (taxZoneSet.has(taxRateZone) || (!!rawTaxRateZone && taxZoneSet.has(rawTaxRateZone)))
+  if (strict && !taxZoneValid) {
     details.taxRateZone = ["Select a valid road size tax zone"]
-  } else if (taxRateZone && !taxZoneSet.has(taxRateZone)) {
+  } else if (taxRateZone && !taxZoneValid) {
     details.taxRateZone = ["Select a valid road size tax zone"]
   }
 

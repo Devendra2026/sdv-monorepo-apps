@@ -2,7 +2,7 @@
 function normalizeTaxZoneToken(value: string): string {
   return value
     .toLowerCase()
-    .replace(/[\u2013\u2014-]/g, "_")
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212-]/g, "_")
     .replace(/\s+/g, "_")
     .replace(/_+/g, "_")
     .replace(/^_|_$/g, "")

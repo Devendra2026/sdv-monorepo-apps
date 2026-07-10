@@ -10,6 +10,11 @@ import {
   tenantMunicipalityIds,
 } from "../shared/tenancy"
 import {
+  recordWardSurveyorStatsInsert,
+  recordWardSurveyorStatsRemove,
+  recordWardSurveyorStatsUpdate,
+} from "./surveyRollupStats"
+import {
   computeDailyTrendFromSlice,
   computeDashboardCountsFromSlice,
   type DashboardCounts,
@@ -289,10 +294,9 @@ export async function loadDashboardCountsForHome(
   }
 
   const wardScoped = userRequiresWardScopedSurveyCounts(me)
-  const parts: DashboardCountPart[] = []
-  for (const municipalityId of scopedMuniIds) {
-    parts.push(await loadMunicipalityDashboardCounts(ctx, me, municipalityId, todayMs, wardScoped))
-  }
+  const parts = await Promise.all(
+    scopedMuniIds.map((municipalityId) => loadMunicipalityDashboardCounts(ctx, me, municipalityId, todayMs, wardScoped))
+  )
 
   return mergeDashboardCountParts(parts)
 }
@@ -357,14 +361,8 @@ async function loadDailyQcTrendFromDecisions(
       .withIndex("by_reviewer_decided", (q) => q.eq("reviewerId", reviewer._id).gte("decidedAt", startMs))
       .take(DASHBOARD_QC_TREND_DECISIONS_CAP)
 
-    const surveyIds = [...new Set(decisions.map((d) => d.surveyId))]
-    const surveys = await Promise.all(surveyIds.map((id) => ctx.db.get("surveys", id)))
-    const muniBySurvey = new Map(
-      surveys.filter((row): row is Doc<"surveys"> => row !== null).map((row) => [row._id, row.municipalityId])
-    )
-
     for (const decision of decisions) {
-      const municipalityId = muniBySurvey.get(decision.surveyId)
+      const municipalityId = decision.municipalityId
       if (!municipalityId || !scopedMunis.has(municipalityId)) continue
       const bucket = buckets.get(formatDateKey(decision.decidedAt))
       if (!bucket) continue
@@ -577,9 +575,32 @@ function dateKeysForSurvey(survey: SurveySnapshot): string[] {
   return [...keys]
 }
 
-async function applySurveySnapshot(ctx: MutationCtx, survey: SurveySnapshot, sign: 1 | -1) {
+async function applyCompletionPctDelta(
+  ctx: MutationCtx,
+  municipalityId: Id<"municipalities">,
+  completionPct: number,
+  sign: 1 | -1
+) {
+  const row = await getOrCreateMunicipalityStats(ctx, municipalityId)
+  const sum = (row.completionPctSum ?? 0) + sign * completionPct
+  const count = (row.completionPctCount ?? 0) + sign * 1
+  await ctx.db.patch(row._id, {
+    completionPctSum: Math.max(0, sum),
+    completionPctCount: Math.max(0, count),
+  })
+}
+
+async function applySurveySnapshot(
+  ctx: MutationCtx,
+  survey: SurveySnapshot & { completionPct?: number },
+  sign: 1 | -1
+) {
   const muniDelta = municipalityBucketFor(survey)
   await applyMunicipalityDelta(ctx, survey.municipalityId, muniDelta, sign)
+
+  if (survey.completionPct !== undefined) {
+    await applyCompletionPctDelta(ctx, survey.municipalityId, survey.completionPct, sign)
+  }
 
   for (const dateKey of dateKeysForSurvey(survey)) {
     const dailyDelta = dailyBucketFor(survey, dateKey)
@@ -591,11 +612,13 @@ async function applySurveySnapshot(ctx: MutationCtx, survey: SurveySnapshot, sig
 /** Record a newly inserted survey in denormalized stats tables. */
 export async function recordSurveyStatsInsert(ctx: MutationCtx, survey: Doc<"surveys">) {
   await applySurveySnapshot(ctx, survey, 1)
+  await recordWardSurveyorStatsInsert(ctx, survey)
 }
 
 /** Remove a deleted survey from denormalized stats tables. */
 export async function recordSurveyStatsRemove(ctx: MutationCtx, survey: Doc<"surveys">) {
   await applySurveySnapshot(ctx, survey, -1)
+  await recordWardSurveyorStatsRemove(ctx, survey)
 }
 
 /** Apply a survey update that may change status, qcStatus, or municipality. */
@@ -603,6 +626,7 @@ export async function recordSurveyStatsUpdate(ctx: MutationCtx, before: Doc<"sur
   if (before.municipalityId !== after.municipalityId) {
     await applySurveySnapshot(ctx, before, -1)
     await applySurveySnapshot(ctx, after, 1)
+    await recordWardSurveyorStatsUpdate(ctx, before, after)
     return
   }
 
@@ -633,6 +657,15 @@ export async function recordSurveyStatsUpdate(ctx: MutationCtx, before: Doc<"sur
     if (dailyDelta.created === 0 && dailyDelta.submitted === 0) continue
     await applyDailyDelta(ctx, after.municipalityId, dateKey, dailyDelta, 1)
   }
+
+  const beforePct = before.completionPct
+  const afterPct = after.completionPct
+  if (beforePct !== afterPct) {
+    if (beforePct !== undefined) await applyCompletionPctDelta(ctx, after.municipalityId, beforePct, -1)
+    if (afterPct !== undefined) await applyCompletionPctDelta(ctx, after.municipalityId, afterPct, 1)
+  }
+
+  await recordWardSurveyorStatsUpdate(ctx, before, after)
 }
 
 export type ScopeStatsFilters = {
@@ -844,6 +877,36 @@ export async function resolveScopedMunicipalityIds(
   return scopedMuniIds.length > 0 ? scopedMuniIds : null
 }
 
+/** Average survey completion % from denormalized municipality stats (no survey scan). */
+export async function loadScopeCompletionPct(
+  ctx: QueryCtx,
+  me: Doc<"users">,
+  filters: ScopeStatsFilters = {}
+): Promise<number | null> {
+  const scopedMuniIds = await resolveScopedMunicipalityIds(ctx, me, filters)
+  if (!scopedMuniIds) return null
+
+  let sum = 0
+  let count = 0
+  const rows = await Promise.all(
+    scopedMuniIds.map((municipalityId) =>
+      ctx.db
+        .query("surveyMunicipalityStats")
+        .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
+        .unique()
+    )
+  )
+
+  for (const row of rows) {
+    if (!row) return null
+    sum += row.completionPctSum ?? 0
+    count += row.completionPctCount ?? 0
+  }
+
+  if (count === 0) return 0
+  return Math.round(sum / count)
+}
+
 async function loadMunicipalityStatsRollups(
   ctx: QueryCtx,
   me: Doc<"users">,
@@ -899,8 +962,9 @@ export async function loadScopeStatsSummary(
   }
 
   for (let index = 0; index < scopedMuniIds.length; index++) {
+    const municipalityId = scopedMuniIds[index]!
     if (userRequiresWardScopedSurveyCounts(me)) {
-      const today = await computeTodayMetricsForMunicipality(ctx, me, scopedMuniIds[index]!, todayMs)
+      const today = await computeTodayMetricsForMunicipality(ctx, me, municipalityId, todayMs)
       totals.todayCreated += today.created
       totals.submittedToday += today.submitted
       continue
@@ -910,11 +974,11 @@ export async function loadScopeStatsSummary(
     if (row) {
       totals.todayCreated += row.created
       totals.submittedToday += row.submitted
-      continue
+    } else {
+      const today = await computeTodayMetricsForMunicipality(ctx, me, municipalityId, todayMs)
+      totals.todayCreated += today.created
+      totals.submittedToday += today.submitted
     }
-    const today = await computeTodayMetricsForMunicipality(ctx, me, scopedMuniIds[index]!, todayMs)
-    totals.todayCreated += today.created
-    totals.submittedToday += today.submitted
   }
 
   return totals
