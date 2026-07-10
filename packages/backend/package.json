@@ -20,7 +20,7 @@
     "svix": "^1.96.1"
   },
   "devDependencies": {
-    "@types/node": "^22.20.1",
+    "@types/node": "^26.1.1",
     "@workspace/typescript-config": "workspace:*",
     "typescript": "^7.0.2"
   }
