@@ -204,7 +204,11 @@ importers:
         specifier: workspace:*
         version: link:../typescript-config
 
-  packages/typescript-config: {}
+  packages/typescript-config:
+    devDependencies:
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
 
   packages/ui:
     dependencies:
