@@ -5,7 +5,7 @@ import { RoleGate } from "@/components/shared/role-gate"
 import { SurveyPageSkeleton } from "@/components/shared/survey-route-skeleton"
 import { Suspense } from "react"
 
-export function SurveyRegistryFallback({ nowMs: _nowMs }: { nowMs: number }) {
+export function SurveyRegistryFallback({ nowMs }: { nowMs: number }) {
   return (
     <RoleGate
       mode="page"
@@ -14,7 +14,7 @@ export function SurveyRegistryFallback({ nowMs: _nowMs }: { nowMs: number }) {
       redirectTo="/qc"
     >
       <Suspense fallback={<SurveyPageSkeleton variant="registry" />}>
-        <SurveyRegistryContent />
+        <SurveyRegistryContent nowMs={nowMs} />
       </Suspense>
     </RoleGate>
   )

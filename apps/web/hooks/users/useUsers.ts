@@ -69,6 +69,6 @@ export function useUpdateUser() {
 }
 /** Catalog of districts/ULBs/wards for the approval & assignment forms. */
 export function useTenantCatalog() {
-  const allowed = useHasCapability("users.assignTenant")
+  const allowed = useHasCapability("tenants.manage")
   return useConvexQuery(api.tenants.queries.listForAdmin, allowed ? {} : "skip")
 }

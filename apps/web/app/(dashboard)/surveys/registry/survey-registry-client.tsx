@@ -8,7 +8,7 @@ import { usePreloadedQuery, type Preloaded } from "convex/react"
 import { Suspense } from "react"
 
 export function SurveyRegistryClient({
-  nowMs: _nowMs,
+  nowMs,
   preloadedRegistry,
 }: {
   nowMs: number
@@ -24,7 +24,7 @@ export function SurveyRegistryClient({
       redirectTo="/qc"
     >
       <Suspense fallback={<SurveyPageSkeleton variant="registry" />}>
-        <SurveyRegistryContent seedRegistryPage={seedRegistryPage} />
+        <SurveyRegistryContent seedRegistryPage={seedRegistryPage} nowMs={nowMs} />
       </Suspense>
     </RoleGate>
   )

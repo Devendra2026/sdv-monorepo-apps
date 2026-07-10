@@ -8,7 +8,7 @@ import type { FunctionReturnType } from "convex/server"
 export type TenantAdminTree = FunctionReturnType<typeof api.tenants.queries.listForAdmin>
 
 export function useTenantAdmin(opts?: { enabled?: boolean }) {
-  const allowed = useHasCapability("masters.manage") && (opts?.enabled ?? true)
+  const allowed = useHasCapability("tenants.manage") && (opts?.enabled ?? true)
   return useQuery(api.tenants.queries.listForAdmin, allowed ? {} : "skip")
 }
 

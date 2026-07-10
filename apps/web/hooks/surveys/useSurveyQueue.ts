@@ -53,6 +53,8 @@ export type UseSurveyQueueOptions = {
   seedStats?: CommandCenterStats
   /** Hydrated registry page from a server preload (default filters only). */
   seedRegistryPage?: RegistryPage
+  /** Server-rendered clock seed for deterministic query args. */
+  seedNowMs?: number
 }
 
 export function useSurveyQueue(options: UseSurveyQueueOptions = {}) {
@@ -61,7 +63,7 @@ export function useSurveyQueue(options: UseSurveyQueueOptions = {}) {
   const { scope, setScope, patchScope, scopeReady } = useSurveyWorkScope()
   const { masters } = useMasters()
   const authReady = useConvexAuthReady()
-  const nowMs = useClientNowMs()
+  const nowMs = useClientNowMs(options.seedNowMs)
 
   const queryScope = useMemo(() => {
     if (masters) {
@@ -136,7 +138,7 @@ export function useSurveyQueue(options: UseSurveyQueueOptions = {}) {
 
   const serverStats = useConvexQuery(
     api.surveys.queries.commandCenterStats,
-    authReady && scopeReady && mode === "command"
+    authReady && scopeReady && mode === "command" && Number.isFinite(nowMs)
       ? {
           wardNo: scopeFilters.wardNo,
           districtId: scopeFilters.districtId as Id<"districts"> | undefined,
@@ -161,7 +163,8 @@ export function useSurveyQueue(options: UseSurveyQueueOptions = {}) {
       searchTerm: surveyorSearchTerm,
     },
     pageSize,
-    scopeReady && mode === "registry"
+    scopeReady && mode === "registry",
+    options.seedNowMs
   )
 
   const isLoading =

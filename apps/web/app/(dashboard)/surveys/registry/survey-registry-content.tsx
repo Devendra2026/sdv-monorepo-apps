@@ -19,8 +19,10 @@ import { useEffect, useMemo, useState } from "react"
 
 export function SurveyRegistryContent({
   seedRegistryPage,
+  nowMs,
 }: {
   seedRegistryPage?: FunctionReturnType<typeof api.surveys.queries.listPaginated>
+  nowMs?: number
 }) {
   const searchParams = useSearchParams()
   const wardFromUrl = searchParams.get("wardNo") ?? undefined
@@ -51,7 +53,12 @@ export function SurveyRegistryContent({
     canGoNext,
     goNext,
     goPrev,
-  } = useSurveyQueue({ mode: "registry", initialTab: tabFromUrl ?? "all", seedRegistryPage })
+  } = useSurveyQueue({
+    mode: "registry",
+    initialTab: tabFromUrl ?? "all",
+    seedRegistryPage,
+    seedNowMs: nowMs,
+  })
 
   useEffect(() => {
     if (!wardFromUrl && !muniFromUrl && !districtFromUrl) return

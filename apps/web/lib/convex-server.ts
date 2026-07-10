@@ -37,9 +37,22 @@ export function isUserNotProvisionedError(error: unknown): boolean {
   return message.includes("USER_NOT_PROVISIONED") || message.includes("still being set up")
 }
 
+/** True when Convex rejected the request because no valid auth was present. */
+export function isConvexUnauthorizedError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const data = (error as { data?: { code?: string } }).data
+  if (data?.code === "UNAUTHORIZED") return true
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes("UNAUTHORIZED") || message.includes("Authentication required")
+}
+
 /** Preload errors that should fall back to client queries without logging as failures. */
 export function isPreloadSkippableError(error: unknown): boolean {
-  return error instanceof ClerkConvexTokenUnavailableError || isUserNotProvisionedError(error)
+  return (
+    error instanceof ClerkConvexTokenUnavailableError ||
+    isUserNotProvisionedError(error) ||
+    isConvexUnauthorizedError(error)
+  )
 }
 
 /** Deduped per-request Clerk JWT for Convex preloads. */
