@@ -10,6 +10,9 @@ import { FileSpreadsheet, Loader2, Upload } from "lucide-react"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
 
+/** Must stay ≤ backend MAX_EXPORT_PAGE_SIZE (50). */
+const EXPORT_BUNDLE_PAGE_SIZE = 50
+
 export type SurveyExportFilters = {
   status?: SurveyStatus
   qcStatus?: QcStatus
@@ -36,6 +39,7 @@ export function SurveyExcelActions({
 
   async function onExport() {
     setExporting(true)
+    const progress = toast.loading("Preparing Excel export…")
     try {
       const queryArgs = {
         status: filters.status,
@@ -46,27 +50,27 @@ export function SurveyExcelActions({
         surveyorId: filters.surveyorId as Id<"users"> | undefined,
       }
 
-      const allBundles = []
-      let offset = 0
-      let total: number | undefined
-
-      while (true) {
-        const page = await convex.query(api.export.queries.listForExport, { ...queryArgs, offset })
-        total = page.total
-        allBundles.push(...page.bundles)
-        if (page.nextOffset === null) break
-        offset = page.nextOffset
-      }
-
-      if (!allBundles.length) {
-        toast.message("No surveys to export for the current filters.")
+      const { surveyIds, total } = await convex.query(api.export.queries.listExportIds, queryArgs)
+      if (!surveyIds.length) {
+        toast.message("No surveys to export for the current filters.", { id: progress })
         return
       }
+
+      const allBundles = []
+      for (let i = 0; i < surveyIds.length; i += EXPORT_BUNDLE_PAGE_SIZE) {
+        const chunk = surveyIds.slice(i, i + EXPORT_BUNDLE_PAGE_SIZE)
+        const page = await convex.query(api.export.queries.getExportBundlesByIds, { surveyIds: chunk })
+        allBundles.push(...page.bundles)
+        toast.loading(`Loading ${allBundles.length.toLocaleString()} / ${total.toLocaleString()}…`, {
+          id: progress,
+        })
+      }
+
       const { exportSurveysFullExcel } = await import("@/lib/survey/survey-excel")
       exportSurveysFullExcel(allBundles as Parameters<typeof exportSurveysFullExcel>[0])
-      toast.success(`Exported ${total ?? allBundles.length} survey(s) to Excel`)
+      toast.success(`Exported ${total} survey(s) to Excel`, { id: progress })
     } catch (e) {
-      toast.error(parseConvexError(e).message)
+      toast.error(parseConvexError(e).message, { id: progress })
     } finally {
       setExporting(false)
     }

@@ -56,30 +56,24 @@ export function QcFinalReportExportButton({ filters, disabled }: QcFinalReportEx
         municipalityId: filters.municipalityId as Id<"municipalities"> | undefined,
       }
 
-      const allBundles: SurveyExportBundle[] = []
-      let offset = 0
-      let total: number | undefined
-
-      while (true) {
-        const page = await convex.query(api.export.queries.listForExport, { ...queryArgs, offset })
-        total = page.total
-        allBundles.push(...(page.bundles as SurveyExportBundle[]))
-        toast.loading(
-          `Loading ${allBundles.length.toLocaleString()} / ${(total ?? allBundles.length).toLocaleString()}…`,
-          {
-            id: progress,
-          }
-        )
-        if (page.nextOffset === null) break
-        offset = page.nextOffset
-      }
-
-      if (!allBundles.length) {
+      const { surveyIds, total } = await convex.query(api.export.queries.listExportIds, queryArgs)
+      if (!surveyIds.length) {
         toast.message("No QC-approved surveys to export for the current filters.", { id: progress })
         return
       }
 
-      if (total !== undefined && total > QC_FINAL_EXPORT_SCOPE_LIMIT) {
+      const allBundles: SurveyExportBundle[] = []
+      const pageSize = 50
+      for (let i = 0; i < surveyIds.length; i += pageSize) {
+        const chunk = surveyIds.slice(i, i + pageSize)
+        const page = await convex.query(api.export.queries.getExportBundlesByIds, { surveyIds: chunk })
+        allBundles.push(...(page.bundles as SurveyExportBundle[]))
+        toast.loading(`Loading ${allBundles.length.toLocaleString()} / ${total.toLocaleString()}…`, {
+          id: progress,
+        })
+      }
+
+      if (total > QC_FINAL_EXPORT_SCOPE_LIMIT) {
         toast.warning(
           `Export includes up to ${QC_FINAL_EXPORT_SCOPE_LIMIT.toLocaleString()} surveys (server scope limit). Narrow filters for a complete export.`,
           { id: progress, duration: 8000 }
