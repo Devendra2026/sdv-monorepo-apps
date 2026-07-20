@@ -4,11 +4,13 @@
 import { v } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "../_generated/server"
-import { collectSurveysInFieldScope } from "../shared/fieldAccess"
 import { canReadWard, clientError } from "../shared/helpers"
 import { resolveTenantScope, tenantMunicipalityIds } from "../shared/tenancy"
 
 const FIELD_COLLECTOR_ROLES = new Set(["surveyor", "supervisor"])
+
+/** Max draft surveys loaded per municipality for reassignment listing. */
+const DRAFT_LIST_CAP_PER_MUNICIPALITY = 300
 
 export function isOrphanedAssignee(user: Doc<"users"> | null): boolean {
   if (!user) return true
@@ -80,13 +82,46 @@ export async function collectDraftsInAdminScope(
     orphanedOnly?: boolean
   }
 ): Promise<Doc<"surveys">[]> {
-  let rows = (await collectSurveysInFieldScope(ctx, me)).filter(isTransferableDraft)
+  const scope = await resolveTenantScope(ctx, me)
+  const muniIds = tenantMunicipalityIds(scope)
+
+  let targetMunis: Id<"municipalities">[]
+  if (filters.municipalityId) {
+    if (!muniIds.has(filters.municipalityId)) return []
+    targetMunis = [filters.municipalityId]
+  } else if (filters.districtId) {
+    targetMunis = scope.municipalities.filter((m) => m.districtId === filters.districtId).map((m) => m._id)
+  } else {
+    targetMunis = scope.municipalities.length > 0 ? scope.municipalities.map((m) => m._id) : [...muniIds]
+  }
+
+  if (targetMunis.length === 0) return []
+
+  const batches = await Promise.all(
+    targetMunis.map((municipalityId) =>
+      ctx.db
+        .query("surveys")
+        .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId).eq("status", "draft"))
+        .order("desc")
+        .take(DRAFT_LIST_CAP_PER_MUNICIPALITY)
+    )
+  )
+
+  const seen = new Set<string>()
+  let rows: Doc<"surveys">[] = []
+  for (const batch of batches) {
+    for (const row of batch) {
+      if (seen.has(row._id)) continue
+      seen.add(row._id)
+      if (!isTransferableDraft(row)) continue
+      if (!muniIds.has(row.municipalityId)) continue
+      if (row.wardNo && !canReadWard(me, row.municipalityId, row.wardNo)) continue
+      rows.push(row)
+    }
+  }
 
   if (filters.districtId) {
     rows = rows.filter((r) => r.districtId === filters.districtId)
-  }
-  if (filters.municipalityId) {
-    rows = rows.filter((r) => r.municipalityId === filters.municipalityId)
   }
   if (filters.wardNo) {
     rows = rows.filter((r) => r.wardNo === filters.wardNo)

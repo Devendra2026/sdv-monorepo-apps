@@ -405,16 +405,47 @@ export async function loadWardStatsForScope(
   let targetMunis = scopedMuniIds
   if (filters.municipalityId) targetMunis = [filters.municipalityId]
 
-  const rows: WardStatsRollup[] = []
+  const batchResults = await Promise.all(
+    targetMunis.map(async (municipalityId) => {
+      if (filters.wardNo) {
+        const normalized = normalizeWardNo(filters.wardNo)
+        const row = await ctx.db
+          .query("surveyWardStats")
+          .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", municipalityId).eq("wardNo", normalized))
+          .unique()
+        if (row && canReadWard(me, municipalityId, row.wardNo)) {
+          return [
+            {
+              municipalityId: row.municipalityId,
+              wardNo: row.wardNo,
+              city: row.city,
+              total: row.total,
+              drafts: row.drafts,
+              submitted: row.submitted,
+              qcApproved: row.qcApproved,
+              qcRejected: row.qcRejected,
+              qcPending: row.qcPending,
+              activeSurveyorIds: row.activeSurveyorIds,
+              firstPendingSurveyId: row.firstPendingSurveyId,
+            } satisfies WardStatsRollup,
+          ]
+        }
+        return [] as WardStatsRollup[]
+      }
 
-  for (const municipalityId of targetMunis) {
-    if (filters.wardNo) {
-      const normalized = normalizeWardNo(filters.wardNo)
-      const row = await ctx.db
+      const wardRows = await ctx.db
         .query("surveyWardStats")
-        .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", municipalityId).eq("wardNo", normalized))
-        .unique()
-      if (row && canReadWard(me, municipalityId, row.wardNo)) {
+        .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
+        .collect()
+
+      const rows: WardStatsRollup[] = []
+      for (const row of wardRows) {
+        if (!muniIds.has(row.municipalityId)) continue
+        if (!canReadWard(me, row.municipalityId, row.wardNo)) continue
+        if (filters.districtId) {
+          const muni = muniMap.get(row.municipalityId)
+          if (muni?.districtId !== filters.districtId) continue
+        }
         rows.push({
           municipalityId: row.municipalityId,
           wardNo: row.wardNo,
@@ -429,36 +460,11 @@ export async function loadWardStatsForScope(
           firstPendingSurveyId: row.firstPendingSurveyId,
         })
       }
-      continue
-    }
+      return rows
+    })
+  )
 
-    const wardRows = await ctx.db
-      .query("surveyWardStats")
-      .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
-      .collect()
-
-    for (const row of wardRows) {
-      if (!muniIds.has(row.municipalityId)) continue
-      if (!canReadWard(me, row.municipalityId, row.wardNo)) continue
-      if (filters.districtId) {
-        const muni = muniMap.get(row.municipalityId)
-        if (muni?.districtId !== filters.districtId) continue
-      }
-      rows.push({
-        municipalityId: row.municipalityId,
-        wardNo: row.wardNo,
-        city: row.city,
-        total: row.total,
-        drafts: row.drafts,
-        submitted: row.submitted,
-        qcApproved: row.qcApproved,
-        qcRejected: row.qcRejected,
-        qcPending: row.qcPending,
-        activeSurveyorIds: row.activeSurveyorIds,
-        firstPendingSurveyId: row.firstPendingSurveyId,
-      })
-    }
-  }
+  const rows = batchResults.flat()
 
   if (filters.wardNo) {
     return rows.filter((r) => wardNumbersMatch(r.wardNo, filters.wardNo!))
@@ -476,30 +482,32 @@ export async function loadSurveyorStatsForScope(
   const scopedMuniIds = await resolveScopedMunicipalityIdsForRollups(ctx, me, filters)
   if (!scopedMuniIds) return []
 
-  const rows: SurveyorStatsRollup[] = []
+  const batchResults = await Promise.all(
+    scopedMuniIds.map(async (municipalityId) => {
+      const muniRows = await ctx.db
+        .query("surveySurveyorStats")
+        .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
+        .collect()
 
-  for (const municipalityId of scopedMuniIds) {
-    const muniRows = await ctx.db
-      .query("surveySurveyorStats")
-      .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
-      .collect()
+      const rows: SurveyorStatsRollup[] = []
+      for (const row of muniRows) {
+        if (filters.districtId && row.districtId !== filters.districtId) continue
+        rows.push({
+          surveyorId: row.surveyorId,
+          municipalityId: row.municipalityId,
+          districtId: row.districtId,
+          total: row.total,
+          drafts: row.drafts,
+          submitted: row.submitted,
+          qcApproved: row.qcApproved,
+          qcRejected: row.qcRejected,
+        })
+      }
+      return rows
+    })
+  )
 
-    for (const row of muniRows) {
-      if (filters.districtId && row.districtId !== filters.districtId) continue
-      rows.push({
-        surveyorId: row.surveyorId,
-        municipalityId: row.municipalityId,
-        districtId: row.districtId,
-        total: row.total,
-        drafts: row.drafts,
-        submitted: row.submitted,
-        qcApproved: row.qcApproved,
-        qcRejected: row.qcRejected,
-      })
-    }
-  }
-
-  return rows
+  return batchResults.flat()
 }
 
 /** Aggregate in-memory buckets for backfill (single pass over survey batch). */

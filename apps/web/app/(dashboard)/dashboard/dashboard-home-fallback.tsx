@@ -10,24 +10,25 @@ import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import { useQuery } from "convex/react"
 
-/** Client-side home bundle subscription when server preload fails or user is not provisioned yet. */
+/** Client-side counts + analytics when server preload fails or user is not provisioned yet. */
 export function DashboardHomeFallback({ nowMs: nowMsProp }: { nowMs?: number }) {
   const ready = useConvexAuthReady()
   const clientNowMs = useClientNowMs()
   const nowMs = nowMsProp ?? clientNowMs
-  const bundle = useQuery(api.analytics.queries.homeBundle, ready ? { nowMs, trendDays: 30 } : "skip")
+  const counts = useQuery(api.analytics.queries.counts, ready ? { nowMs } : "skip")
+  const analytics = useQuery(api.analytics.queries.analyticsBundle, ready ? { nowMs, trendDays: 30 } : "skip")
 
   return (
     <div className="space-y-6 lg:space-y-8">
-      <DataSection ready={bundle !== undefined} skeleton={<DashboardKpisSkeleton />} ariaLabel="KPI metrics">
+      <DataSection ready={counts !== undefined} skeleton={<DashboardKpisSkeleton />} ariaLabel="KPI metrics">
         <div className="space-y-6">
-          <DashboardKpiGrid counts={bundle!.counts} />
-          <DashboardQcOperations counts={bundle!.counts} />
+          <DashboardKpiGrid counts={counts!} />
+          <DashboardQcOperations counts={counts!} />
         </div>
       </DataSection>
 
-      <DataSection ready={bundle !== undefined} skeleton={<DashboardAnalyticsSkeleton />} ariaLabel="Analytics">
-        <DashboardAnalyticsClient analytics={bundle?.analytics ?? null} />
+      <DataSection ready={analytics !== undefined} skeleton={<DashboardAnalyticsSkeleton />} ariaLabel="Analytics">
+        <DashboardAnalyticsClient analytics={analytics ?? null} />
       </DataSection>
     </div>
   )

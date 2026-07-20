@@ -3,12 +3,7 @@ import type { MutationCtx, QueryCtx } from "../_generated/server"
 import { dayEndMs, formatDateKey, startOfDayMs, startOfDayMsFromKey } from "../shared/calendar"
 import { fieldSurveyAccess } from "../shared/fieldAccess"
 import { canReadWard } from "../shared/helpers"
-import {
-  resolveDashboardTenantScope,
-  resolveTenantScope,
-  tenantDistrictIds,
-  tenantMunicipalityIds,
-} from "../shared/tenancy"
+import { resolveDashboardTenantScope, resolveTenantScope, tenantMunicipalityIds } from "../shared/tenancy"
 import {
   recordWardSurveyorStatsInsert,
   recordWardSurveyorStatsRemove,
@@ -314,20 +309,8 @@ export function liveScopedStatsSlices(rows: Doc<"surveys">[]): SurveyStatsSlice[
   return rows.map(toStatsSlice)
 }
 
-/** Max QC decisions loaded per reviewer for dashboard daily trend. */
+/** Max QC decisions loaded per municipality for dashboard daily trend. */
 const DASHBOARD_QC_TREND_DECISIONS_CAP = 800
-
-function filterActiveUsersInScope(
-  users: Doc<"users">[],
-  muniIds: Set<Id<"municipalities">>,
-  districtIds: Set<Id<"districts">>
-): Doc<"users">[] {
-  return users.filter((u) => {
-    if (u.municipalityId && !muniIds.has(u.municipalityId)) return false
-    if (u.districtId && !districtIds.has(u.districtId)) return false
-    return true
-  })
-}
 
 /** QC approve/reject counts per day from decision records (no full survey scan). */
 async function loadDailyQcTrendFromDecisions(
@@ -337,39 +320,26 @@ async function loadDailyQcTrendFromDecisions(
   nowMs: number
 ): Promise<Map<string, { approved: number; rejected: number }>> {
   const safeDays = Math.min(Math.max(days, 1), 180)
-  const scopedMunis = new Set(await resolveDashboardMunicipalityIds(ctx, me))
+  const scopedMunis = await resolveDashboardMunicipalityIds(ctx, me)
   const { startMs, buckets } = istTrendBuckets(safeDays, nowMs, () => ({ approved: 0, rejected: 0 }))
 
-  if (scopedMunis.size === 0) return buckets
+  if (scopedMunis.length === 0) return buckets
 
-  const scope = await resolveDashboardTenantScope(ctx, me)
-  const muniIds = tenantMunicipalityIds(scope)
-  const districtIds = tenantDistrictIds(scope)
+  await Promise.all(
+    scopedMunis.map(async (municipalityId) => {
+      const decisions = await ctx.db
+        .query("qcDecisions")
+        .withIndex("by_municipality_decided", (q) => q.eq("municipalityId", municipalityId).gte("decidedAt", startMs))
+        .take(DASHBOARD_QC_TREND_DECISIONS_CAP)
 
-  const activeQcSupervisors = filterActiveUsersInScope(
-    await ctx.db
-      .query("users")
-      .withIndex("by_role_status", (q) => q.eq("role", "qc_supervisor").eq("status", "active"))
-      .collect(),
-    muniIds,
-    districtIds
+      for (const decision of decisions) {
+        const bucket = buckets.get(formatDateKey(decision.decidedAt))
+        if (!bucket) continue
+        if (decision.decision === "approve") bucket.approved += 1
+        else if (decision.decision === "reject") bucket.rejected += 1
+      }
+    })
   )
-
-  for (const reviewer of activeQcSupervisors) {
-    const decisions = await ctx.db
-      .query("qcDecisions")
-      .withIndex("by_reviewer_decided", (q) => q.eq("reviewerId", reviewer._id).gte("decidedAt", startMs))
-      .take(DASHBOARD_QC_TREND_DECISIONS_CAP)
-
-    for (const decision of decisions) {
-      const municipalityId = decision.municipalityId
-      if (!municipalityId || !scopedMunis.has(municipalityId)) continue
-      const bucket = buckets.get(formatDateKey(decision.decidedAt))
-      if (!bucket) continue
-      if (decision.decision === "approve") bucket.approved += 1
-      else bucket.rejected += 1
-    }
-  }
 
   return buckets
 }
@@ -417,15 +387,21 @@ export async function loadDailyTrendFromDailyStats(
     return [...buckets.entries()].map(([date, bucket]) => ({ date, ...bucket }))
   }
 
+  const dateKeys = [...buckets.keys()].sort()
+  const startKey = dateKeys[0]!
+  const endKey = dateKeys[dateKeys.length - 1]!
+
   await Promise.all(
     scopedMunis.map(async (municipalityId) => {
-      for (const dateKey of buckets.keys()) {
-        const row = await ctx.db
-          .query("surveyDailyStats")
-          .withIndex("by_municipality_date", (q) => q.eq("municipalityId", municipalityId).eq("dateKey", dateKey))
-          .unique()
-        if (!row) continue
-        const bucket = buckets.get(dateKey)
+      const rows = await ctx.db
+        .query("surveyDailyStats")
+        .withIndex("by_municipality_date", (q) =>
+          q.eq("municipalityId", municipalityId).gte("dateKey", startKey).lte("dateKey", endKey)
+        )
+        .take(safeDays + 5)
+
+      for (const row of rows) {
+        const bucket = buckets.get(row.dateKey)
         if (!bucket) continue
         bucket.created += row.created
         bucket.submitted += row.submitted

@@ -2,23 +2,33 @@ import { DashboardActivityFallback } from "@/app/(dashboard)/dashboard/dashboard
 import { DashboardActivityPreloaded } from "@/app/(dashboard)/dashboard/dashboard-activity-preloaded"
 import { DashboardHomeClient } from "@/app/(dashboard)/dashboard/dashboard-home-client"
 import { DashboardHomeFallback } from "@/app/(dashboard)/dashboard/dashboard-home-fallback"
-import { isPreloadSkippableError, preloadDashboardActivity, preloadDashboardHomeBundle } from "@/lib/convex-server"
+import {
+  isPreloadSkippableError,
+  preloadDashboardActivity,
+  preloadDashboardAnalytics,
+  preloadDashboardCounts,
+} from "@/lib/convex-server"
 
 export async function DashboardContent({ nowMs }: { nowMs: number }) {
-  const [homeResult, activityResult] = await Promise.allSettled([
-    preloadDashboardHomeBundle(nowMs),
+  const [countsResult, analyticsResult, activityResult] = await Promise.allSettled([
+    preloadDashboardCounts(nowMs),
+    preloadDashboardAnalytics(nowMs),
     preloadDashboardActivity(),
   ])
 
-  let homeSection
-  if (homeResult.status === "fulfilled") {
-    homeSection = <DashboardHomeClient preloadedHome={homeResult.value} />
-  } else if (isPreloadSkippableError(homeResult.reason)) {
-    homeSection = <DashboardHomeFallback nowMs={nowMs} />
-  } else {
-    console.error("[dashboard] home bundle preload failed", homeResult.reason)
-    homeSection = <DashboardHomeFallback nowMs={nowMs} />
+  if (countsResult.status === "rejected" && !isPreloadSkippableError(countsResult.reason)) {
+    console.error("[dashboard] counts preload failed", countsResult.reason)
   }
+  if (analyticsResult.status === "rejected" && !isPreloadSkippableError(analyticsResult.reason)) {
+    console.error("[dashboard] analytics preload failed", analyticsResult.reason)
+  }
+
+  const homeSection =
+    countsResult.status === "fulfilled" && analyticsResult.status === "fulfilled" ? (
+      <DashboardHomeClient preloadedCounts={countsResult.value} preloadedAnalytics={analyticsResult.value} />
+    ) : (
+      <DashboardHomeFallback nowMs={nowMs} />
+    )
 
   let activitySection
   if (activityResult.status === "fulfilled") {

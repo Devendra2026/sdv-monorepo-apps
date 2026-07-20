@@ -143,6 +143,8 @@ $env:CONVEX_DEPLOYMENT = $null
 pnpm convex:deploy:production
 ```
 
+**If deploy fails with `/api/get_config_hashes` 404** (or Traefik body `404 page not found`): `api.sdvedutech.in` is not routing to the Convex backend. That is a Dokploy/Traefik issue, not a bad admin key. On the host, ensure the convex-backend container is up and domain `api.sdvedutech.in` points at **port 3210**. Healthy check: `curl -i https://api.sdvedutech.in/` should show Convex running text, not Traefik’s bare 404. See [`packages/backend/scripts/diagnose-convex-export-404.sh`](packages/backend/scripts/diagnose-convex-export-404.sh).
+
 **Convex deployment env** (Clerk auth on the self-hosted instance — use `--env-file .env.production` with CLI env commands):
 
 ```bash

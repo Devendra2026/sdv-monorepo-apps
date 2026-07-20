@@ -8,11 +8,6 @@ import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import { type Preloaded, usePreloadedQuery, useQuery } from "convex/react"
 import { useMemo } from "react"
 
-/** Home dashboard bundle (KPIs + analytics) hydrated from a server `preloadQuery` payload. */
-export function useDashboardHomeBundle(preloaded: Preloaded<typeof api.analytics.queries.homeBundle>) {
-  return usePreloadedQuery(preloaded)
-}
-
 /** Home dashboard KPI counts hydrated from a server `preloadQuery` payload. */
 export function useDashboardCounts(preloaded: Preloaded<typeof api.analytics.queries.counts>) {
   return usePreloadedQuery(preloaded)
@@ -20,6 +15,11 @@ export function useDashboardCounts(preloaded: Preloaded<typeof api.analytics.que
 
 /** Home dashboard analytics hydrated from a server `preloadQuery` payload. */
 export function useDashboardAnalytics(preloaded: Preloaded<typeof api.analytics.queries.analyticsBundle>) {
+  return usePreloadedQuery(preloaded)
+}
+
+/** @deprecated Prefer useDashboardCounts + useDashboardAnalytics for independent streaming. */
+export function useDashboardHomeBundle(preloaded: Preloaded<typeof api.analytics.queries.homeBundle>) {
   return usePreloadedQuery(preloaded)
 }
 

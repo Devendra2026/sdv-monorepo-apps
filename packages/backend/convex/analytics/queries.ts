@@ -42,7 +42,6 @@ import {
 } from "../shared/tenancy"
 
 const ANALYTICS_SURVEYOR_SLICE_LIMIT = 2000
-const ANALYTICS_QC_DECISIONS_PER_REVIEWER_CAP = 400
 const MS_PER_DAY = 86_400_000
 const DASHBOARD_QC_DECISIONS_PER_REVIEWER_CAP = 400
 const DASHBOARD_ANALYTICS_WINDOW_BUFFER_DAYS = 14
@@ -316,7 +315,38 @@ async function loadScopedQcDecisionsByReviewer(
     return byReviewer
   }
 
-  const useMunicipalityFilter = scopedMunicipalityIds.size > 0
+  const reviewerIds = new Set(activeQcSupervisors.map((u) => u._id))
+  const perMuniCap = DASHBOARD_QC_DECISIONS_PER_REVIEWER_CAP
+
+  if (scopedMunicipalityIds.size > 0) {
+    const batches = await Promise.all(
+      [...scopedMunicipalityIds].map(async (municipalityId) => {
+        if (fromMs > 0) {
+          return await ctx.db
+            .query("qcDecisions")
+            .withIndex("by_municipality_decided", (q) =>
+              q.eq("municipalityId", municipalityId).gte("decidedAt", fromMs)
+            )
+            .take(perMuniCap)
+        }
+        return await ctx.db
+          .query("qcDecisions")
+          .withIndex("by_municipality_decided", (q) => q.eq("municipalityId", municipalityId))
+          .order("desc")
+          .take(perMuniCap)
+      })
+    )
+
+    for (const decisions of batches) {
+      for (const decision of decisions) {
+        if (!reviewerIds.has(decision.reviewerId)) continue
+        if (scopedSurveyIds.size > 0 && !scopedSurveyIds.has(decision.surveyId)) continue
+        const bucket = byReviewer.get(decision.reviewerId)
+        if (bucket) bucket.push(decision)
+      }
+    }
+    return byReviewer
+  }
 
   await Promise.all(
     activeQcSupervisors.map(async (reviewer) => {
@@ -326,12 +356,8 @@ async function loadScopedQcDecisionsByReviewer(
         .order("desc")
         .take(DASHBOARD_QC_DECISIONS_PER_REVIEWER_CAP)
       for (const decision of decisions) {
-        if (decision._creationTime < fromMs) continue
-        if (useMunicipalityFilter) {
-          if (!decision.municipalityId || !scopedMunicipalityIds.has(decision.municipalityId)) continue
-        } else if (!scopedSurveyIds.has(decision.surveyId)) {
-          continue
-        }
+        if (fromMs > 0 && decision._creationTime < fromMs) continue
+        if (!scopedSurveyIds.has(decision.surveyId)) continue
         const bucket = byReviewer.get(decision.reviewerId)
         if (bucket) bucket.push(decision)
       }
@@ -883,16 +909,24 @@ export const surveyStatsBreakdown = query({
     )
 
     const scopedSurveyIds = new Set(rows.map((r) => r._id))
-    const byQcSupervisor = await Promise.all(
-      activeQcSupervisors.map(async (u) => {
-        const decisions = await ctx.db
-          .query("qcDecisions")
-          .withIndex("by_reviewer", (q) => q.eq("reviewerId", u._id))
-          .order("desc")
-          .take(ANALYTICS_QC_DECISIONS_PER_REVIEWER_CAP)
-        const scoped = decisions.filter((d) => scopedSurveyIds.has(d.surveyId))
-        const approved = scoped.filter((d) => d.decision === "approve").length
-        const rejected = scoped.filter((d) => d.decision === "reject").length
+    const scopedMunicipalityIds = new Set(rows.map((r) => r.municipalityId))
+    const decisionsByReviewer = await loadScopedQcDecisionsByReviewer(
+      ctx,
+      scopedSurveyIds,
+      scopedMunicipalityIds,
+      activeQcSupervisors,
+      0
+    )
+
+    const byQcSupervisor = activeQcSupervisors
+      .map((u) => {
+        const scoped = decisionsByReviewer.get(u._id) ?? []
+        let approved = 0
+        let rejected = 0
+        for (const decision of scoped) {
+          if (decision.decision === "approve") approved += 1
+          if (decision.decision === "reject") rejected += 1
+        }
         return {
           reviewerId: u._id,
           name: u.name,
@@ -902,8 +936,7 @@ export const surveyStatsBreakdown = query({
           total: scoped.length,
         }
       })
-    )
-    byQcSupervisor.sort((a, b) => b.total - a.total)
+      .sort((a, b) => b.total - a.total)
 
     const filterMunicipalities = scope.municipalities.filter(
       (m) => !args.districtId || m.districtId === args.districtId
@@ -1031,8 +1064,8 @@ export const analyticsBundle = query({
 })
 
 /**
- * Single-pass home dashboard bundle for the web app.
- * Loads scoped surveys once, then derives KPIs + analytics in memory.
+ * Deprecated compatibility wrapper for the web home dashboard.
+ * Prefer `counts` + `analyticsBundle` so KPIs and charts subscribe independently.
  */
 export const homeBundle = query({
   args: {
@@ -1049,8 +1082,10 @@ export const homeBundle = query({
 
     const todayMs = startOfDayMs(args.nowMs)
     const trendDays = args.trendDays ?? 30
-    const counts = await loadDashboardCountsForHome(ctx, me, todayMs)
-    const analytics = await buildAnalyticsBundle(ctx, me, todayMs, trendDays, args.nowMs)
+    const [counts, analytics] = await Promise.all([
+      loadDashboardCountsForHome(ctx, me, todayMs),
+      buildAnalyticsBundle(ctx, me, todayMs, trendDays, args.nowMs),
+    ])
 
     return { counts, analytics }
   },

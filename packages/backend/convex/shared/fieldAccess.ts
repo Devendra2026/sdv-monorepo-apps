@@ -123,19 +123,32 @@ async function queryByDistrict(
     .take(take)
 }
 
+/** Cap total multi-muni survey docs read for recent-activity style lists. */
+const MULTI_MUNI_SURVEY_READ_BUDGET = 80
+
+/** Per-municipality take so total reads stay under MULTI_MUNI_SURVEY_READ_BUDGET. */
+function perMunicipalityTake(limit: number, municipalityCount: number): number {
+  if (municipalityCount <= 1) return limit * 2
+  const fair = Math.ceil((limit * 2) / municipalityCount)
+  const capped = Math.min(limit, Math.max(3, fair))
+  const budgetPerMuni = Math.max(1, Math.floor(MULTI_MUNI_SURVEY_READ_BUDGET / municipalityCount))
+  return Math.min(capped, budgetPerMuni)
+}
+
 /** Admin list without geo filter — batch by municipality index instead of full-table scan. */
 async function queryAdminScopeSurveys(
   ctx: QueryCtx,
   scope: Awaited<ReturnType<typeof resolveTenantScope>>,
   muniIds: Set<Id<"municipalities">>,
   status: Doc<"surveys">["status"] | undefined,
-  take: number
+  limit: number
 ): Promise<Doc<"surveys">[]> {
   const scopedMunis = scope.municipalities.length > 0 ? scope.municipalities.map((m) => m._id) : [...muniIds]
   if (scopedMunis.length === 0) return []
 
+  const perMuniTake = perMunicipalityTake(limit, scopedMunis.length)
   const batches = await Promise.all(
-    scopedMunis.map((municipalityId) => queryByMunicipality(ctx, municipalityId, status, take))
+    scopedMunis.map((municipalityId) => queryByMunicipality(ctx, municipalityId, status, perMuniTake))
   )
   const seen = new Set<string>()
   const rows: Doc<"surveys">[] = []
@@ -147,7 +160,7 @@ async function queryAdminScopeSurveys(
     }
   }
   rows.sort((a, b) => b._creationTime - a._creationTime)
-  return rows.slice(0, take)
+  return rows.slice(0, limit)
 }
 
 /** Ward narrowing is for surveyors and QC supervisors with ward assignments. */
@@ -219,7 +232,7 @@ export async function querySurveysInFieldScope(
     if (args.districtId) {
       return (await queryByDistrict(ctx, args.districtId, args.status, take)).slice(0, args.limit)
     }
-    const rows = await queryAdminScopeSurveys(ctx, scope, muniIds, args.status, take)
+    const rows = await queryAdminScopeSurveys(ctx, scope, muniIds, args.status, args.limit)
     return (await filterSurveysInScope(ctx, rows, me, muniIds)).slice(0, args.limit)
   }
 
@@ -235,8 +248,9 @@ export async function querySurveysInFieldScope(
   let rows: Doc<"surveys">[] = []
 
   if (scopedMunis.length > 1) {
+    const perMuniTake = perMunicipalityTake(args.limit, scopedMunis.length)
     const batches = await Promise.all(
-      scopedMunis.map((municipalityId) => queryByMunicipality(ctx, municipalityId, args.status, take))
+      scopedMunis.map((municipalityId) => queryByMunicipality(ctx, municipalityId, args.status, perMuniTake))
     )
     const seen = new Set<string>()
     for (const batch of batches) {
