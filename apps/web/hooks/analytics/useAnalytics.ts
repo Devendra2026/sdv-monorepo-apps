@@ -18,6 +18,11 @@ export function useDashboardAnalytics(preloaded: Preloaded<typeof api.analytics.
   return usePreloadedQuery(preloaded)
 }
 
+/** QC supervisor bundle hydrated from a server `preloadQuery` payload. */
+export function useDashboardQcSupervisors(preloaded: Preloaded<typeof api.analytics.queries.qcSupervisorBundle>) {
+  return usePreloadedQuery(preloaded)
+}
+
 /** @deprecated Prefer useDashboardCounts + useDashboardAnalytics for independent streaming. */
 export function useDashboardHomeBundle(preloaded: Preloaded<typeof api.analytics.queries.homeBundle>) {
   return usePreloadedQuery(preloaded)

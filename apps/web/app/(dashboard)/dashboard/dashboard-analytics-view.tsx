@@ -6,7 +6,7 @@ import { OrganizationOverview } from "@/components/dashboard/organization-overvi
 import { SurveyTrendChart } from "@/components/dashboard/survey-trend-chart"
 import { SurveyorProductivity, type SurveyorProductivityRow } from "@/components/dashboard/surveyor-productivity"
 import { SectionHeader } from "@/components/design-system/executive-hero"
-import type { WebDashboardAnalytics } from "@workspace/schemas"
+import type { WebDashboardAnalytics, WebDashboardQcSupervisors } from "@workspace/schemas"
 import { Card, CardContent } from "@workspace/ui/components/card"
 import { ShieldCheck } from "lucide-react"
 import { useMemo } from "react"
@@ -49,7 +49,13 @@ function QcSupervisorThroughput({
   )
 }
 
-export function DashboardAnalyticsView({ analytics }: { analytics: WebDashboardAnalytics | null }) {
+export function DashboardAnalyticsView({
+  analytics,
+  qcSupervisors,
+}: {
+  analytics: WebDashboardAnalytics | null
+  qcSupervisors?: WebDashboardQcSupervisors | null
+}) {
   const surveyorRows = useMemo((): SurveyorProductivityRow[] => {
     if (!analytics?.breakdown?.bySurveyor) return []
     return [...analytics.breakdown.bySurveyor]
@@ -84,6 +90,19 @@ export function DashboardAnalyticsView({ analytics }: { analytics: WebDashboardA
     [analytics?.breakdown?.byUlb]
   )
 
+  const mergedBreakdown = useMemo(() => {
+    if (!analytics?.breakdown) return analytics?.breakdown
+    if (!qcSupervisors) return analytics.breakdown
+    return {
+      ...analytics.breakdown,
+      byQcSupervisor: qcSupervisors.byQcSupervisor,
+      filterOptions: {
+        ...analytics.breakdown.filterOptions,
+        qcSupervisors: qcSupervisors.qcSupervisors,
+      },
+    }
+  }, [analytics?.breakdown, qcSupervisors])
+
   if (analytics === null) {
     return (
       <Card className="rounded-xl border border-border bg-card shadow-sm">
@@ -98,11 +117,11 @@ export function DashboardAnalyticsView({ analytics }: { analytics: WebDashboardA
     )
   }
 
-  const { breakdown, dailyTrend } = analytics
+  const { dailyTrend } = analytics
 
   return (
     <div className="space-y-6">
-      <OrganizationOverview breakdown={breakdown} />
+      {mergedBreakdown ? <OrganizationOverview breakdown={mergedBreakdown} /> : null}
 
       <section aria-labelledby="analytics-heading" className="space-y-4">
         <SectionHeader
@@ -116,7 +135,7 @@ export function DashboardAnalyticsView({ analytics }: { analytics: WebDashboardA
           </div>
           <SurveyorProductivity data={surveyorRows} />
         </div>
-        <QcSupervisorThroughput supervisors={breakdown?.byQcSupervisor} />
+        <QcSupervisorThroughput supervisors={mergedBreakdown?.byQcSupervisor ?? []} />
       </section>
 
       <section aria-labelledby="coverage-heading" className="space-y-4">

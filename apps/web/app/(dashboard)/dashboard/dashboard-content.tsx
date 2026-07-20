@@ -7,12 +7,14 @@ import {
   preloadDashboardActivity,
   preloadDashboardAnalytics,
   preloadDashboardCounts,
+  preloadDashboardQcSupervisors,
 } from "@/lib/convex-server"
 
 export async function DashboardContent({ nowMs }: { nowMs: number }) {
-  const [countsResult, analyticsResult, activityResult] = await Promise.allSettled([
+  const [countsResult, analyticsResult, qcResult, activityResult] = await Promise.allSettled([
     preloadDashboardCounts(nowMs),
     preloadDashboardAnalytics(nowMs),
+    preloadDashboardQcSupervisors(nowMs),
     preloadDashboardActivity(),
   ])
 
@@ -22,10 +24,17 @@ export async function DashboardContent({ nowMs }: { nowMs: number }) {
   if (analyticsResult.status === "rejected" && !isPreloadSkippableError(analyticsResult.reason)) {
     console.error("[dashboard] analytics preload failed", analyticsResult.reason)
   }
+  if (qcResult.status === "rejected" && !isPreloadSkippableError(qcResult.reason)) {
+    console.error("[dashboard] QC supervisors preload failed", qcResult.reason)
+  }
 
   const homeSection =
     countsResult.status === "fulfilled" && analyticsResult.status === "fulfilled" ? (
-      <DashboardHomeClient preloadedCounts={countsResult.value} preloadedAnalytics={analyticsResult.value} />
+      <DashboardHomeClient
+        preloadedCounts={countsResult.value}
+        preloadedAnalytics={analyticsResult.value}
+        preloadedQcSupervisors={qcResult.status === "fulfilled" ? qcResult.value : undefined}
+      />
     ) : (
       <DashboardHomeFallback nowMs={nowMs} />
     )

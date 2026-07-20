@@ -20,7 +20,35 @@ import {
 /** Max survey documents loaded for dashboard analytics fallbacks (avoids Convex read limits). */
 export const DASHBOARD_BOUNDED_ROW_CAP = 2500
 
+/**
+ * Max municipalities that may use live survey scans when rollups are cold/missing.
+ * Larger scopes return zeros (degraded) instead of timing out.
+ *
+ * Before: live take(2500) × N ULBs → SystemTimeout.
+ * After: O(1) indexed rollup reads; live only for ≤ this many ULBs (or ward-scoped users).
+ */
+export const DASHBOARD_LIVE_FALLBACK_ULB_CAP = 3
+
 const MS_PER_DAY = 86_400_000
+
+function emptyMunicipalityRollup(municipalityId: Id<"municipalities">): MunicipalityStatsRollup {
+  return {
+    municipalityId,
+    total: 0,
+    drafts: 0,
+    submitted: 0,
+    qcApproved: 0,
+    qcRejected: 0,
+    qcPending: 0,
+  }
+}
+
+/** True when live survey scans are allowed for this scope size / access pattern. */
+function mayUseLiveMunicipalityFallback(me: Doc<"users">, scopedMuniCount: number, wardScoped: boolean): boolean {
+  if (wardScoped) return scopedMuniCount <= DASHBOARD_LIVE_FALLBACK_ULB_CAP
+  if (me.role === "admin" && scopedMuniCount > DASHBOARD_LIVE_FALLBACK_ULB_CAP) return false
+  return scopedMuniCount <= DASHBOARD_LIVE_FALLBACK_ULB_CAP
+}
 
 function istTrendBuckets<T>(days: number, nowMs: number, empty: () => T): { startMs: number; buckets: Map<string, T> } {
   const safeDays = Math.min(Math.max(days, 1), 180)
@@ -111,23 +139,28 @@ export async function loadBoundedScopedSurveyRows(
   const scopedMunis = await resolveDashboardMunicipalityIds(ctx, me)
   if (scopedMunis.length === 0) return []
 
+  // Before: sequential await per municipality (O(M) wall time).
+  // After: parallel indexed takes; merge until maxRows.
+  const perMuniTake = Math.min(maxRows, Math.ceil(maxRows / Math.max(scopedMunis.length, 1)) + 20)
+  const batches = await Promise.all(
+    scopedMunis.map((municipalityId) =>
+      ctx.db
+        .query("surveys")
+        .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId))
+        .take(perMuniTake)
+    )
+  )
+
   const seen = new Set<string>()
   const rows: Doc<"surveys">[] = []
-
-  for (const municipalityId of scopedMunis) {
-    if (rows.length >= maxRows) break
-    const remaining = maxRows - rows.length
-    const batch = await ctx.db
-      .query("surveys")
-      .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId))
-      .take(remaining)
+  for (const batch of batches) {
     for (const row of batch) {
       if (seen.has(row._id)) continue
       if (!muniIds.has(row.municipalityId)) continue
       if (!canReadWard(me, row.municipalityId, row.wardNo)) continue
       seen.add(row._id)
       rows.push(row)
-      if (rows.length >= maxRows) break
+      if (rows.length >= maxRows) return rows
     }
   }
 
@@ -205,9 +238,11 @@ async function loadMunicipalityDashboardCounts(
   me: Doc<"users">,
   municipalityId: Id<"municipalities">,
   todayMs: number,
-  wardScoped: boolean
+  wardScoped: boolean,
+  allowLiveFallback: boolean
 ): Promise<DashboardCountPart> {
   if (wardScoped) {
+    if (!allowLiveFallback) return emptyDashboardCountPart()
     const live = await computeLiveMunicipalitySnapshot(ctx, me, municipalityId, todayMs)
     return liveSnapshotToDashboardPart(live)
   }
@@ -229,6 +264,7 @@ async function loadMunicipalityDashboardCounts(
     }
 
     if (!municipalityStatsRowLooksConsistent(rollup)) {
+      if (!allowLiveFallback) return emptyDashboardCountPart()
       const live = await computeLiveMunicipalitySnapshot(ctx, me, municipalityId, todayMs)
       return liveSnapshotToDashboardPart(live)
     }
@@ -252,7 +288,7 @@ async function loadMunicipalityDashboardCounts(
     if (dailyRow) {
       part.today = dailyRow.created
       part.submittedToday = dailyRow.submitted
-    } else {
+    } else if (allowLiveFallback) {
       const today = await computeTodayMetricsForMunicipality(ctx, me, municipalityId, todayMs)
       part.today = today.created
       part.submittedToday = today.submitted
@@ -261,6 +297,7 @@ async function loadMunicipalityDashboardCounts(
     return part
   }
 
+  if (!allowLiveFallback) return emptyDashboardCountPart()
   const live = await computeLiveMunicipalitySnapshot(ctx, me, municipalityId, todayMs)
   return liveSnapshotToDashboardPart(live)
 }
@@ -289,8 +326,11 @@ export async function loadDashboardCountsForHome(
   }
 
   const wardScoped = userRequiresWardScopedSurveyCounts(me)
+  const allowLiveFallback = mayUseLiveMunicipalityFallback(me, scopedMuniIds.length, wardScoped)
   const parts = await Promise.all(
-    scopedMuniIds.map((municipalityId) => loadMunicipalityDashboardCounts(ctx, me, municipalityId, todayMs, wardScoped))
+    scopedMuniIds.map((municipalityId) =>
+      loadMunicipalityDashboardCounts(ctx, me, municipalityId, todayMs, wardScoped, allowLiveFallback)
+    )
   )
 
   return mergeDashboardCountParts(parts)
@@ -778,6 +818,12 @@ async function computeTodayMetricsForMunicipality(
   return { created: snapshot.todayCreated, submitted: snapshot.submittedToday }
 }
 
+/**
+ * Load municipality stats rollups with optional live fallback.
+ *
+ * Before: sequential per-ULB; missing stats → live take(2500) each (timeout on admin).
+ * After: parallel indexed `.unique()`; live only when scope ≤ DASHBOARD_LIVE_FALLBACK_ULB_CAP.
+ */
 async function loadMunicipalityStatsRollupsResilient(
   ctx: QueryCtx,
   me: Doc<"users">,
@@ -785,49 +831,50 @@ async function loadMunicipalityStatsRollupsResilient(
   todayMs: number
 ): Promise<MunicipalityStatsRollup[]> {
   const wardScoped = userRequiresWardScopedSurveyCounts(me)
-  const rollups: MunicipalityStatsRollup[] = []
+  const allowLiveFallback = mayUseLiveMunicipalityFallback(me, scopedMuniIds.length, wardScoped)
+  const todayStart = startOfDayMsFromKey(formatDateKey(todayMs))
 
-  for (const municipalityId of scopedMuniIds) {
-    if (!wardScoped) {
-      const row = await ctx.db
-        .query("surveyMunicipalityStats")
-        .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
-        .unique()
-      if (row) {
-        const rollup: MunicipalityStatsRollup = {
-          municipalityId: row.municipalityId,
-          total: row.total,
-          drafts: row.drafts,
-          submitted: row.submitted,
-          qcApproved: row.qcApproved,
-          qcRejected: row.qcRejected,
-          qcPending: row.qcPending,
-        }
-        if (municipalityStatsRowLooksConsistent(rollup)) {
-          rollups.push(rollup)
-          continue
+  const results = await Promise.all(
+    scopedMuniIds.map(async (municipalityId) => {
+      if (!wardScoped) {
+        const row = await ctx.db
+          .query("surveyMunicipalityStats")
+          .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
+          .unique()
+        if (row) {
+          const rollup: MunicipalityStatsRollup = {
+            municipalityId: row.municipalityId,
+            total: row.total,
+            drafts: row.drafts,
+            submitted: row.submitted,
+            qcApproved: row.qcApproved,
+            qcRejected: row.qcRejected,
+            qcPending: row.qcPending,
+          }
+          if (municipalityStatsRowLooksConsistent(rollup)) {
+            return rollup
+          }
         }
       }
-    }
 
-    const live = await computeLiveMunicipalitySnapshot(
-      ctx,
-      me,
-      municipalityId,
-      startOfDayMsFromKey(formatDateKey(todayMs))
-    )
-    rollups.push({
-      municipalityId: live.municipalityId,
-      total: live.total,
-      drafts: live.drafts,
-      submitted: live.submitted,
-      qcApproved: live.qcApproved,
-      qcRejected: live.qcRejected,
-      qcPending: live.qcPending,
+      if (!allowLiveFallback) {
+        return emptyMunicipalityRollup(municipalityId)
+      }
+
+      const live = await computeLiveMunicipalitySnapshot(ctx, me, municipalityId, todayStart)
+      return {
+        municipalityId: live.municipalityId,
+        total: live.total,
+        drafts: live.drafts,
+        submitted: live.submitted,
+        qcApproved: live.qcApproved,
+        qcRejected: live.qcRejected,
+        qcPending: live.qcPending,
+      }
     })
-  }
+  )
 
-  return rollups
+  return results
 }
 
 /** Municipality ids visible for stats rollups, optionally narrowed by district / ULB filters. */

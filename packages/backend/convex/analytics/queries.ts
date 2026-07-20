@@ -298,6 +298,77 @@ function filterActiveUsersInScopeSimple(
   })
 }
 
+/**
+ * Load active users of a role within tenant scope via municipality indexes.
+ *
+ * Before: O(all users with role) — global `by_role_status` `.collect()` then filter in memory.
+ * After: O(scoped municipalities) — parallel `by_municipality_status` lookups + role filter.
+ */
+async function loadActiveUsersInScopeByRole(
+  ctx: QueryCtx,
+  role: "surveyor" | "qc_supervisor",
+  scopedMunicipalityIds: Id<"municipalities">[],
+  muniIds: Set<Id<"municipalities">>,
+  districtIds: Set<Id<"districts">>
+): Promise<Doc<"users">[]> {
+  if (scopedMunicipalityIds.length === 0) return []
+
+  const batches = await Promise.all(
+    scopedMunicipalityIds.map((municipalityId) =>
+      ctx.db
+        .query("users")
+        .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId).eq("status", "active"))
+        .collect()
+    )
+  )
+
+  const seen = new Set<string>()
+  const users: Doc<"users">[] = []
+  for (const batch of batches) {
+    for (const u of batch) {
+      if (u.role !== role) continue
+      if (seen.has(u._id)) continue
+      seen.add(u._id)
+      users.push(u)
+    }
+  }
+
+  return filterActiveUsersInScopeSimple(users, muniIds, districtIds)
+}
+
+/** Hydrate surveyor docs from rollup IDs (O(unique surveyors) gets — no global collect). */
+async function loadActiveSurveyorsByIds(ctx: QueryCtx, surveyorIds: Id<"users">[]): Promise<Doc<"users">[]> {
+  const unique = [...new Set(surveyorIds)]
+  if (unique.length === 0) return []
+  const docs = await Promise.all(unique.map((id) => ctx.db.get("users", id)))
+  return docs.filter((u): u is Doc<"users"> => u != null && u.status === "active" && u.role === "surveyor")
+}
+
+function buildQcSupervisorRows(
+  activeQcSupervisors: Doc<"users">[],
+  decisionsByReviewer: Map<Id<"users">, Doc<"qcDecisions">[]>
+) {
+  return activeQcSupervisors
+    .map((u) => {
+      const scoped = decisionsByReviewer.get(u._id) ?? []
+      let approved = 0
+      let rejected = 0
+      for (const decision of scoped) {
+        if (decision.decision === "approve") approved += 1
+        if (decision.decision === "reject") rejected += 1
+      }
+      return {
+        reviewerId: u._id,
+        name: u.name,
+        email: u.email,
+        approved,
+        rejected,
+        total: scoped.length,
+      }
+    })
+    .sort((a, b) => b.total - a.total)
+}
+
 /** Pick the cheaper QC decision load strategy based on scope size. */
 async function loadScopedQcDecisionsByReviewer(
   ctx: QueryCtx,
@@ -420,14 +491,13 @@ async function buildDashboardBreakdown(
 
   const bySurveyorGroups = groupCounts(surveyorRows, (r) => r.surveyorId, todayStartMs)
 
-  const activeSurveyors = filterActiveUsersInScopeSimple(
-    await ctx.db
-      .query("users")
-      .withIndex("by_role_status", (q) => q.eq("role", "surveyor").eq("status", "active"))
-      .collect(),
-    muniIds,
-    districtIds
-  )
+  // Before: global surveyor + qc_supervisor role collects.
+  // After: parallel municipality-scoped user loads.
+  const scopedMuniList = [...muniIds]
+  const [activeSurveyors, activeQcSupervisors] = await Promise.all([
+    loadActiveUsersInScopeByRole(ctx, "surveyor", scopedMuniList, muniIds, districtIds),
+    loadActiveUsersInScopeByRole(ctx, "qc_supervisor", scopedMuniList, muniIds, districtIds),
+  ])
 
   const bySurveyor = activeSurveyors
     .map((u) => {
@@ -446,15 +516,6 @@ async function buildDashboardBreakdown(
     })
     .sort((a, b) => b.approved + b.submitted - (a.approved + a.submitted))
 
-  const activeQcSupervisors = filterActiveUsersInScopeSimple(
-    await ctx.db
-      .query("users")
-      .withIndex("by_role_status", (q) => q.eq("role", "qc_supervisor").eq("status", "active"))
-      .collect(),
-    muniIds,
-    districtIds
-  )
-
   const scopedSurveyIds = new Set(surveyorRows.map((r) => r._id))
   const scopedMunicipalityIds = new Set(surveyorRows.map((r) => r.municipalityId))
   const decisionsByReviewer = await loadScopedQcDecisionsByReviewer(
@@ -465,25 +526,7 @@ async function buildDashboardBreakdown(
     fromMs
   )
 
-  const byQcSupervisor = activeQcSupervisors
-    .map((u) => {
-      const scoped = decisionsByReviewer.get(u._id) ?? []
-      let approved = 0
-      let rejected = 0
-      for (const decision of scoped) {
-        if (decision.decision === "approve") approved += 1
-        if (decision.decision === "reject") rejected += 1
-      }
-      return {
-        reviewerId: u._id,
-        name: u.name,
-        email: u.email,
-        approved,
-        rejected,
-        total: scoped.length,
-      }
-    })
-    .sort((a, b) => b.total - a.total)
+  const byQcSupervisor = buildQcSupervisorRows(activeQcSupervisors, decisionsByReviewer)
 
   return {
     summary: statsBreakdown?.summary ?? countRows(surveyorRows, todayStartMs),
@@ -550,13 +593,19 @@ function aggregateSurveyorRollups(rollups: SurveyorStatsRollup[]): Map<Id<"users
   return groups
 }
 
+/**
+ * Home-path breakdown from rollups — no QC decision fan-out.
+ *
+ * Before: global user collects + QC decisions × ULBs inside analyticsBundle (timeout risk).
+ * After: surveyor docs from rollup IDs + scoped municipality user loads; QC left empty for qcSupervisorBundle.
+ */
 async function buildDashboardBreakdownFromRollups(
   ctx: QueryCtx,
-  me: Doc<"users">,
+  _me: Doc<"users">,
   statsBreakdown: Awaited<ReturnType<typeof loadAnalyticsBreakdownFromStats>>,
   surveyorRollups: SurveyorStatsRollup[],
   todayStartMs: number,
-  fromMs: number,
+  _fromMs: number,
   scope: Awaited<ReturnType<typeof resolveTenantScope>>
 ) {
   const districtIds = tenantDistrictIds(scope)
@@ -568,14 +617,20 @@ async function buildDashboardBreakdownFromRollups(
   const byDistrict = statsBreakdown?.byDistrict ?? []
   const byUlb = statsBreakdown?.byUlb ?? []
 
-  const activeSurveyors = filterActiveUsersInScopeSimple(
-    await ctx.db
-      .query("users")
-      .withIndex("by_role_status", (q) => q.eq("role", "surveyor").eq("status", "active"))
-      .collect(),
-    muniIds,
-    districtIds
-  )
+  const scopedMuniList = [...muniIds]
+  const [rollupSurveyors, scopedSurveyors] = await Promise.all([
+    loadActiveSurveyorsByIds(
+      ctx,
+      surveyorRollups.map((r) => r.surveyorId)
+    ),
+    loadActiveUsersInScopeByRole(ctx, "surveyor", scopedMuniList, muniIds, districtIds),
+  ])
+
+  const surveyorById = new Map<Id<"users">, Doc<"users">>()
+  for (const u of [...rollupSurveyors, ...scopedSurveyors]) {
+    surveyorById.set(u._id, u)
+  }
+  const activeSurveyors = [...surveyorById.values()]
 
   const bySurveyor = activeSurveyors
     .map((u) => {
@@ -593,44 +648,6 @@ async function buildDashboardBreakdownFromRollups(
       }
     })
     .sort((a, b) => b.approved + b.submitted - (a.approved + a.submitted))
-
-  const activeQcSupervisors = filterActiveUsersInScopeSimple(
-    await ctx.db
-      .query("users")
-      .withIndex("by_role_status", (q) => q.eq("role", "qc_supervisor").eq("status", "active"))
-      .collect(),
-    muniIds,
-    districtIds
-  )
-
-  const scopedMunicipalityIds = new Set(surveyorRollups.map((r) => r.municipalityId))
-  const decisionsByReviewer = await loadScopedQcDecisionsByReviewer(
-    ctx,
-    new Set(),
-    scopedMunicipalityIds,
-    activeQcSupervisors,
-    fromMs
-  )
-
-  const byQcSupervisor = activeQcSupervisors
-    .map((u) => {
-      const scoped = decisionsByReviewer.get(u._id) ?? []
-      let approved = 0
-      let rejected = 0
-      for (const decision of scoped) {
-        if (decision.decision === "approve") approved += 1
-        if (decision.decision === "reject") rejected += 1
-      }
-      return {
-        reviewerId: u._id,
-        name: u.name,
-        email: u.email,
-        approved,
-        rejected,
-        total: scoped.length,
-      }
-    })
-    .sort((a, b) => b.total - a.total)
 
   const summary =
     statsBreakdown?.summary ??
@@ -651,7 +668,8 @@ async function buildDashboardBreakdownFromRollups(
     byDistrict,
     byUlb,
     bySurveyor,
-    byQcSupervisor,
+    // QC loaded by qcSupervisorBundle — keep empty arrays for StatsBreakdown shape compatibility.
+    byQcSupervisor: [] as ReturnType<typeof buildQcSupervisorRows>,
     filterOptions: {
       districts: scope.districts.map((d) => ({ _id: d._id, code: d.code, name: d.name })),
       municipalities: scope.municipalities.map((m) => ({
@@ -665,12 +683,53 @@ async function buildDashboardBreakdownFromRollups(
         name: u.name,
         email: u.email,
       })),
-      qcSupervisors: activeQcSupervisors.map((u) => ({
-        _id: u._id,
-        name: u.name,
-        email: u.email,
-      })),
+      qcSupervisors: [] as Array<{ _id: Id<"users">; name: string; email: string }>,
     },
+  }
+}
+
+/**
+ * QC supervisor throughput for home dashboard (sibling of analyticsBundle).
+ *
+ * Before: embedded in analyticsBundle → home timed out on multi-ULB QC fan-out.
+ * After: O(scoped ULBs × capped decisions) on an independent subscription.
+ */
+async function buildQcSupervisorBundle(
+  ctx: QueryCtx,
+  me: Doc<"users">,
+  fromMs: number
+): Promise<{
+  byQcSupervisor: ReturnType<typeof buildQcSupervisorRows>
+  qcSupervisors: Array<{ _id: Id<"users">; name: string; email: string }>
+}> {
+  const scope = await resolveDashboardTenantScope(ctx, me)
+  const districtIds = tenantDistrictIds(scope)
+  const muniIds = tenantMunicipalityIds(scope)
+  const scopedMuniList = [...muniIds]
+
+  const activeQcSupervisors = await loadActiveUsersInScopeByRole(
+    ctx,
+    "qc_supervisor",
+    scopedMuniList,
+    muniIds,
+    districtIds
+  )
+
+  const decisionsByReviewer = await loadScopedQcDecisionsByReviewer(
+    ctx,
+    new Set(),
+    new Set(scopedMuniList),
+    activeQcSupervisors,
+    fromMs
+  )
+
+  return {
+    byQcSupervisor: buildQcSupervisorRows(activeQcSupervisors, decisionsByReviewer),
+    qcSupervisors: activeQcSupervisors.map((u) => ({
+      _id: u._id,
+      name: u.name,
+      email: u.email,
+    })),
   }
 }
 
@@ -867,11 +926,22 @@ export const surveyStatsBreakdown = query({
 
     const bySurveyorGroups = groupCounts(rows, (r) => r.surveyorId, todayStartMs)
 
+    // Before: global by_role_status collects for surveyor + qc_supervisor.
+    // After: municipality-scoped indexed loads (O(scoped ULBs)).
+    let scopedMuniList = [...muniIds]
+    if (args.municipalityId) {
+      scopedMuniList = [args.municipalityId]
+    } else if (args.districtId) {
+      scopedMuniList = scope.municipalities.filter((m) => m.districtId === args.districtId).map((m) => m._id)
+    }
+
+    const [scopedSurveyors, scopedQcSupervisors] = await Promise.all([
+      loadActiveUsersInScopeByRole(ctx, "surveyor", scopedMuniList, muniIds, districtIds),
+      loadActiveUsersInScopeByRole(ctx, "qc_supervisor", scopedMuniList, muniIds, districtIds),
+    ])
+
     const activeSurveyors = filterActiveUsersInScope(
-      await ctx.db
-        .query("users")
-        .withIndex("by_role_status", (q) => q.eq("role", "surveyor").eq("status", "active"))
-        .collect(),
+      scopedSurveyors,
       muniIds,
       districtIds,
       args.districtId,
@@ -897,10 +967,7 @@ export const surveyStatsBreakdown = query({
       .sort((a, b) => b.approved + b.submitted - (a.approved + a.submitted))
 
     const activeQcSupervisors = filterActiveUsersInScope(
-      await ctx.db
-        .query("users")
-        .withIndex("by_role_status", (q) => q.eq("role", "qc_supervisor").eq("status", "active"))
-        .collect(),
+      scopedQcSupervisors,
       muniIds,
       districtIds,
       args.districtId,
@@ -908,8 +975,10 @@ export const surveyStatsBreakdown = query({
       muniMap
     )
 
-    const scopedSurveyIds = new Set(rows.map((r) => r._id))
-    const scopedMunicipalityIds = new Set(rows.map((r) => r.municipalityId))
+    // Prefer municipality-scoped decisions (fromMs=0) over survey-id filtering when filters narrow ULBs.
+    const scopedMunicipalityIds =
+      scopedMuniList.length > 0 ? new Set(scopedMuniList) : new Set(rows.map((r) => r.municipalityId))
+    const scopedSurveyIds = args.surveyorId ? new Set(rows.map((r) => r._id)) : new Set<Id<"surveys">>()
     const decisionsByReviewer = await loadScopedQcDecisionsByReviewer(
       ctx,
       scopedSurveyIds,
@@ -918,25 +987,7 @@ export const surveyStatsBreakdown = query({
       0
     )
 
-    const byQcSupervisor = activeQcSupervisors
-      .map((u) => {
-        const scoped = decisionsByReviewer.get(u._id) ?? []
-        let approved = 0
-        let rejected = 0
-        for (const decision of scoped) {
-          if (decision.decision === "approve") approved += 1
-          if (decision.decision === "reject") rejected += 1
-        }
-        return {
-          reviewerId: u._id,
-          name: u.name,
-          email: u.email,
-          approved,
-          rejected,
-          total: scoped.length,
-        }
-      })
-      .sort((a, b) => b.total - a.total)
+    const byQcSupervisor = buildQcSupervisorRows(activeQcSupervisors, decisionsByReviewer)
 
     const filterMunicipalities = scope.municipalities.filter(
       (m) => !args.districtId || m.districtId === args.districtId
@@ -1060,6 +1111,34 @@ export const analyticsBundle = query({
 
     const todayMs = startOfDayMs(args.nowMs)
     return buildAnalyticsBundle(ctx, me, todayMs, args.trendDays ?? 30, args.nowMs)
+  },
+})
+
+const qcSupervisorBundleShape = v.object({
+  byQcSupervisor: v.array(v.object(qcSupervisorRow)),
+  qcSupervisors: v.array(userFilterOption),
+})
+
+/**
+ * QC supervisor throughput for the home dashboard.
+ * Loaded separately from analyticsBundle so charts succeed without waiting on QC fan-out.
+ */
+export const qcSupervisorBundle = query({
+  args: {
+    nowMs: v.number(),
+    trendDays: v.optional(v.number()),
+  },
+  returns: v.union(v.null(), qcSupervisorBundleShape),
+  handler: async (ctx, args) => {
+    const me = await requireUser(ctx, { allowPending: true })
+    if (me.status !== "active") return null
+
+    const canViewAnalytics = await hasCapability(ctx, me, "analytics.view")
+    if (!canViewAnalytics) return null
+
+    const days = Math.min(Math.max(args.trendDays ?? 30, 1), 180)
+    const fromMs = args.nowMs - (days + DASHBOARD_ANALYTICS_WINDOW_BUFFER_DAYS) * MS_PER_DAY
+    return buildQcSupervisorBundle(ctx, me, fromMs)
   },
 })
 

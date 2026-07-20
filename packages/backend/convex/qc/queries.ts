@@ -193,13 +193,16 @@ export const listParcelSiblings = query({
       wardVariants.add(String(wardNum).padStart(2, "0"))
     }
 
+    // Before: unbounded `.collect()` per ward string variant (timeout on dense wards).
+    // After: O(variants × cap) indexed take — enough to find parcel siblings.
+    const WARD_SIBLING_SCAN_CAP = 500
     const wardRows: Doc<"surveys">[] = []
     const batches = await Promise.all(
       [...wardVariants].map((ward) =>
         ctx.db
           .query("surveys")
           .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", survey.municipalityId).eq("wardNo", ward))
-          .collect()
+          .take(WARD_SIBLING_SCAN_CAP)
       )
     )
     for (const batch of batches) {
@@ -253,7 +256,7 @@ export const listPropertyIdConflicts = query({
     const matches = await ctx.db
       .query("surveys")
       .withIndex("by_property_id", (q) => q.eq("propertyId", resolvedId))
-      .collect()
+      .take(MAX_PARCEL_SIBLING_RESULTS + 50)
 
     const conflicts = matches.filter((row) => {
       if (row._id === args.surveyId) return false

@@ -197,6 +197,16 @@ export const webDashboardAnalyticsSchema = z.object({
 export type WebDashboardAnalytics = z.infer<typeof webDashboardAnalyticsSchema>
 
 /**
+ * QC supervisor sibling bundle for the home dashboard (loaded separately from analyticsBundle).
+ */
+export const webDashboardQcSupervisorsSchema = z.object({
+  byQcSupervisor: z.array(qcSupervisorBreakdownSchema),
+  qcSupervisors: z.array(userFilterOptionSchema),
+})
+
+export type WebDashboardQcSupervisors = z.infer<typeof webDashboardQcSupervisorsSchema>
+
+/**
  * Complete web dashboard bundle.
  */
 export const webDashboardBundleSchema = z.object({

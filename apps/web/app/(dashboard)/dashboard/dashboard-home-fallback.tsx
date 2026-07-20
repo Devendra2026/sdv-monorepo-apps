@@ -17,6 +17,7 @@ export function DashboardHomeFallback({ nowMs: nowMsProp }: { nowMs?: number }) 
   const nowMs = nowMsProp ?? clientNowMs
   const counts = useQuery(api.analytics.queries.counts, ready ? { nowMs } : "skip")
   const analytics = useQuery(api.analytics.queries.analyticsBundle, ready ? { nowMs, trendDays: 30 } : "skip")
+  const qcSupervisors = useQuery(api.analytics.queries.qcSupervisorBundle, ready ? { nowMs, trendDays: 30 } : "skip")
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -28,7 +29,7 @@ export function DashboardHomeFallback({ nowMs: nowMsProp }: { nowMs?: number }) 
       </DataSection>
 
       <DataSection ready={analytics !== undefined} skeleton={<DashboardAnalyticsSkeleton />} ariaLabel="Analytics">
-        <DashboardAnalyticsClient analytics={analytics ?? null} />
+        <DashboardAnalyticsClient analytics={analytics ?? null} qcSupervisors={qcSupervisors ?? null} />
       </DataSection>
     </div>
   )

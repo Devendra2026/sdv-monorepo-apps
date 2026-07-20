@@ -97,6 +97,11 @@ export const preloadDashboardAnalytics = cache(async (nowMs: number, trendDays =
   return preloadConvexQuery(api.analytics.queries.analyticsBundle, { nowMs, trendDays })
 })
 
+/** Deduped per-request preload for QC supervisor throughput (sibling of analyticsBundle). */
+export const preloadDashboardQcSupervisors = cache(async (nowMs: number, trendDays = 30) => {
+  return preloadConvexQuery(api.analytics.queries.qcSupervisorBundle, { nowMs, trendDays })
+})
+
 /** Deduped per-request preload for the home activity feed. */
 export const preloadDashboardActivity = cache(async () => {
   return preloadConvexQuery(api.analytics.queries.recentActivity, {})

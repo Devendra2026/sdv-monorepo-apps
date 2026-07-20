@@ -121,11 +121,13 @@ export const listUsers = query({
 /** Active user count for admin dashboard cards. */
 export const countActiveUsers = query({
   args: {},
+  returns: v.number(),
   handler: async (ctx) => {
     const me = await requireUser(ctx)
     await assertCanListUsers(ctx, me)
 
     if (me.role === "admin") {
+      // Indexed by_status — still O(active users); no count API. Prefer rollup later.
       const rows = await ctx.db
         .query("users")
         .withIndex("by_status", (q) => q.eq("status", "active"))
@@ -138,23 +140,32 @@ export const countActiveUsers = query({
     const districtIds = [...tenantDistrictIds(scope)]
     const seen = new Set<string>()
 
-    for (const municipalityId of muniIds) {
-      const rows = await ctx.db
-        .query("users")
-        .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId).eq("status", "active"))
-        .collect()
-      for (const row of rows) {
-        seen.add(row._id)
-      }
+    // Before: sequential per-muni/district awaits.
+    // After: parallel indexed collects within tenant scope.
+    const [muniBatches, districtBatches] = await Promise.all([
+      Promise.all(
+        muniIds.map((municipalityId) =>
+          ctx.db
+            .query("users")
+            .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId).eq("status", "active"))
+            .collect()
+        )
+      ),
+      Promise.all(
+        districtIds.map((districtId) =>
+          ctx.db
+            .query("users")
+            .withIndex("by_district_status", (q) => q.eq("districtId", districtId).eq("status", "active"))
+            .collect()
+        )
+      ),
+    ])
+
+    for (const rows of muniBatches) {
+      for (const row of rows) seen.add(row._id)
     }
-    for (const districtId of districtIds) {
-      const rows = await ctx.db
-        .query("users")
-        .withIndex("by_district_status", (q) => q.eq("districtId", districtId).eq("status", "active"))
-        .collect()
-      for (const row of rows) {
-        seen.add(row._id)
-      }
+    for (const rows of districtBatches) {
+      for (const row of rows) seen.add(row._id)
     }
     return seen.size
   },
@@ -163,6 +174,7 @@ export const countActiveUsers = query({
 /** Disabled user count for admin directory KPIs. */
 export const countDisabledUsers = query({
   args: {},
+  returns: v.number(),
   handler: async (ctx) => {
     const me = await requireUser(ctx)
     await assertCanListUsers(ctx, me)
@@ -180,23 +192,30 @@ export const countDisabledUsers = query({
     const districtIds = [...tenantDistrictIds(scope)]
     const seen = new Set<string>()
 
-    for (const municipalityId of muniIds) {
-      const rows = await ctx.db
-        .query("users")
-        .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId).eq("status", "disabled"))
-        .collect()
-      for (const row of rows) {
-        seen.add(row._id)
-      }
+    const [muniBatches, districtBatches] = await Promise.all([
+      Promise.all(
+        muniIds.map((municipalityId) =>
+          ctx.db
+            .query("users")
+            .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId).eq("status", "disabled"))
+            .collect()
+        )
+      ),
+      Promise.all(
+        districtIds.map((districtId) =>
+          ctx.db
+            .query("users")
+            .withIndex("by_district_status", (q) => q.eq("districtId", districtId).eq("status", "disabled"))
+            .collect()
+        )
+      ),
+    ])
+
+    for (const rows of muniBatches) {
+      for (const row of rows) seen.add(row._id)
     }
-    for (const districtId of districtIds) {
-      const rows = await ctx.db
-        .query("users")
-        .withIndex("by_district_status", (q) => q.eq("districtId", districtId).eq("status", "disabled"))
-        .collect()
-      for (const row of rows) {
-        seen.add(row._id)
-      }
+    for (const rows of districtBatches) {
+      for (const row of rows) seen.add(row._id)
     }
     return seen.size
   },

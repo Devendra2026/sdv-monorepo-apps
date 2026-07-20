@@ -602,8 +602,13 @@ export function applySurveyListFilters(
   return filtered.sort(compareWardThenParcel)
 }
 
-/** Max rows loaded before in-memory filter + manual pagination (matches export scope). */
-export const LIST_PAGINATED_SCOPE_LIMIT = 5000
+/**
+ * Max rows loaded for expensive listPaginated filter paths (search, date range, multi-QC, parcelShared).
+ *
+ * Before: 5000 — full-scan paths caused SystemTimeout / 503.
+ * After: 800 — still useful pages; `scopeTruncated` signals incompleteness.
+ */
+export const LIST_PAGINATED_SCOPE_LIMIT = 800
 export const LIST_PAGINATED_PAGE_BUFFER = 100
 export const COMMAND_CENTER_WARD_SCAN_LIMIT = 2500
 
