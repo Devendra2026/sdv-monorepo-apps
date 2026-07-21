@@ -47,7 +47,7 @@ import { draftSurveyInput, submitFloorRow, surveyInput } from "./validators"
  *
  * Production constraints:
  * - Idempotent / retry-safe via localId + existing resolution
- * - Avoids shared analytics writes on draft field/completion churn (OCC storms)
+ * - Draft completion churn skips shared rollup writes inside recordSurveyAnalyticsUpdate
  * - Cheap completion % (presence-only floor/photo reads)
  * - Partial patch only — no full document replace
  */
@@ -135,14 +135,12 @@ export const saveDraft = mutation({
         ...patch,
       }
 
-      // CRITICAL: while status stays draft, never touch shared analytics or audit.
-      // Ward/city edits used to fan out to municipality stats → OCC storms →
-      // UserTimeout → UnhandledPromiseRejection → "Restarting Isolate" on self-hosted.
-      // Status/QC transitions (submit, approved re-queue) still update rollups below.
-      const staysDraft = existing.status === "draft" && updated.status === "draft"
+      // Draft saves call the canonical analytics helper; completion-only churn is
+      // a no-op inside recordSurveyAnalyticsUpdate to avoid municipality-row OCC storms.
+      await recordSurveyStatsUpdate(ctx, existing, updated)
 
+      const staysDraft = existing.status === "draft" && updated.status === "draft"
       if (!staysDraft) {
-        await recordSurveyStatsUpdate(ctx, existing, updated)
         await writeAudit(ctx, {
           actorId: me._id,
           action: auditActionForSave(existing, ownScope, false),
@@ -160,7 +158,7 @@ export const saveDraft = mutation({
     }
 
     // Insert once: seed draft rollup + audit. Further draft field/ward edits
-    // stay on the survey document only (see staysDraft guard above).
+    // update rollups when analytics dimensions change (see recordSurveyAnalyticsUpdate).
     const completionPct = computeSurveyCompletionPercent({ ...writable, floors: [], photos: [] })
     const newId = await ctx.db.insert("surveys", {
       ...writable,
