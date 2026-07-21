@@ -10,9 +10,9 @@ import {
   recordSurveyAnalyticsUpdate,
 } from "./surveyAnalyticsWrites"
 import {
-  filterLegacyAnalyticsRows,
   getLegacyDailyStatsRow,
   getLegacyMunicipalityStatsRow,
+  loadLegacyDailyStatsInDateRange,
 } from "./surveyAnalyticsLookups"
 import {
   computeDailyTrendFromSlice,
@@ -432,14 +432,9 @@ export async function loadDailyTrendFromDailyStats(
 
   await Promise.all(
     scopedMunis.map(async (municipalityId) => {
-      const rows = await ctx.db
-        .query("surveyDailyStats")
-        .withIndex("by_municipality_date", (q) =>
-          q.eq("municipalityId", municipalityId).gte("dateKey", startKey).lte("dateKey", endKey)
-        )
-        .take(safeDays + 5)
+      const rows = await loadLegacyDailyStatsInDateRange(ctx, municipalityId, startKey, endKey)
 
-      for (const row of filterLegacyAnalyticsRows(rows)) {
+      for (const row of rows) {
         const bucket = buckets.get(row.dateKey)
         if (!bucket) continue
         bucket.created += row.created

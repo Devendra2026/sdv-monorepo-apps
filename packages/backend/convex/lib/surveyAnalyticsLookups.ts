@@ -10,6 +10,11 @@ export type AnalyticsGeneration = string
 /** Max rows per legacy index key (legacy + active + building generations). */
 const LEGACY_INDEX_MATCH_CAP = 16
 
+/** Max calendar days in a daily-trend range scan (matches dashboard cap in surveyScopeStats). */
+export const DAILY_TREND_MAX_DAYS = 180
+
+const DAILY_STATS_RANGE_PAGE_SIZE = 128
+
 type DbCtx = QueryCtx | MutationCtx
 
 type GenerationTagged = { generation?: string }
@@ -62,6 +67,36 @@ export async function getLegacyDailyStatsRow(
     .withIndex("by_municipality_date", (q) => q.eq("municipalityId", municipalityId).eq("dateKey", dateKey))
     .take(LEGACY_INDEX_MATCH_CAP)
   return pickUniqueLegacyRow(rows, `municipality ${municipalityId} date ${dateKey}`)
+}
+
+/**
+ * Load all legacy daily stats in [startKey, endKey] for one municipality.
+ * Paginates the legacy index so coexisting generated rows cannot truncate legacy history.
+ */
+export async function loadLegacyDailyStatsInDateRange(
+  ctx: DbCtx,
+  municipalityId: Id<"municipalities">,
+  startKey: string,
+  endKey: string
+): Promise<Doc<"surveyDailyStats">[]> {
+  const legacyRows: Doc<"surveyDailyStats">[] = []
+  let cursor: string | null = null
+
+  while (true) {
+    const page = await ctx.db
+      .query("surveyDailyStats")
+      .withIndex("by_municipality_date", (q) =>
+        q.eq("municipalityId", municipalityId).gte("dateKey", startKey).lte("dateKey", endKey)
+      )
+      .paginate({ numItems: DAILY_STATS_RANGE_PAGE_SIZE, cursor })
+
+    legacyRows.push(...filterLegacyAnalyticsRows(page.page))
+
+    if (page.isDone) break
+    cursor = page.continueCursor
+  }
+
+  return legacyRows
 }
 
 export async function getLegacyWardStatsRow(
