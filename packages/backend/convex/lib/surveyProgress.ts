@@ -35,15 +35,16 @@ export function computeSurveyCompletionPercent(input: {
 }
 
 export async function completionPctForSurvey(ctx: MutationCtx, survey: Doc<"surveys">): Promise<number> {
+  // Presence-only: take(1) avoids loading every floor/photo on hot draft saves.
   const [floors, photos] = await Promise.all([
     ctx.db
       .query("floors")
       .withIndex("by_survey", (q) => q.eq("surveyId", survey._id))
-      .collect(),
+      .take(1),
     ctx.db
       .query("photos")
       .withIndex("by_survey", (q) => q.eq("surveyId", survey._id))
-      .collect(),
+      .take(1),
   ]);
   return computeSurveyCompletionPercent({
     ...survey,

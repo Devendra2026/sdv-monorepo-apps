@@ -1,6 +1,7 @@
 import { v } from "convex/values"
 import type { Doc } from "../_generated/dataModel"
 import { mutation } from "../_generated/server"
+import { recordSurveyStatsUpdate } from "../lib/surveyScopeStats"
 import { requireCapability } from "../shared/capabilities"
 import { clientError, requireUser, writeAudit } from "../shared/helpers"
 import {
@@ -109,13 +110,16 @@ export const reassignDrafts = mutation({
         ctx.db.get("users", args.toSurveyorId),
       ])
 
+      const surveyPatch = {
+        surveyorId: args.toSurveyorId,
+        localId,
+        serverVersion: survey.serverVersion + 1,
+        clientUpdatedAt: now,
+      }
+      await ctx.db.patch(survey._id, surveyPatch)
+      await recordSurveyStatsUpdate(ctx, survey, { ...survey, ...surveyPatch })
+
       await Promise.all([
-        ctx.db.patch(survey._id, {
-          surveyorId: args.toSurveyorId,
-          localId,
-          serverVersion: survey.serverVersion + 1,
-          clientUpdatedAt: now,
-        }),
         ctx.db.insert("notifications", {
           userId: args.toSurveyorId,
           type: "survey_draft_assigned",

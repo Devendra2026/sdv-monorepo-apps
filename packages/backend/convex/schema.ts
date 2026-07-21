@@ -445,13 +445,17 @@ export default defineSchema({
     errorMessage: v.optional(v.string()),
     createdAt: v.number(),
     completedAt: v.optional(v.number()),
-  }).index("by_user_created", ["requestedBy", "createdAt"]),
+  }).index("by_user_created", ["requestedBy", "createdAt"])
+    .index("by_status_created", ["status", "createdAt"])
+    .index("by_createdAt", ["createdAt"]),
 
   /**
    * Denormalized per-municipality survey counters for fast dashboard KPIs.
    * Updated by survey/QC mutations; backfill via migrations/backfillSurveyScopeStats.
    */
   surveyMunicipalityStats: defineTable({
+    /** Omitted on legacy rows; required on generation-scoped rollups after cutover. */
+    generation: v.optional(v.string()),
     municipalityId: v.id("municipalities"),
     total: v.number(),
     drafts: v.number(),
@@ -462,18 +466,27 @@ export default defineSchema({
     /** Sum of completionPct across surveys — for avg without full scan. */
     completionPctSum: v.optional(v.number()),
     completionPctCount: v.optional(v.number()),
-  }).index("by_municipality", ["municipalityId"]),
+  })
+    .index("by_municipality", ["municipalityId"])
+    .index("by_generation_and_municipalityId", ["generation", "municipalityId"]),
 
   /** Per-municipality daily rollups for "today" and "submitted today" KPIs. */
   surveyDailyStats: defineTable({
+    generation: v.optional(v.string()),
     municipalityId: v.id("municipalities"),
     dateKey: v.string(),
     created: v.number(),
     submitted: v.number(),
-  }).index("by_municipality_date", ["municipalityId", "dateKey"]),
+    /** QC decision events — optional on legacy rows. */
+    approved: v.optional(v.number()),
+    rejected: v.optional(v.number()),
+  })
+    .index("by_municipality_date", ["municipalityId", "dateKey"])
+    .index("by_generation_and_municipalityId_and_dateKey", ["generation", "municipalityId", "dateKey"]),
 
   /** Per-ward survey counters for command-center ward tables. */
   surveyWardStats: defineTable({
+    generation: v.optional(v.string()),
     municipalityId: v.id("municipalities"),
     wardNo: v.string(),
     city: v.string(),
@@ -488,10 +501,12 @@ export default defineSchema({
     firstPendingSurveyId: v.optional(v.id("surveys")),
   })
     .index("by_municipality", ["municipalityId"])
-    .index("by_municipality_ward", ["municipalityId", "wardNo"]),
+    .index("by_municipality_ward", ["municipalityId", "wardNo"])
+    .index("by_generation_and_municipalityId_and_wardNo", ["generation", "municipalityId", "wardNo"]),
 
   /** Per-surveyor survey counters for analytics breakdown. */
   surveySurveyorStats: defineTable({
+    generation: v.optional(v.string()),
     surveyorId: v.id("users"),
     municipalityId: v.id("municipalities"),
     districtId: v.id("districts"),
@@ -503,5 +518,75 @@ export default defineSchema({
   })
     .index("by_surveyor", ["surveyorId"])
     .index("by_municipality", ["municipalityId"])
-    .index("by_surveyor_municipality", ["surveyorId", "municipalityId"]),
+    .index("by_surveyor_municipality", ["surveyorId", "municipalityId"])
+    .index("by_generation_and_municipalityId", ["generation", "municipalityId"])
+    .index("by_generation_and_surveyorId_and_municipalityId", [
+      "generation",
+      "surveyorId",
+      "municipalityId",
+    ]),
+
+  /** All-time district counters for analytics breakdown. */
+  surveyDistrictStats: defineTable({
+    generation: v.string(),
+    districtId: v.id("districts"),
+    total: v.number(),
+    drafts: v.number(),
+    submitted: v.number(),
+    qcApproved: v.number(),
+    qcRejected: v.number(),
+    qcPending: v.number(),
+  }).index("by_generation_and_districtId", ["generation", "districtId"]),
+
+  /** QC reviewer throughput by municipality. */
+  surveyQcReviewerStats: defineTable({
+    generation: v.string(),
+    reviewerId: v.id("users"),
+    municipalityId: v.id("municipalities"),
+    approved: v.number(),
+    rejected: v.number(),
+    total: v.number(),
+  })
+    .index("by_generation_and_municipalityId", ["generation", "municipalityId"])
+    .index("by_generation_and_reviewerId_and_municipalityId", [
+      "generation",
+      "reviewerId",
+      "municipalityId",
+    ]),
+
+  /** Idempotent survey contribution snapshot per generation (backfill + live writes). */
+  surveyAnalyticsContributions: defineTable({
+    generation: v.string(),
+    surveyId: v.id("surveys"),
+    municipalityId: v.id("municipalities"),
+    districtId: v.id("districts"),
+    surveyorId: v.id("users"),
+    wardNo: v.string(),
+    city: v.string(),
+    status: surveyStatus,
+    qcStatus: qcStatus,
+    submittedAt: v.optional(v.number()),
+    createdAtMs: v.number(),
+    completionPct: v.optional(v.number()),
+  }).index("by_generation_and_surveyId", ["generation", "surveyId"]),
+
+  /** Idempotent QC decision contribution per generation. */
+  qcAnalyticsContributions: defineTable({
+    generation: v.string(),
+    decisionId: v.id("qcDecisions"),
+    reviewerId: v.id("users"),
+    municipalityId: v.id("municipalities"),
+    decision: v.union(v.literal("approve"), v.literal("reject")),
+    decidedAt: v.number(),
+  }).index("by_generation_and_decisionId", ["generation", "decisionId"]),
+
+  /** Singleton metadata for analytics generation cutover. */
+  surveyAnalyticsMeta: defineTable({
+    key: v.literal("survey-analytics"),
+    activeGeneration: v.string(),
+    buildingGeneration: v.optional(v.string()),
+    surveyBackfillCursor: v.optional(v.string()),
+    qcBackfillCursor: v.optional(v.string()),
+    readyAt: v.optional(v.number()),
+  }).index("by_key", ["key"]),
 })

@@ -37,7 +37,8 @@ export const startBulkExport = mutation({
       },
       scope,
       muniIds,
-      access
+      access,
+      MAX_EXPORT_SURVEYS + 1,
     )
 
     if (filtered.length === 0) {
@@ -116,6 +117,15 @@ export const completeExport = mutation({
   handler: async (ctx, args) => {
     const [me, job] = await Promise.all([requireUser(ctx), ctx.db.get(args.jobId)])
     assertJobAccess(me, job)
+
+    // Replace previous blob if a retry completed with a new upload.
+    if (job!.storageId && job!.storageId !== args.storageId) {
+      try {
+        await ctx.storage.delete(job!.storageId)
+      } catch {
+        // blob may already be gone
+      }
+    }
 
     await ctx.db.patch(args.jobId, {
       status: "completed",

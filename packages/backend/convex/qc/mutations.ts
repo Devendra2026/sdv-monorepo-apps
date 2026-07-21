@@ -9,6 +9,7 @@
  */
 import { v } from "convex/values"
 import { mutation } from "../_generated/server"
+import { applyQcDecisionContribution } from "../lib/surveyAnalyticsWrites"
 import { recordSurveyStatsUpdate } from "../lib/surveyScopeStats"
 import { qcSections } from "../schema"
 import { requireCapability } from "../shared/capabilities"
@@ -124,25 +125,32 @@ export const decide = mutation({
     }
 
     const now = Date.now()
-    await Promise.all([
-      ctx.db.insert("qcDecisions", {
-        surveyId: args.surveyId,
-        municipalityId: survey.municipalityId,
-        reviewerId: me._id,
-        decision: args.decision,
-        comment: args.comment,
-        taggedSections: args.taggedSections ?? [],
-        decidedAt: now,
-      }),
-      ctx.db.patch(args.surveyId, {
-        qcStatus: args.decision === "approve" ? "approved" : "rejected",
-        status: args.decision === "approve" ? "approved" : "draft",
-        serverVersion: survey.serverVersion + 1,
-      }),
-    ])
+    const decisionId = await ctx.db.insert("qcDecisions", {
+      surveyId: args.surveyId,
+      municipalityId: survey.municipalityId,
+      reviewerId: me._id,
+      decision: args.decision,
+      comment: args.comment,
+      taggedSections: args.taggedSections ?? [],
+      decidedAt: now,
+    })
+    await ctx.db.patch(args.surveyId, {
+      qcStatus: args.decision === "approve" ? "approved" : "rejected",
+      status: args.decision === "approve" ? "approved" : "draft",
+      serverVersion: survey.serverVersion + 1,
+    })
 
     const decided = await ctx.db.get(args.surveyId)
-    if (decided) await recordSurveyStatsUpdate(ctx, survey, decided)
+    if (decided) {
+      await recordSurveyStatsUpdate(ctx, survey, decided)
+      await applyQcDecisionContribution(ctx, {
+        decisionId,
+        reviewerId: me._id,
+        municipalityId: survey.municipalityId,
+        decision: args.decision,
+        decidedAt: now,
+      })
+    }
 
     if (args.comment && args.comment.trim().length > 0) {
       await ctx.db.insert("qcRemarks", {

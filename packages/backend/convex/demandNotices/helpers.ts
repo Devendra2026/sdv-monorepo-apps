@@ -29,7 +29,7 @@ import { normalizeStoredTaxRates } from "../lib/qc/normalizeTaxRates"
 import { clientError, requireUser } from "../shared/helpers"
 import { assertCanAccessSurvey } from "../shared/fieldAccess"
 
-export const MAX_EXPORT_SURVEYS = 5000
+export const MAX_EXPORT_SURVEYS = 1500
 
 export const jobStatusValidator = v.union(
   v.literal("queued"),

@@ -5,10 +5,10 @@ import { fieldSurveyAccess } from "../shared/fieldAccess"
 import { canReadWard } from "../shared/helpers"
 import { resolveDashboardTenantScope, resolveTenantScope, tenantMunicipalityIds } from "../shared/tenancy"
 import {
-  recordWardSurveyorStatsInsert,
-  recordWardSurveyorStatsRemove,
-  recordWardSurveyorStatsUpdate,
-} from "./surveyRollupStats"
+  recordSurveyAnalyticsInsert,
+  recordSurveyAnalyticsRemove,
+  recordSurveyAnalyticsUpdate,
+} from "./surveyAnalyticsWrites"
 import {
   computeDailyTrendFromSlice,
   computeDashboardCountsFromSlice,
@@ -627,61 +627,17 @@ async function applySurveySnapshot(
 
 /** Record a newly inserted survey in denormalized stats tables. */
 export async function recordSurveyStatsInsert(ctx: MutationCtx, survey: Doc<"surveys">) {
-  await applySurveySnapshot(ctx, survey, 1)
-  await recordWardSurveyorStatsInsert(ctx, survey)
+  await recordSurveyAnalyticsInsert(ctx, survey)
 }
 
 /** Remove a deleted survey from denormalized stats tables. */
 export async function recordSurveyStatsRemove(ctx: MutationCtx, survey: Doc<"surveys">) {
-  await applySurveySnapshot(ctx, survey, -1)
-  await recordWardSurveyorStatsRemove(ctx, survey)
+  await recordSurveyAnalyticsRemove(ctx, survey)
 }
 
 /** Apply a survey update that may change status, qcStatus, or municipality. */
 export async function recordSurveyStatsUpdate(ctx: MutationCtx, before: Doc<"surveys">, after: Doc<"surveys">) {
-  if (before.municipalityId !== after.municipalityId) {
-    await applySurveySnapshot(ctx, before, -1)
-    await applySurveySnapshot(ctx, after, 1)
-    await recordWardSurveyorStatsUpdate(ctx, before, after)
-    return
-  }
-
-  const beforeMuni = municipalityBucketFor(before)
-  const afterMuni = municipalityBucketFor(after)
-  const muniDelta: MunicipalityBucket = { ...EMPTY_MUNI_BUCKET }
-  addMunicipalityBuckets(muniDelta, afterMuni, 1)
-  addMunicipalityBuckets(muniDelta, beforeMuni, -1)
-
-  if (
-    muniDelta.total !== 0 ||
-    muniDelta.drafts !== 0 ||
-    muniDelta.submitted !== 0 ||
-    muniDelta.qcApproved !== 0 ||
-    muniDelta.qcRejected !== 0 ||
-    muniDelta.qcPending !== 0
-  ) {
-    await applyMunicipalityDelta(ctx, after.municipalityId, muniDelta, 1)
-  }
-
-  const dateKeys = new Set([...dateKeysForSurvey(before), ...dateKeysForSurvey(after)])
-  for (const dateKey of dateKeys) {
-    const beforeDaily = dailyBucketFor(before, dateKey)
-    const afterDaily = dailyBucketFor(after, dateKey)
-    const dailyDelta: DailyBucket = { created: 0, submitted: 0 }
-    addDailyBuckets(dailyDelta, afterDaily, 1)
-    addDailyBuckets(dailyDelta, beforeDaily, -1)
-    if (dailyDelta.created === 0 && dailyDelta.submitted === 0) continue
-    await applyDailyDelta(ctx, after.municipalityId, dateKey, dailyDelta, 1)
-  }
-
-  const beforePct = before.completionPct
-  const afterPct = after.completionPct
-  if (beforePct !== afterPct) {
-    if (beforePct !== undefined) await applyCompletionPctDelta(ctx, after.municipalityId, beforePct, -1)
-    if (afterPct !== undefined) await applyCompletionPctDelta(ctx, after.municipalityId, afterPct, 1)
-  }
-
-  await recordWardSurveyorStatsUpdate(ctx, before, after)
+  await recordSurveyAnalyticsUpdate(ctx, before, after)
 }
 
 export type ScopeStatsFilters = {

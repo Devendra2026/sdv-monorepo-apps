@@ -59,6 +59,41 @@ export function snapshotFromSurvey(survey: Doc<"surveys">): SurveyAnalyticsSnaps
   };
 }
 
+/** True when analytics counter dimensions match (ignores completionPct). */
+export function analyticsDimensionsEqual(
+  a: SurveyAnalyticsSnapshot,
+  b: SurveyAnalyticsSnapshot,
+): boolean {
+  return (
+    a.municipalityId === b.municipalityId &&
+    a.districtId === b.districtId &&
+    a.surveyorId === b.surveyorId &&
+    a.wardNo === b.wardNo &&
+    a.city === b.city &&
+    a.status === b.status &&
+    a.qcStatus === b.qcStatus &&
+    a.submittedAt === b.submittedAt &&
+    a.createdAtMs === b.createdAtMs
+  );
+}
+
+/**
+ * Draft wizard saves change completionPct constantly. Rolling that into shared
+ * municipality stats causes OCC storms under concurrent surveyors.
+ * Draft inserts/removes also skip shared completion counters (survey doc still stores %).
+ */
+export function shouldSkipCompletionPctRollup(
+  before: SurveyAnalyticsSnapshot | null,
+  after: SurveyAnalyticsSnapshot | null,
+): boolean {
+  if (after?.status === "draft") {
+    if (!before) return true;
+    return before.status === "draft" && analyticsDimensionsEqual(before, after);
+  }
+  if (before?.status === "draft" && !after) return true;
+  return false;
+}
+
 /** Current-state counters for one survey snapshot (dimensions may overlap). */
 export function countersForSnapshot(snapshot: SurveyAnalyticsSnapshot): SurveyStateCounters {
   return {

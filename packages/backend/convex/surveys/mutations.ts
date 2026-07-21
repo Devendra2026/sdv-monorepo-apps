@@ -11,6 +11,8 @@ import {
   validateFloorRow,
 } from "../lib/masters/areaMasters"
 import { loadAllowedTaxZoneSet, normalizeTaxationFields } from "../lib/masters/taxationMasters"
+import { logSlowPath } from "../lib/observability"
+import { analyticsDimensionsEqual, snapshotFromSurvey } from "../lib/surveyAnalyticsModel"
 import {
   completionPctForSurvey,
   computeSurveyCompletionPercent,
@@ -43,10 +45,18 @@ import { draftSurveyInput, submitFloorRow, surveyInput } from "./validators"
  * Save in-progress survey data without requiring every step to be complete.
  * Full business rules (PIN vs ULB, owner mobile, taxation, etc.) run on
  * `submit` instead.
+ *
+ * Production constraints:
+ * - Idempotent / retry-safe via localId + existing resolution
+ * - Avoids shared analytics writes on draft field/completion churn (OCC storms)
+ * - Cheap completion % (presence-only floor/photo reads)
+ * - Partial patch only — no full document replace
  */
 export const saveDraft = mutation({
   args: draftSurveyInput,
+  returns: v.id("surveys"),
   handler: async (ctx, args) => {
+    const startedAt = Date.now()
     const me = await requireUser(ctx)
     const [, ownScope, canInsert, muni, existing] = await Promise.all([
       requireSurveyDraftEdit(ctx, me),
@@ -109,21 +119,45 @@ export const saveDraft = mutation({
       const { status, qcStatus } = resolvePostSaveStatuses(existing)
       const completionPct = await completionPctForSurvey(ctx, { ...existing, ...writable } as Doc<"surveys">)
 
-      await ctx.db.patch(existing._id, {
+      const patch = {
         ...writable,
         status,
         qcStatus,
         serverVersion: existing.serverVersion + 1,
         clientUpdatedAt: args.clientUpdatedAt,
         completionPct,
-      })
-      const updated = await ctx.db.get(existing._id)
-      if (updated) await recordSurveyStatsUpdate(ctx, existing, updated)
-      await writeAudit(ctx, {
-        actorId: me._id,
-        action: auditActionForSave(existing, ownScope, false),
-        entity: "survey",
-        entityId: existing._id,
+      }
+
+      await ctx.db.patch(existing._id, patch)
+
+      // Build after-state without a second read (saves a round-trip on hot path).
+      const updated: Doc<"surveys"> = {
+        ...existing,
+        ...patch,
+      }
+
+      // CRITICAL: draft field/completion churn must NOT touch shared stats or audit.
+      // Shared municipality stats + audit-on-every-keystroke caused UserTimeout →
+      // UnhandledPromiseRejection → "Restarting Isolate" on self-hosted.
+      const dimsChanged =
+        existing.status !== updated.status ||
+        existing.qcStatus !== updated.qcStatus ||
+        !analyticsDimensionsEqual(snapshotFromSurvey(existing), snapshotFromSurvey(updated))
+
+      if (dimsChanged) {
+        await recordSurveyStatsUpdate(ctx, existing, updated)
+        await writeAudit(ctx, {
+          actorId: me._id,
+          action: auditActionForSave(existing, ownScope, false),
+          entity: "survey",
+          entityId: existing._id,
+        })
+      }
+
+      logSlowPath("surveys.saveDraft", startedAt, {
+        mode: "update",
+        surveyId: existing._id,
+        dimsChanged,
       })
       return existing._id
     }
@@ -148,6 +182,7 @@ export const saveDraft = mutation({
       entityId: newId,
       metadata: { localId: args.localId, draft: true },
     })
+    logSlowPath("surveys.saveDraft", startedAt, { mode: "insert", surveyId: newId })
     return newId
   },
 })

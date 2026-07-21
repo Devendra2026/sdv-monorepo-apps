@@ -52,7 +52,6 @@ const DASHBOARD_QC_DECISIONS_PER_REVIEWER_CAP = 200
  */
 const DASHBOARD_QC_ULB_CAP = 12
 const DASHBOARD_ANALYTICS_WINDOW_BUFFER_DAYS = 14
-const DASHBOARD_SURVEYOR_SLICE_LIMIT = 2000
 /** Max active users loaded per municipality for role-scoped filter options. */
 const DASHBOARD_USERS_PER_MUNI_CAP = 200
 
@@ -451,125 +450,6 @@ async function loadScopedQcDecisionsByReviewer(
   return byReviewer
 }
 
-async function buildDashboardBreakdown(
-  ctx: QueryCtx,
-  me: Doc<"users">,
-  statsBreakdown: Awaited<ReturnType<typeof loadAnalyticsBreakdownFromStats>>,
-  surveyorRows: SurveyStatsSlice[],
-  todayStartMs: number,
-  fromMs: number,
-  scope: Awaited<ReturnType<typeof resolveTenantScope>>
-) {
-  const districtIds = tenantDistrictIds(scope)
-  const muniIds = tenantMunicipalityIds(scope)
-  const districtMap = new Map(scope.districts.map((d) => [d._id, d]))
-  const muniMap = new Map(scope.municipalities.map((m) => [m._id, m]))
-
-  const byDistrict =
-    statsBreakdown?.byDistrict ??
-    (() => {
-      const byDistrictGroups = groupCounts(surveyorRows, (r) => r.districtId, todayStartMs)
-      return [...byDistrictGroups.entries()]
-        .map(([districtId, counts]) => {
-          const d = districtMap.get(districtId as Id<"districts">)
-          return {
-            districtId: districtId as Id<"districts">,
-            code: d?.code ?? "—",
-            name: d?.name ?? "Unknown district",
-            ...counts,
-          }
-        })
-        .sort((a, b) => a.name.localeCompare(b.name))
-    })()
-
-  const byUlb =
-    statsBreakdown?.byUlb ??
-    (() => {
-      const byUlbGroups = groupCounts(surveyorRows, (r) => r.municipalityId, todayStartMs)
-      return [...byUlbGroups.entries()]
-        .map(([municipalityId, counts]) => {
-          const m = muniMap.get(municipalityId as Id<"municipalities">)
-          const d = m ? districtMap.get(m.districtId) : undefined
-          const sampleDistrictId = surveyorRows.find((r) => r.municipalityId === municipalityId)?.districtId
-          return {
-            municipalityId: municipalityId as Id<"municipalities">,
-            code: m?.code ?? "—",
-            name: m?.name ?? "Unknown ULB",
-            districtId: m?.districtId ?? sampleDistrictId ?? (municipalityId as Id<"districts">),
-            districtName: d?.name ?? "—",
-            ...counts,
-          }
-        })
-        .sort((a, b) => a.name.localeCompare(b.name))
-    })()
-
-  const bySurveyorGroups = groupCounts(surveyorRows, (r) => r.surveyorId, todayStartMs)
-
-  // Before: global surveyor + qc_supervisor role collects.
-  // After: parallel municipality-scoped user loads.
-  const scopedMuniList = [...muniIds]
-  const [activeSurveyors, activeQcSupervisors] = await Promise.all([
-    loadActiveUsersInScopeByRole(ctx, "surveyor", scopedMuniList, muniIds, districtIds),
-    loadActiveUsersInScopeByRole(ctx, "qc_supervisor", scopedMuniList, muniIds, districtIds),
-  ])
-
-  const bySurveyor = activeSurveyors
-    .map((u) => {
-      const counts = bySurveyorGroups.get(u._id) ?? countRows([], todayStartMs)
-      const muni = u.municipalityId ? muniMap.get(u.municipalityId) : undefined
-      const dist = u.districtId ? districtMap.get(u.districtId) : muni ? districtMap.get(muni.districtId) : undefined
-      return {
-        surveyorId: u._id,
-        name: u.name,
-        email: u.email,
-        municipalityName: muni?.name ?? null,
-        districtName: dist?.name ?? null,
-        status: "active" as const,
-        ...counts,
-      }
-    })
-    .sort((a, b) => b.approved + b.submitted - (a.approved + a.submitted))
-
-  const scopedSurveyIds = new Set(surveyorRows.map((r) => r._id))
-  const scopedMunicipalityIds = new Set(surveyorRows.map((r) => r.municipalityId))
-  const decisionsByReviewer = await loadScopedQcDecisionsByReviewer(
-    ctx,
-    scopedSurveyIds,
-    scopedMunicipalityIds,
-    activeQcSupervisors,
-    fromMs
-  )
-
-  const byQcSupervisor = buildQcSupervisorRows(activeQcSupervisors, decisionsByReviewer)
-
-  return {
-    summary: statsBreakdown?.summary ?? countRows(surveyorRows, todayStartMs),
-    byDistrict,
-    byUlb,
-    bySurveyor,
-    byQcSupervisor,
-    filterOptions: {
-      districts: scope.districts.map((d) => ({ _id: d._id, code: d.code, name: d.name })),
-      municipalities: scope.municipalities.map((m) => ({
-        _id: m._id,
-        code: m.code,
-        name: m.name,
-        districtId: m.districtId,
-      })),
-      surveyors: activeSurveyors.map((u) => ({
-        _id: u._id,
-        name: u.name,
-        email: u.email,
-      })),
-      qcSupervisors: activeQcSupervisors.map((u) => ({
-        _id: u._id,
-        name: u.name,
-        email: u.email,
-      })),
-    },
-  }
-}
-
 function wardCoverageFromRollups(
   wardRows: WardStatsRollup[],
   muniMap: Map<Id<"municipalities">, Doc<"municipalities">>
@@ -746,15 +626,6 @@ async function buildQcSupervisorBundle(
       email: u.email,
     })),
   }
-}
-
-function computeWardCoverage(rows: SurveyStatsSlice[], muniMap: Map<Id<"municipalities">, Doc<"municipalities">>) {
-  const muniNames = new Map([...muniMap.entries()].map(([id, m]) => [id, m.name]))
-  return computeWardCoverageFromSlice(rows, muniNames)
-}
-
-function toSurveyorSliceRows(rows: Doc<"surveys">[]): SurveyStatsSlice[] {
-  return rows
 }
 
 async function buildAnalyticsBundle(

@@ -105,9 +105,9 @@ const exportBundleValidator = v.object({
   photos: v.array(exportPhotoValidator),
 })
 
-const EXPORT_SCOPE_LIMIT = 5000
+const EXPORT_SCOPE_LIMIT = 1500
 const DEFAULT_EXPORT_PAGE_SIZE = 30
-const MAX_EXPORT_PAGE_SIZE = 50
+const MAX_EXPORT_PAGE_SIZE = 40
 
 type ExportListFilters = {
   status?: Doc<"surveys">["status"]

@@ -5,7 +5,7 @@ import { normalizeAddressFields } from "../masters/helpers"
 import { normalizeFloorFields, usageTypeToOccupied, validateFloorRow } from "../lib/masters/areaMasters"
 import { requireCapability } from "../shared/capabilities"
 import { assertCanAccessSurvey } from "../shared/fieldAccess"
-import { assertCanReadWard, requireUser, writeAudit } from "../shared/helpers"
+import { assertCanReadWard, clientError, requireUser, writeAudit } from "../shared/helpers"
 import { lookupSurveyByPropertyId } from "../lib/propertyIdLookup"
 import { recordSurveyStatsInsert, recordSurveyStatsUpdate } from "../lib/surveyScopeStats"
 import {
@@ -18,6 +18,10 @@ import {
 } from "../surveys/helpers"
 import { assertMunicipalityInScope } from "../shared/tenancy"
 import { registerPropertyIdMapping } from "./helpers"
+
+/** Keep import mutations inside Convex transaction budgets. */
+const MAX_IMPORT_SURVEYS = 40
+const MAX_IMPORT_FLOORS = 200
 
 const importSurveyRow = v.object({
   localId: v.string(),
@@ -87,6 +91,19 @@ export const importExcelBundle = mutation({
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
     await requireCapability(ctx, me, "reports.export")
+
+    if (args.surveys.length > MAX_IMPORT_SURVEYS) {
+      clientError(
+        "VALIDATION",
+        `Import is limited to ${MAX_IMPORT_SURVEYS} surveys per request — split the file into smaller batches`,
+      )
+    }
+    if ((args.floors?.length ?? 0) > MAX_IMPORT_FLOORS) {
+      clientError(
+        "VALIDATION",
+        `Import is limited to ${MAX_IMPORT_FLOORS} floor rows per request — split the file into smaller batches`,
+      )
+    }
 
     let created = 0
     let updated = 0
