@@ -4,6 +4,13 @@ import { fieldSurveyAccess } from "../shared/fieldAccess"
 import { canReadWard } from "../shared/helpers"
 import { resolveTenantScope, tenantMunicipalityIds } from "../shared/tenancy"
 import { normalizeWardNo } from "./qcWardStats"
+import {
+  filterLegacyAnalyticsRows,
+  getLegacyDailyStatsRow,
+  getLegacyMunicipalityStatsRow,
+  getLegacySurveyorStatsRow,
+  getLegacyWardStatsRow,
+} from "./surveyAnalyticsLookups"
 
 /** Max ward rollup rows loaded per municipality (avoids huge ULB collects). */
 const WARD_STATS_PER_MUNI_CAP = 400
@@ -142,10 +149,7 @@ async function getOrCreateWardStats(
   city: string
 ) {
   const normalized = normalizeWardNo(wardNo)
-  const existing = await ctx.db
-    .query("surveyWardStats")
-    .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", municipalityId).eq("wardNo", normalized))
-    .unique()
+  const existing = await getLegacyWardStatsRow(ctx, municipalityId, wardNo)
   if (existing) return existing
 
   const id = await ctx.db.insert("surveyWardStats", {
@@ -164,12 +168,7 @@ async function getOrCreateWardStats(
 }
 
 async function getOrCreateSurveyorStats(ctx: MutationCtx, survey: SurveyorSurveySnapshot) {
-  const existing = await ctx.db
-    .query("surveySurveyorStats")
-    .withIndex("by_surveyor_municipality", (q) =>
-      q.eq("surveyorId", survey.surveyorId).eq("municipalityId", survey.municipalityId)
-    )
-    .unique()
+  const existing = await getLegacySurveyorStatsRow(ctx, survey.surveyorId, survey.municipalityId)
   if (existing) return existing
 
   const id = await ctx.db.insert("surveySurveyorStats", {
@@ -420,10 +419,7 @@ export async function loadWardStatsForScope(
     targetMunis.map(async (municipalityId) => {
       if (filters.wardNo) {
         const normalized = normalizeWardNo(filters.wardNo)
-        const row = await ctx.db
-          .query("surveyWardStats")
-          .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", municipalityId).eq("wardNo", normalized))
-          .unique()
+        const row = await getLegacyWardStatsRow(ctx, municipalityId, normalized)
         if (row && canReadWard(me, municipalityId, row.wardNo)) {
           return [
             {
@@ -444,10 +440,12 @@ export async function loadWardStatsForScope(
         return [] as WardStatsRollup[]
       }
 
-      const wardRows = await ctx.db
-        .query("surveyWardStats")
-        .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
-        .take(WARD_STATS_PER_MUNI_CAP)
+      const wardRows = filterLegacyAnalyticsRows(
+        await ctx.db
+          .query("surveyWardStats")
+          .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
+          .take(WARD_STATS_PER_MUNI_CAP)
+      )
 
       const rows: WardStatsRollup[] = []
       for (const row of wardRows) {
@@ -497,10 +495,12 @@ export async function loadSurveyorStatsForScope(
 
   const batchResults = await Promise.all(
     targetMunis.map(async (municipalityId) => {
-      const muniRows = await ctx.db
-        .query("surveySurveyorStats")
-        .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
-        .take(SURVEYOR_STATS_PER_MUNI_CAP)
+      const muniRows = filterLegacyAnalyticsRows(
+        await ctx.db
+          .query("surveySurveyorStats")
+          .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
+          .take(SURVEYOR_STATS_PER_MUNI_CAP)
+      )
 
       const rows: SurveyorStatsRollup[] = []
       for (const row of muniRows) {
@@ -701,10 +701,7 @@ function formatDateKeyForBackfill(ms: number): string {
 /** Write merged backfill aggregates to rollup tables (idempotent full replace per key). */
 export async function flushBackfillAggregates(ctx: MutationCtx, aggregates: BackfillAggregates, replace: boolean) {
   for (const agg of aggregates.municipality.values()) {
-    const existing = await ctx.db
-      .query("surveyMunicipalityStats")
-      .withIndex("by_municipality", (q) => q.eq("municipalityId", agg.municipalityId))
-      .unique()
+    const existing = await getLegacyMunicipalityStatsRow(ctx, agg.municipalityId)
 
     const patch = {
       total: replace ? agg.total : (existing?.total ?? 0) + agg.total,
@@ -730,10 +727,7 @@ export async function flushBackfillAggregates(ctx: MutationCtx, aggregates: Back
   }
 
   for (const agg of aggregates.daily.values()) {
-    const existing = await ctx.db
-      .query("surveyDailyStats")
-      .withIndex("by_municipality_date", (q) => q.eq("municipalityId", agg.municipalityId).eq("dateKey", agg.dateKey))
-      .unique()
+    const existing = await getLegacyDailyStatsRow(ctx, agg.municipalityId, agg.dateKey)
 
     const patch = {
       created: replace ? agg.created : (existing?.created ?? 0) + agg.created,
@@ -752,10 +746,7 @@ export async function flushBackfillAggregates(ctx: MutationCtx, aggregates: Back
   }
 
   for (const agg of aggregates.ward.values()) {
-    const existing = await ctx.db
-      .query("surveyWardStats")
-      .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", agg.municipalityId).eq("wardNo", agg.wardNo))
-      .unique()
+    const existing = await getLegacyWardStatsRow(ctx, agg.municipalityId, agg.wardNo)
 
     const activeSurveyorIds = [...agg.activeSurveyorIds]
     const patch = {
@@ -786,12 +777,7 @@ export async function flushBackfillAggregates(ctx: MutationCtx, aggregates: Back
   }
 
   for (const agg of aggregates.surveyor.values()) {
-    const existing = await ctx.db
-      .query("surveySurveyorStats")
-      .withIndex("by_surveyor_municipality", (q) =>
-        q.eq("surveyorId", agg.surveyorId).eq("municipalityId", agg.municipalityId)
-      )
-      .unique()
+    const existing = await getLegacySurveyorStatsRow(ctx, agg.surveyorId, agg.municipalityId)
 
     const patch = {
       districtId: agg.districtId,

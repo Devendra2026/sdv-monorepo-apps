@@ -10,6 +10,11 @@ import {
   recordSurveyAnalyticsUpdate,
 } from "./surveyAnalyticsWrites"
 import {
+  filterLegacyAnalyticsRows,
+  getLegacyDailyStatsRow,
+  getLegacyMunicipalityStatsRow,
+} from "./surveyAnalyticsLookups"
+import {
   computeDailyTrendFromSlice,
   computeDashboardCountsFromSlice,
   type DashboardCounts,
@@ -247,10 +252,7 @@ async function loadMunicipalityDashboardCounts(
     return liveSnapshotToDashboardPart(live)
   }
 
-  const statsRow = await ctx.db
-    .query("surveyMunicipalityStats")
-    .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
-    .unique()
+  const statsRow = await getLegacyMunicipalityStatsRow(ctx, municipalityId)
 
   if (statsRow) {
     const rollup: MunicipalityStatsRollup = {
@@ -280,10 +282,7 @@ async function loadMunicipalityDashboardCounts(
     }
 
     const dateKey = formatDateKey(todayMs)
-    const dailyRow = await ctx.db
-      .query("surveyDailyStats")
-      .withIndex("by_municipality_date", (q) => q.eq("municipalityId", municipalityId).eq("dateKey", dateKey))
-      .unique()
+    const dailyRow = await getLegacyDailyStatsRow(ctx, municipalityId, dateKey)
 
     if (dailyRow) {
       part.today = dailyRow.created
@@ -440,7 +439,7 @@ export async function loadDailyTrendFromDailyStats(
         )
         .take(safeDays + 5)
 
-      for (const row of rows) {
+      for (const row of filterLegacyAnalyticsRows(rows)) {
         const bucket = buckets.get(row.dateKey)
         if (!bucket) continue
         bucket.created += row.created
@@ -630,10 +629,7 @@ async function loadMunicipalityStatsRollupsResilient(
   const results = await Promise.all(
     scopedMuniIds.map(async (municipalityId) => {
       if (!wardScoped) {
-        const row = await ctx.db
-          .query("surveyMunicipalityStats")
-          .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
-          .unique()
+        const row = await getLegacyMunicipalityStatsRow(ctx, municipalityId)
         if (row) {
           const rollup: MunicipalityStatsRollup = {
             municipalityId: row.municipalityId,
@@ -705,12 +701,7 @@ export async function loadScopeCompletionPct(
   let sum = 0
   let count = 0
   const rows = await Promise.all(
-    scopedMuniIds.map((municipalityId) =>
-      ctx.db
-        .query("surveyMunicipalityStats")
-        .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
-        .unique()
-    )
+    scopedMuniIds.map((municipalityId) => getLegacyMunicipalityStatsRow(ctx, municipalityId))
   )
 
   for (const row of rows) {
@@ -748,12 +739,7 @@ export async function loadScopeStatsSummary(
 
   const dateKey = formatDateKey(todayMs)
   const dailyStats = await Promise.all(
-    scopedMuniIds.map((municipalityId) =>
-      ctx.db
-        .query("surveyDailyStats")
-        .withIndex("by_municipality_date", (q) => q.eq("municipalityId", municipalityId).eq("dateKey", dateKey))
-        .unique()
-    )
+    scopedMuniIds.map((municipalityId) => getLegacyDailyStatsRow(ctx, municipalityId, dateKey))
   )
 
   const totals: ScopeStatsSummary = {
@@ -854,12 +840,7 @@ export async function loadAnalyticsBreakdownFromStats(
 
   const dateKey = formatDateKey(todayMs)
   const dailyStats = await Promise.all(
-    scopedMuniIds.map((municipalityId) =>
-      ctx.db
-        .query("surveyDailyStats")
-        .withIndex("by_municipality_date", (q) => q.eq("municipalityId", municipalityId).eq("dateKey", dateKey))
-        .unique()
-    )
+    scopedMuniIds.map((municipalityId) => getLegacyDailyStatsRow(ctx, municipalityId, dateKey))
   )
   const todayByMuni = new Map<Id<"municipalities">, number>()
   scopedMuniIds.forEach((municipalityId, index) => {
