@@ -4,13 +4,16 @@
 import { v } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "../_generated/server"
+import {
+  DRAFT_LIST_CAP_PER_MUNICIPALITY,
+  MAX_REASSIGN_PER_MUTATION,
+} from "../lib/budgetLimits"
 import { canReadWard, clientError } from "../shared/helpers"
 import { resolveTenantScope, tenantMunicipalityIds } from "../shared/tenancy"
 
-const FIELD_COLLECTOR_ROLES = new Set(["surveyor", "supervisor"])
+export { DRAFT_LIST_CAP_PER_MUNICIPALITY, MAX_REASSIGN_PER_MUTATION }
 
-/** Max draft surveys loaded per municipality for reassignment listing. */
-const DRAFT_LIST_CAP_PER_MUNICIPALITY = 300
+const FIELD_COLLECTOR_ROLES = new Set(["surveyor", "supervisor"])
 
 export function isOrphanedAssignee(user: Doc<"users"> | null): boolean {
   if (!user) return true

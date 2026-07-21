@@ -1,6 +1,8 @@
 import { v } from "convex/values"
 import type { Doc } from "../_generated/dataModel"
 import { mutation } from "../_generated/server"
+import { MAX_REASSIGN_PER_MUTATION } from "../lib/budgetLimits"
+import { logBudgetEvent, logSlowPath } from "../lib/observability"
 import { recordSurveyStatsUpdate } from "../lib/surveyScopeStats"
 import { requireCapability } from "../shared/capabilities"
 import { clientError, requireUser, writeAudit } from "../shared/helpers"
@@ -20,6 +22,8 @@ import {
  *  - `fromSurveyor` — all drafts for `fromSurveyorId` (optional ULB/ward filters)
  *  - `orphaned`     — drafts whose assignee is disabled / non-field
  *  - `selected`     — explicit `surveyIds` list
+ *
+ * Hard-capped at MAX_REASSIGN_PER_MUTATION surveys per call to stay inside mutation budgets.
  */
 export const reassignDrafts = mutation({
   args: {
@@ -33,10 +37,21 @@ export const reassignDrafts = mutation({
   },
   returns: reassignResult,
   handler: async (ctx, args) => {
+    const startedAt = Date.now()
     const [me, target] = await Promise.all([requireUser(ctx), loadTargetSurveyor(ctx, args.toSurveyorId)])
     await requireCapability(ctx, me, "surveys.reassign")
     if (args.toSurveyorId === args.fromSurveyorId) {
       clientError("BAD_REQUEST", "Source and target surveyor must differ")
+    }
+    if (args.mode === "selected" && (args.surveyIds?.length ?? 0) > MAX_REASSIGN_PER_MUTATION) {
+      logBudgetEvent("reassignment.selected.over_limit", {
+        requested: args.surveyIds!.length,
+        max: MAX_REASSIGN_PER_MUTATION,
+      })
+      clientError(
+        "VALIDATION",
+        `Reassignment is limited to ${MAX_REASSIGN_PER_MUTATION} surveys per request — select a smaller batch`,
+      )
     }
 
     let drafts: Doc<"surveys">[] = []
@@ -81,6 +96,18 @@ export const reassignDrafts = mutation({
 
     if (drafts.length === 0) {
       clientError("BAD_REQUEST", "No draft surveys matched this reassignment")
+    }
+
+    if (drafts.length > MAX_REASSIGN_PER_MUTATION) {
+      logBudgetEvent("reassignment.bulk.over_limit", {
+        matched: drafts.length,
+        max: MAX_REASSIGN_PER_MUTATION,
+        mode: args.mode,
+      })
+      clientError(
+        "VALIDATION",
+        `This selection matches ${drafts.length} drafts; reassignment is limited to ${MAX_REASSIGN_PER_MUTATION} per request — narrow filters or run multiple batches`,
+      )
     }
 
     let transferred = 0
@@ -152,6 +179,13 @@ export const reassignDrafts = mutation({
     if (transferred === 0) {
       clientError("BAD_REQUEST", "No drafts could be transferred — check target ULB/ward scope")
     }
+
+    logSlowPath("reassignment.reassignDrafts", startedAt, {
+      mode: args.mode,
+      matched: drafts.length,
+      transferred,
+      skipped,
+    })
 
     return { transferred, skipped, localIdAdjusted }
   },

@@ -63,7 +63,7 @@ export function QcFinalReportExportButton({ filters, disabled }: QcFinalReportEx
       }
 
       const allBundles: SurveyExportBundle[] = []
-      const pageSize = 50
+      const pageSize = 40
       for (let i = 0; i < surveyIds.length; i += pageSize) {
         const chunk = surveyIds.slice(i, i + pageSize)
         const page = await convex.query(api.export.queries.getExportBundlesByIds, { surveyIds: chunk })

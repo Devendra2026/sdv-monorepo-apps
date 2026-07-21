@@ -12,7 +12,6 @@ import {
 } from "../lib/masters/areaMasters"
 import { loadAllowedTaxZoneSet, normalizeTaxationFields } from "../lib/masters/taxationMasters"
 import { logSlowPath } from "../lib/observability"
-import { analyticsDimensionsEqual, snapshotFromSurvey } from "../lib/surveyAnalyticsModel"
 import {
   completionPctForSurvey,
   computeSurveyCompletionPercent,
@@ -136,15 +135,13 @@ export const saveDraft = mutation({
         ...patch,
       }
 
-      // CRITICAL: draft field/completion churn must NOT touch shared stats or audit.
-      // Shared municipality stats + audit-on-every-keystroke caused UserTimeout →
-      // UnhandledPromiseRejection → "Restarting Isolate" on self-hosted.
-      const dimsChanged =
-        existing.status !== updated.status ||
-        existing.qcStatus !== updated.qcStatus ||
-        !analyticsDimensionsEqual(snapshotFromSurvey(existing), snapshotFromSurvey(updated))
+      // CRITICAL: while status stays draft, never touch shared analytics or audit.
+      // Ward/city edits used to fan out to municipality stats → OCC storms →
+      // UserTimeout → UnhandledPromiseRejection → "Restarting Isolate" on self-hosted.
+      // Status/QC transitions (submit, approved re-queue) still update rollups below.
+      const staysDraft = existing.status === "draft" && updated.status === "draft"
 
-      if (dimsChanged) {
+      if (!staysDraft) {
         await recordSurveyStatsUpdate(ctx, existing, updated)
         await writeAudit(ctx, {
           actorId: me._id,
@@ -157,11 +154,13 @@ export const saveDraft = mutation({
       logSlowPath("surveys.saveDraft", startedAt, {
         mode: "update",
         surveyId: existing._id,
-        dimsChanged,
+        staysDraft,
       })
       return existing._id
     }
 
+    // Insert once: seed draft rollup + audit. Further draft field/ward edits
+    // stay on the survey document only (see staysDraft guard above).
     const completionPct = computeSurveyCompletionPercent({ ...writable, floors: [], photos: [] })
     const newId = await ctx.db.insert("surveys", {
       ...writable,

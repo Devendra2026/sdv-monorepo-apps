@@ -5,6 +5,7 @@ import { DemandNoticeDocument } from "@/components/qc/demand-notice"
 import { useDemandNoticePrintFit } from "@/hooks/qc/useDemandNoticePrintFit"
 import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
 import type { DemandNoticeDocumentProps } from "@/lib/qc/demand-notice-document-types"
+import { reportDocumentTimestamp } from "@/lib/qc/report-dates"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import type { SurveyDetail } from "@workspace/schemas"
@@ -46,7 +47,7 @@ export function DemandNoticeView({ survey, surveyId, backHref = `/qc/${surveyId}
   const { printNotice } = useDemandNoticePrintFit()
   const noticeProps = useConvexQuery(
     api.demandNotices.queries.getNoticeForSurvey,
-    ready ? { surveyId: surveyId as Id<"surveys"> } : "skip"
+    ready ? { surveyId: surveyId as Id<"surveys">, reportDateMs: reportDocumentTimestamp() } : "skip"
   ) as DemandNoticeDocumentProps | null | undefined
 
   const propertyId = noticeProps?.propertyId ?? survey.propertyId ?? survey.parcelNo

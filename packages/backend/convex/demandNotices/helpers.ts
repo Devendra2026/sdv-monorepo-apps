@@ -2,6 +2,10 @@ import { v } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { QueryCtx } from "../_generated/server"
 import {
+  MAX_DEMAND_NOTICE_JOB_SURVEYS,
+  MAX_DEMAND_NOTICE_PAYLOAD_PAGE,
+} from "../lib/budgetLimits"
+import {
   CONSTRUCTION_TYPES,
   FLOOR_NAMES,
   FLOOR_USAGE_FACTORS,
@@ -23,13 +27,16 @@ import {
   TAX_RATE_ZONES,
 } from "../lib/masters/taxationMasters"
 import { loadActiveMastersByCategories } from "../lib/mastersLoad"
+import { logBudgetEvent, logSlowPath } from "../lib/observability"
 import { buildDemandNoticeDocumentProps, type DemandNoticeMastersBundle } from "../lib/qc/buildDemandNoticeDocument"
 import type { DemandNoticeDocumentProps } from "../lib/qc/demandNoticeDocumentTypes"
 import { normalizeStoredTaxRates } from "../lib/qc/normalizeTaxRates"
-import { clientError, requireUser } from "../shared/helpers"
 import { assertCanAccessSurvey } from "../shared/fieldAccess"
+import { clientError, requireUser } from "../shared/helpers"
 
-export const MAX_EXPORT_SURVEYS = 1500
+/** @deprecated Prefer MAX_DEMAND_NOTICE_JOB_SURVEYS — kept for call-site clarity. */
+export const MAX_EXPORT_SURVEYS = MAX_DEMAND_NOTICE_JOB_SURVEYS
+export { MAX_DEMAND_NOTICE_JOB_SURVEYS, MAX_DEMAND_NOTICE_PAYLOAD_PAGE }
 
 export const jobStatusValidator = v.union(
   v.literal("queued"),
@@ -77,7 +84,11 @@ export function assertJobAccess(
   }
 }
 
-async function loadMastersBundle(ctx: QueryCtx, municipalityId: Id<"municipalities">): Promise<MastersBundle> {
+async function loadMastersBundle(
+  ctx: QueryCtx,
+  municipalityId: Id<"municipalities">,
+  reportDateMs: number,
+): Promise<MastersBundle> {
   const categorySet = new Set<string>(MASTER_BUNDLE_CATEGORIES)
   const rows = (await loadActiveMastersByCategories(ctx, MASTER_BUNDLE_CATEGORIES)).filter((m) =>
     categorySet.has(m.category)
@@ -94,7 +105,7 @@ async function loadMastersBundle(ctx: QueryCtx, municipalityId: Id<"municipaliti
   const district = muni ? await ctx.db.get(muni.districtId) : null
 
   return {
-    updatedAt: Date.now(),
+    updatedAt: reportDateMs,
     districts: district
       ? [
           {
@@ -169,7 +180,7 @@ async function loadFloors(ctx: QueryCtx, surveyId: Id<"surveys">) {
   const rows = await ctx.db
     .query("floors")
     .withIndex("by_survey", (q) => q.eq("surveyId", surveyId))
-    .collect()
+    .take(64)
   return rows.sort((a, b) => a.position - b.position).map(presentFloorRow)
 }
 
@@ -182,8 +193,20 @@ export async function buildNoticePayloadsForSurveys(
     reportDateMs: number
   }
 ): Promise<DemandNoticeDocumentProps[]> {
+  if (args.surveyIds.length > MAX_DEMAND_NOTICE_PAYLOAD_PAGE) {
+    logBudgetEvent("demandNotices.buildNoticePayloads.over_page", {
+      requested: args.surveyIds.length,
+      max: MAX_DEMAND_NOTICE_PAYLOAD_PAGE,
+    })
+    clientError(
+      "VALIDATION",
+      `Demand notice payload page is limited to ${MAX_DEMAND_NOTICE_PAYLOAD_PAGE} surveys — request a smaller page`,
+    )
+  }
+
+  const startedAt = Date.now()
   const [masters, rateConfig, muni] = await Promise.all([
-    loadMastersBundle(ctx, args.municipalityId),
+    loadMastersBundle(ctx, args.municipalityId, args.reportDateMs),
     loadTaxRates(ctx, args.municipalityId),
     ctx.db.get(args.municipalityId),
   ])
@@ -212,5 +235,10 @@ export async function buildNoticePayloadsForSurveys(
     })
   )
 
-  return payloads.filter((payload): payload is DemandNoticeDocumentProps => payload !== null)
+  const built = payloads.filter((payload): payload is DemandNoticeDocumentProps => payload !== null)
+  logSlowPath("demandNotices.buildNoticePayloads", startedAt, {
+    surveyCount: args.surveyIds.length,
+    payloadCount: built.length,
+  })
+  return built
 }

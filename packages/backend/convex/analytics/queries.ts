@@ -595,12 +595,15 @@ async function buildQcSupervisorBundle(
 ): Promise<{
   byQcSupervisor: ReturnType<typeof buildQcSupervisorRows>
   qcSupervisors: Array<{ _id: Id<"users">; name: string; email: string }>
+  truncated: boolean
+  omittedMunicipalityCount: number
 }> {
   const scope = await resolveDashboardTenantScope(ctx, me)
   const districtIds = tenantDistrictIds(scope)
   const muniIds = tenantMunicipalityIds(scope)
   // Cap ULB list before user + decision fan-out for large admin scopes.
   const scopedMuniList = [...muniIds].slice(0, DASHBOARD_QC_ULB_CAP)
+  const omittedMunicipalityCount = Math.max(0, muniIds.size - scopedMuniList.length)
 
   const activeQcSupervisors = await loadActiveUsersInScopeByRole(
     ctx,
@@ -625,6 +628,8 @@ async function buildQcSupervisorBundle(
       name: u.name,
       email: u.email,
     })),
+    truncated: omittedMunicipalityCount > 0,
+    omittedMunicipalityCount,
   }
 }
 
@@ -1003,6 +1008,8 @@ export const analyticsBundle = query({
 const qcSupervisorBundleShape = v.object({
   byQcSupervisor: v.array(v.object(qcSupervisorRow)),
   qcSupervisors: v.array(userFilterOption),
+  truncated: v.boolean(),
+  omittedMunicipalityCount: v.number(),
 })
 
 /**

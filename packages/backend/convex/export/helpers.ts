@@ -3,6 +3,7 @@
  */
 import type { Doc, Id } from "../_generated/dataModel"
 import type { QueryCtx } from "../_generated/server"
+import { MAX_EXPORT_FLOORS_PER_SURVEY, MAX_EXPORT_PHOTOS_PER_SURVEY } from "../lib/budgetLimits"
 import { presentFloorRow } from "../lib/masters/areaMasters"
 import { mapTruthyById } from "../shared/helpers"
 import { enrichSurveyPropertyIds, loadMunicipalityCodes } from "../surveys/helpers"
@@ -49,11 +50,11 @@ export async function enrichSurveysForExport(
         ctx.db
           .query("floors")
           .withIndex("by_survey", (q) => q.eq("surveyId", survey._id))
-          .collect(),
+          .take(MAX_EXPORT_FLOORS_PER_SURVEY),
         ctx.db
           .query("photos")
           .withIndex("by_survey", (q) => q.eq("surveyId", survey._id))
-          .collect(),
+          .take(MAX_EXPORT_PHOTOS_PER_SURVEY),
       ])
 
       const photos = await Promise.all(

@@ -42,7 +42,17 @@ export function useDemandNoticeBulkPdf() {
         })
 
         const exportJob = await convex.query(api.demandNotices.queries.getExportJob, { jobId })
-        const payloads = await convex.query(api.demandNotices.queries.getNoticePayloads, { jobId })
+
+        const payloads: DemandNoticeDocumentProps[] = []
+        let offset: number | null = 0
+        while (offset !== null) {
+          const page = await convex.query(api.demandNotices.queries.getNoticePayloads, {
+            jobId,
+            offset,
+          })
+          payloads.push(...(page.payloads as DemandNoticeDocumentProps[]))
+          offset = page.nextOffset
+        }
 
         if (payloads.length === 0) {
           await failExport({ jobId, errorMessage: "No demand notice payloads could be built." })

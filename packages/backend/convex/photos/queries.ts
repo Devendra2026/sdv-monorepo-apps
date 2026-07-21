@@ -12,7 +12,7 @@
 import { v } from "convex/values"
 import { query } from "../_generated/server"
 import { assertCanAccessSurvey } from "../shared/fieldAccess"
-import { requireUser } from "../shared/helpers"
+import { clientError, requireUser } from "../shared/helpers"
 
 /** Signed preview URLs — only for blobs linked to accessible surveys. */
 export const resolveStorageUrls = query({
@@ -23,6 +23,10 @@ export const resolveStorageUrls = query({
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
     if (me.role === "pending") return []
+
+    if (args.storageIds.length > 50) {
+      clientError("VALIDATION", "Storage URL resolution is limited to 50 ids per request")
+    }
 
     const unique = [...new Set(args.storageIds)]
     return Promise.all(
@@ -161,6 +165,9 @@ export const getUrls = query({
   args: { photoIds: v.array(v.id("photos")) },
   handler: async (ctx, args) => {
     if (args.photoIds.length === 0) return {}
+    if (args.photoIds.length > 50) {
+      clientError("VALIDATION", "Photo URL resolution is limited to 50 ids per request")
+    }
 
     const me = await requireUser(ctx)
     const entries = await Promise.all(

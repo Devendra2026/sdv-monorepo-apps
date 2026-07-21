@@ -1,0 +1,167 @@
+# Convex self-hosted (Dokploy / Traefik / Docker Compose)
+#
+# Source of truth for reproducible production backend config.
+# Based on upstream:
+#   https://github.com/get-convex/convex-backend/blob/main/self-hosted/docker/docker-compose.yml
+# Domains (this deployment):
+#   api.sdvedutech.in  -> backend :3210  (Convex API + sync)
+#   site.sdvedutech.in -> backend :3211  (HTTP actions / CONVEX_SITE_ORIGIN)
+#
+# Persistence:
+#   Named volume -> /convex/data (SQLite db.sqlite3 + storage/ by default).
+#   Do NOT rely on anonymous overlay for /convex/data.
+#
+# Health vs isolate restarts:
+#   This healthcheck only proves the HTTP process answers GET /version.
+#   Application "Restarting Isolate" / UserTimeout / UnhandledPromiseRejection
+#   are isolate-level and will NOT be fixed by container restarts.
+#
+# SQLite:
+#   Convex owns WAL/checkpoint/GC. Do not run live VACUUM/PRAGMA against
+#   db.sqlite3 while the backend is serving traffic (see README).
+
+services:
+  backend:
+    # Pin CONVEX_BACKEND_TAG in .env for production (avoid floating :latest).
+    image: ghcr.io/get-convex/convex-backend:${CONVEX_BACKEND_TAG:-latest}
+    stop_grace_period: 30s
+    stop_signal: SIGINT
+    # Non-Swarm / local compose. Dokploy Swarm uses deploy.restart_policy below.
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3210}:3210"
+      - "${SITE_PROXY_PORT:-3211}:3211"
+    volumes:
+      - convex_data:/convex/data
+    environment:
+      # Public origins (required when not on localhost)
+      - CONVEX_CLOUD_ORIGIN=${CONVEX_CLOUD_ORIGIN:-https://api.sdvedutech.in}
+      - CONVEX_SITE_ORIGIN=${CONVEX_SITE_ORIGIN:-https://site.sdvedutech.in}
+      - INSTANCE_NAME=${INSTANCE_NAME:-sdv-production}
+      - INSTANCE_SECRET=${INSTANCE_SECRET}
+      - RUST_LOG=${RUST_LOG:-info}
+      - REDACT_LOGS_TO_CLIENT=${REDACT_LOGS_TO_CLIENT:-true}
+      - DISABLE_BEACON=${DISABLE_BEACON:-true}
+      # Set false only if you scrape Prometheus /metrics intentionally.
+      - DISABLE_METRICS_ENDPOINT=${DISABLE_METRICS_ENDPOINT:-true}
+      # Document tombstone GC (seconds). Upstream compose default is 172800 (2 days).
+      # Do not lower then raise this casually — see Convex issue discussion on
+      # stuck retention workers when DOCUMENT_RETENTION_DELAY increases after a drop.
+      - DOCUMENT_RETENTION_DELAY=${DOCUMENT_RETENTION_DELAY:-172800}
+      # Official compose defaults (16). Raise only after measuring host CPU/RAM.
+      - APPLICATION_MAX_CONCURRENT_MUTATIONS=${APPLICATION_MAX_CONCURRENT_MUTATIONS:-16}
+      - APPLICATION_MAX_CONCURRENT_QUERIES=${APPLICATION_MAX_CONCURRENT_QUERIES:-16}
+      - APPLICATION_MAX_CONCURRENT_V8_ACTIONS=${APPLICATION_MAX_CONCURRENT_V8_ACTIONS:-16}
+      - APPLICATION_MAX_CONCURRENT_NODE_ACTIONS=${APPLICATION_MAX_CONCURRENT_NODE_ACTIONS:-16}
+      # Action timeouts (seconds). MUST be integers — empty string triggers
+      # ParseIntError and noisy WARN on every boot (seen in production logs).
+      - ACTIONS_USER_TIMEOUT_SECS=${ACTIONS_USER_TIMEOUT_SECS:-600}
+      - V8_ACTION_USER_TIMEOUT_SECS=${V8_ACTION_USER_TIMEOUT_SECS:-600}
+      - NODE_ACTION_USER_TIMEOUT_SECS=${NODE_ACTION_USER_TIMEOUT_SECS:-600}
+      - HTTP_SERVER_TIMEOUT_SECONDS=${HTTP_SERVER_TIMEOUT_SECONDS:-300}
+      # Optional external SQL — only set these in host `.env` when using Postgres/MySQL.
+      # Do not force empty strings into the container (breaks SQLite default).
+      - DATABASE_URL
+      - POSTGRES_URL
+      - MYSQL_URL
+      - DO_NOT_REQUIRE_SSL
+      # Optional S3-compatible storage (recommended so exports/files leave the Docker volume).
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_REGION
+      - AWS_SESSION_TOKEN
+      - AWS_S3_DISABLE_CHECKSUMS
+      - AWS_S3_DISABLE_SSE
+      - AWS_S3_FORCE_PATH_STYLE
+      - S3_ENDPOINT_URL
+      - S3_STORAGE_EXPORTS_BUCKET
+      - S3_STORAGE_FILES_BUCKET
+      - S3_STORAGE_MODULES_BUCKET
+      - S3_STORAGE_SEARCH_BUCKET
+      - S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET
+      - CONVEX_RELEASE_VERSION_DEV
+      - RUST_BACKTRACE
+    # Liveness only: cheap, unauthenticated. Not a readiness probe for sync/auth.
+    # Conservative timing avoids Swarm restart storms on brief load spikes.
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3210/version" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    # Swarm / Dokploy Advanced → Resources. Ignored by plain `docker compose up`
+    # unless using `docker stack deploy` / Swarm service create.
+    deploy:
+      resources:
+        limits:
+          cpus: "${CONVEX_CPU_LIMIT:-2.0}"
+          memory: ${CONVEX_MEMORY_LIMIT:-4G}
+        reservations:
+          cpus: "${CONVEX_CPU_RESERVATION:-1.0}"
+          memory: ${CONVEX_MEMORY_RESERVATION:-2G}
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      update_config:
+        order: stop-first
+        failure_action: rollback
+        monitor: 60s
+    labels:
+      - traefik.enable=true
+      # API (3210)
+      - traefik.http.routers.convex-api.rule=Host(`api.sdvedutech.in`)
+      - traefik.http.routers.convex-api.entrypoints=websecure
+      - traefik.http.routers.convex-api.tls=true
+      - traefik.http.routers.convex-api.tls.certresolver=letsencrypt
+      - traefik.http.routers.convex-api.service=convex-api
+      - traefik.http.services.convex-api.loadbalancer.server.port=3210
+      # HTTP actions / site (3211)
+      - traefik.http.routers.convex-site.rule=Host(`site.sdvedutech.in`)
+      - traefik.http.routers.convex-site.entrypoints=websecure
+      - traefik.http.routers.convex-site.tls=true
+      - traefik.http.routers.convex-site.tls.certresolver=letsencrypt
+      - traefik.http.routers.convex-site.service=convex-site
+      - traefik.http.services.convex-site.loadbalancer.server.port=3211
+
+  dashboard:
+    image: ghcr.io/get-convex/convex-dashboard:${CONVEX_DASHBOARD_TAG:-latest}
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    restart: unless-stopped
+    ports:
+      - "${DASHBOARD_PORT:-6791}:6791"
+    environment:
+      - NEXT_PUBLIC_DEPLOYMENT_URL=${NEXT_PUBLIC_DEPLOYMENT_URL:-https://api.sdvedutech.in}
+      - NEXT_PUBLIC_LOAD_MONACO_INTERNALLY
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "${CONVEX_DASHBOARD_CPU_LIMIT:-0.5}"
+          memory: ${CONVEX_DASHBOARD_MEMORY_LIMIT:-512M}
+        reservations:
+          cpus: "${CONVEX_DASHBOARD_CPU_RESERVATION:-0.1}"
+          memory: ${CONVEX_DASHBOARD_MEMORY_RESERVATION:-128M}
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+        window: 120s
+
+volumes:
+  convex_data:
+    name: ${CONVEX_VOLUME_NAME:-sdv-convex-data}

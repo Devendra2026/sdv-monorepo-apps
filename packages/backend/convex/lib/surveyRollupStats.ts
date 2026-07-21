@@ -814,18 +814,52 @@ export async function flushBackfillAggregates(ctx: MutationCtx, aggregates: Back
   }
 }
 
-/** Clear all rollup tables before a full re-backfill. */
+/** Clear all rollup tables before a full re-backfill (one table page at a time). */
+const ROLLUP_CLEAR_PAGE = 100
+
+type RollupClearTable =
+  | "surveyMunicipalityStats"
+  | "surveyDailyStats"
+  | "surveyWardStats"
+  | "surveySurveyorStats"
+
+const ROLLUP_CLEAR_ORDER: RollupClearTable[] = [
+  "surveyMunicipalityStats",
+  "surveyDailyStats",
+  "surveyWardStats",
+  "surveySurveyorStats",
+]
+
+/**
+ * Delete one page of a rollup table. Returns whether more pages remain for this table.
+ * Callers must chain until all tables are empty — never `.collect()` entire rollups.
+ */
+export async function clearRollupStatsPage(
+  ctx: MutationCtx,
+  table: RollupClearTable,
+): Promise<{ deleted: number; done: boolean }> {
+  const page = await ctx.db.query(table).paginate({ cursor: null, numItems: ROLLUP_CLEAR_PAGE })
+  for (const row of page.page) {
+    await ctx.db.delete(row._id)
+  }
+  // After deletes, re-check whether any docs remain (cursor from pre-delete page is unsafe).
+  const remaining = await ctx.db.query(table).take(1)
+  return { deleted: page.page.length, done: remaining.length === 0 }
+}
+
+export function nextRollupClearTable(current: RollupClearTable | null): RollupClearTable | null {
+  if (current === null) return ROLLUP_CLEAR_ORDER[0] ?? null
+  const idx = ROLLUP_CLEAR_ORDER.indexOf(current)
+  if (idx < 0 || idx >= ROLLUP_CLEAR_ORDER.length - 1) return null
+  return ROLLUP_CLEAR_ORDER[idx + 1] ?? null
+}
+
+/** @deprecated Prefer clearRollupStatsPage via scheduler — unbounded collect fails at scale. */
 export async function clearAllRollupStats(ctx: MutationCtx) {
-  for (const row of await ctx.db.query("surveyMunicipalityStats").collect()) {
-    await ctx.db.delete(row._id)
-  }
-  for (const row of await ctx.db.query("surveyDailyStats").collect()) {
-    await ctx.db.delete(row._id)
-  }
-  for (const row of await ctx.db.query("surveyWardStats").collect()) {
-    await ctx.db.delete(row._id)
-  }
-  for (const row of await ctx.db.query("surveySurveyorStats").collect()) {
-    await ctx.db.delete(row._id)
+  for (const table of ROLLUP_CLEAR_ORDER) {
+    for (;;) {
+      const { done } = await clearRollupStatsPage(ctx, table)
+      if (done) break
+    }
   }
 }

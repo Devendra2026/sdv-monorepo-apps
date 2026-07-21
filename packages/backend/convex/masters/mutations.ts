@@ -14,13 +14,15 @@ export const markRead = mutation({
 
 export const markAllRead = mutation({
   args: {},
+  returns: v.object({ marked: v.number(), hasMore: v.boolean() }),
   handler: async (ctx) => {
     const me = await requireUser(ctx)
     const unread = await ctx.db
       .query("notifications")
       .withIndex("by_user_read", (q) => q.eq("userId", me._id).eq("readAt", undefined))
-      .collect()
+      .take(100)
     const now = Date.now()
     await Promise.all(unread.map((n) => ctx.db.patch(n._id, { readAt: now })))
+    return { marked: unread.length, hasMore: unread.length === 100 }
   },
 })

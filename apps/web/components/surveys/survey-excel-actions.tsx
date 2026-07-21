@@ -10,8 +10,8 @@ import { FileSpreadsheet, Loader2, Upload } from "lucide-react"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
 
-/** Must stay ≤ backend MAX_EXPORT_PAGE_SIZE (50). */
-const EXPORT_BUNDLE_PAGE_SIZE = 50
+/** Must stay ≤ backend MAX_EXPORT_PAGE_SIZE (40). */
+const EXPORT_BUNDLE_PAGE_SIZE = 40
 
 export type SurveyExportFilters = {
   status?: SurveyStatus

@@ -2,6 +2,12 @@ import { v } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { QueryCtx } from "../_generated/server"
 import { query } from "../_generated/server"
+import {
+  DEFAULT_EXPORT_PAGE_SIZE,
+  EXPORT_SCOPE_LIMIT,
+  MAX_EXPORT_PAGE_SIZE,
+} from "../lib/budgetLimits"
+import { logBudgetEvent, logSlowPath } from "../lib/observability"
 import { comparePropertyIds } from "../lib/propertyId"
 import { gpsCapture, photoSlot, qcStatus, sanitationType, surveyOwnerEntry, surveyStatus, waterSource } from "../schema"
 import { hasCapability } from "../shared/capabilities"
@@ -15,6 +21,8 @@ import {
 } from "../shared/tenancy"
 import { collectSurveysForListPaginated } from "../surveys/helpers"
 import { enrichSurveysForExport, loadMunicipalityCodes } from "./helpers"
+
+export { DEFAULT_EXPORT_PAGE_SIZE, EXPORT_SCOPE_LIMIT, MAX_EXPORT_PAGE_SIZE }
 
 const listFilterArgs = {
   status: v.optional(surveyStatus),
@@ -105,10 +113,6 @@ const exportBundleValidator = v.object({
   photos: v.array(exportPhotoValidator),
 })
 
-const EXPORT_SCOPE_LIMIT = 1500
-const DEFAULT_EXPORT_PAGE_SIZE = 30
-const MAX_EXPORT_PAGE_SIZE = 40
-
 type ExportListFilters = {
   status?: Doc<"surveys">["status"]
   qcStatus?: Doc<"surveys">["qcStatus"]
@@ -193,8 +197,19 @@ export const getExportBundlesByIds = query({
     bundles: v.array(exportBundleValidator),
   }),
   handler: async (ctx, args) => {
+    const startedAt = Date.now()
     const { me } = await requireExportCaller(ctx)
-    const ids = args.surveyIds.slice(0, MAX_EXPORT_PAGE_SIZE)
+    if (args.surveyIds.length > MAX_EXPORT_PAGE_SIZE) {
+      logBudgetEvent("export.getExportBundlesByIds.over_limit", {
+        requested: args.surveyIds.length,
+        max: MAX_EXPORT_PAGE_SIZE,
+      })
+      clientError(
+        "VALIDATION",
+        `Export page is limited to ${MAX_EXPORT_PAGE_SIZE} surveys per request — split into smaller chunks`,
+      )
+    }
+    const ids = args.surveyIds
     if (ids.length === 0) {
       return { bundles: [] }
     }
@@ -208,6 +223,17 @@ export const getExportBundlesByIds = query({
       surveys.map((r) => r.municipalityId)
     )
     const bundles = await enrichSurveysForExport(ctx, surveys, codes)
+    if (bundles.length !== ids.length) {
+      // Missing docs are expected if IDs were deleted mid-export; never silently drop by page size.
+      logBudgetEvent("export.getExportBundlesByIds.partial", {
+        requested: ids.length,
+        returned: bundles.length,
+      })
+    }
+    logSlowPath("export.getExportBundlesByIds", startedAt, {
+      surveyCount: ids.length,
+      bundleCount: bundles.length,
+    })
     return { bundles }
   },
 })

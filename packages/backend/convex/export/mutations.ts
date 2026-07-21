@@ -1,13 +1,16 @@
 import { v } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import { mutation } from "../_generated/server"
-import { normalizeAddressFields } from "../masters/helpers"
+import { MAX_IMPORT_FLOORS, MAX_IMPORT_SURVEYS } from "../lib/budgetLimits"
 import { normalizeFloorFields, usageTypeToOccupied, validateFloorRow } from "../lib/masters/areaMasters"
+import { logSlowPath } from "../lib/observability"
+import { lookupSurveyByPropertyId } from "../lib/propertyIdLookup"
+import { recordSurveyStatsInsert, recordSurveyStatsUpdate } from "../lib/surveyScopeStats"
+import { normalizeAddressFields } from "../masters/helpers"
 import { requireCapability } from "../shared/capabilities"
 import { assertCanAccessSurvey } from "../shared/fieldAccess"
 import { assertCanReadWard, clientError, requireUser, writeAudit } from "../shared/helpers"
-import { lookupSurveyByPropertyId } from "../lib/propertyIdLookup"
-import { recordSurveyStatsInsert, recordSurveyStatsUpdate } from "../lib/surveyScopeStats"
+import { assertMunicipalityInScope } from "../shared/tenancy"
 import {
   assertSurveyWritable,
   mergeDraftArgs,
@@ -16,12 +19,9 @@ import {
   stripLocalId,
   withResolvedPropertyId,
 } from "../surveys/helpers"
-import { assertMunicipalityInScope } from "../shared/tenancy"
 import { registerPropertyIdMapping } from "./helpers"
 
-/** Keep import mutations inside Convex transaction budgets. */
-const MAX_IMPORT_SURVEYS = 40
-const MAX_IMPORT_FLOORS = 200
+export { MAX_IMPORT_FLOORS, MAX_IMPORT_SURVEYS }
 
 const importSurveyRow = v.object({
   localId: v.string(),
@@ -88,7 +88,19 @@ export const importExcelBundle = mutation({
     surveys: v.array(importSurveyRow),
     floors: v.optional(v.array(importFloorRow)),
   },
+  returns: v.object({
+    created: v.number(),
+    updated: v.number(),
+    errors: v.array(
+      v.object({
+        propertyId: v.optional(v.string()),
+        localId: v.optional(v.string()),
+        message: v.string(),
+      }),
+    ),
+  }),
   handler: async (ctx, args) => {
+    const startedAt = Date.now()
     const me = await requireUser(ctx)
     await requireCapability(ctx, me, "reports.export")
 
@@ -279,6 +291,14 @@ export const importExcelBundle = mutation({
       entity: "survey",
       entityId: me._id,
       metadata: { created, updated, errorCount: errors.length },
+    })
+
+    logSlowPath("export.importExcelBundle", startedAt, {
+      surveyCount: args.surveys.length,
+      floorCount: args.floors?.length ?? 0,
+      created,
+      updated,
+      errorCount: errors.length,
     })
 
     return { created, updated, errors }
