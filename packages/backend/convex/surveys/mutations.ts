@@ -246,6 +246,7 @@ export const upsert = mutation({
 
     if (existing) {
       const { status, qcStatus } = resolvePostSaveStatuses(existing)
+      const completionPct = await completionPctForSurvey(ctx, { ...existing, ...writable } as Doc<"surveys">)
 
       await ctx.db.patch(existing._id, {
         ...writable,
@@ -253,21 +254,28 @@ export const upsert = mutation({
         qcStatus,
         serverVersion: existing.serverVersion + 1,
         clientUpdatedAt: args.clientUpdatedAt,
+        completionPct,
       })
-      const updated = await ctx.db.get(existing._id)
-      if (updated) await recordSurveyStatsUpdate(ctx, existing, updated)
-      await Promise.all([
-        refreshSurveyCompletionPct(ctx, existing._id),
-        writeAudit(ctx, {
-          actorId: me._id,
-          action: auditActionForSave(existing, ownScope, false),
-          entity: "survey",
-          entityId: existing._id,
-        }),
-      ])
+      const updated: Doc<"surveys"> = {
+        ...existing,
+        ...writable,
+        status,
+        qcStatus,
+        serverVersion: existing.serverVersion + 1,
+        clientUpdatedAt: args.clientUpdatedAt,
+        completionPct,
+      }
+      await recordSurveyStatsUpdate(ctx, existing, updated)
+      await writeAudit(ctx, {
+        actorId: me._id,
+        action: auditActionForSave(existing, ownScope, false),
+        entity: "survey",
+        entityId: existing._id,
+      })
       return existing._id
     }
 
+    const completionPct = computeSurveyCompletionPercent({ ...writable, floors: [], photos: [] })
     const newId = await ctx.db.insert("surveys", {
       ...writable,
       surveyorId: me._id,
@@ -275,19 +283,18 @@ export const upsert = mutation({
       status: "draft",
       qcStatus: "pending",
       serverVersion: 1,
+      clientUpdatedAt: args.clientUpdatedAt,
+      completionPct,
     })
     const created = await ctx.db.get(newId)
     if (created) await recordSurveyStatsInsert(ctx, created)
-    await Promise.all([
-      refreshSurveyCompletionPct(ctx, newId),
-      writeAudit(ctx, {
-        actorId: me._id,
-        action: "survey.created",
-        entity: "survey",
-        entityId: newId,
-        metadata: { localId: args.localId },
-      }),
-    ])
+    await writeAudit(ctx, {
+      actorId: me._id,
+      action: "survey.created",
+      entity: "survey",
+      entityId: newId,
+      metadata: { localId: args.localId },
+    })
     return newId
   },
 })
@@ -313,6 +320,7 @@ export const setGps = mutation({
       gps: args.gps,
       serverVersion: survey.serverVersion + 1,
     })
+    await refreshSurveyCompletionPct(ctx, survey)
   },
 })
 

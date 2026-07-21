@@ -30,6 +30,7 @@ import type * as floors_queries from "../floors/queries.js";
 import type * as http from "../http.js";
 import type * as http_clerkWebhook from "../http/clerkWebhook.js";
 import type * as lib_auditActor from "../lib/auditActor.js";
+import type * as lib_budgetLimits from "../lib/budgetLimits.js";
 import type * as lib_customFunctions from "../lib/customFunctions.js";
 import type * as lib_gpsAccuracy from "../lib/gpsAccuracy.js";
 import type * as lib_gpsValidation from "../lib/gpsValidation.js";
@@ -126,6 +127,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "http/clerkWebhook": typeof http_clerkWebhook;
   "lib/auditActor": typeof lib_auditActor;
+  "lib/budgetLimits": typeof lib_budgetLimits;
   "lib/customFunctions": typeof lib_customFunctions;
   "lib/gpsAccuracy": typeof lib_gpsAccuracy;
   "lib/gpsValidation": typeof lib_gpsValidation;
