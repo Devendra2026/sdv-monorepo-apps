@@ -16,6 +16,62 @@ import { assertCanListUsers, hydrateUsersForAdmin } from "./helpers"
 
 const usersApproveQuery = capabilityQuery("users.approve")
 
+/**
+ * Caps for admin inbox / badge queries.
+ *
+ * Before: unbounded `.collect()` on users-by-status → SystemTimeout under load.
+ * After: indexed `.take()` with hard budgets; return shape unchanged.
+ */
+const PENDING_APPROVALS_LIST_CAP = 200
+const USER_STATUS_COUNT_CAP = 2000
+const USER_STATUS_PER_SCOPE_CAP = 500
+
+async function countUsersByStatusBounded(
+  ctx: Parameters<typeof filterUsersToCallerScope>[0],
+  me: Doc<"users">,
+  status: "active" | "disabled"
+): Promise<number> {
+  if (me.role === "admin") {
+    const rows = await ctx.db
+      .query("users")
+      .withIndex("by_status", (q) => q.eq("status", status))
+      .take(USER_STATUS_COUNT_CAP)
+    return rows.length
+  }
+
+  const scope = await resolveTenantScope(ctx, me)
+  const muniIds = [...tenantMunicipalityIds(scope)]
+  const districtIds = [...tenantDistrictIds(scope)]
+  const seen = new Set<string>()
+
+  const [muniBatches, districtBatches] = await Promise.all([
+    Promise.all(
+      muniIds.map((municipalityId) =>
+        ctx.db
+          .query("users")
+          .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId).eq("status", status))
+          .take(USER_STATUS_PER_SCOPE_CAP)
+      )
+    ),
+    Promise.all(
+      districtIds.map((districtId) =>
+        ctx.db
+          .query("users")
+          .withIndex("by_district_status", (q) => q.eq("districtId", districtId).eq("status", status))
+          .take(USER_STATUS_PER_SCOPE_CAP)
+      )
+    ),
+  ])
+
+  for (const rows of muniBatches) {
+    for (const row of rows) seen.add(row._id)
+  }
+  for (const rows of districtBatches) {
+    for (const row of rows) seen.add(row._id)
+  }
+  return seen.size
+}
+
 async function paginateUsersForCaller(
   ctx: Parameters<typeof filterUsersToCallerScope>[0],
   me: Doc<"users">,
@@ -69,8 +125,8 @@ async function paginateUsersForCaller(
 }
 
 /**
- * Returns every user awaiting approval, newest first. Drives the admin
- * "Pending approvals" inbox.
+ * Returns users awaiting approval, newest first (bounded). Drives the admin
+ * "Pending approvals" inbox. Same projected fields; capped to avoid timeouts.
  */
 export const listPendingApprovals = usersApproveQuery({
   args: {},
@@ -79,7 +135,7 @@ export const listPendingApprovals = usersApproveQuery({
       .query("users")
       .withIndex("by_status", (q) => q.eq("status", "pending_approval"))
       .order("desc")
-      .collect()
+      .take(PENDING_APPROVALS_LIST_CAP)
 
     return rows.map((u) => ({
       _id: u._id,
@@ -93,14 +149,14 @@ export const listPendingApprovals = usersApproveQuery({
   },
 })
 
-/** Pending approval count for admin mobile badge / dashboard KPIs. */
+/** Pending approval count for admin mobile badge / dashboard KPIs (bounded). */
 export const pendingApprovalCount = usersApproveQuery({
   args: {},
   handler: async (ctx) => {
     const rows = await ctx.db
       .query("users")
       .withIndex("by_status", (q) => q.eq("status", "pending_approval"))
-      .collect()
+      .take(USER_STATUS_COUNT_CAP)
     return rows.length
   },
 })
@@ -118,106 +174,25 @@ export const listUsers = query({
   },
 })
 
-/** Active user count for admin dashboard cards. */
+/** Active user count for admin dashboard cards (bounded take — no full-table collect). */
 export const countActiveUsers = query({
   args: {},
   returns: v.number(),
   handler: async (ctx) => {
     const me = await requireUser(ctx)
     await assertCanListUsers(ctx, me)
-
-    if (me.role === "admin") {
-      // Indexed by_status — still O(active users); no count API. Prefer rollup later.
-      const rows = await ctx.db
-        .query("users")
-        .withIndex("by_status", (q) => q.eq("status", "active"))
-        .collect()
-      return rows.length
-    }
-
-    const scope = await resolveTenantScope(ctx, me)
-    const muniIds = [...tenantMunicipalityIds(scope)]
-    const districtIds = [...tenantDistrictIds(scope)]
-    const seen = new Set<string>()
-
-    // Before: sequential per-muni/district awaits.
-    // After: parallel indexed collects within tenant scope.
-    const [muniBatches, districtBatches] = await Promise.all([
-      Promise.all(
-        muniIds.map((municipalityId) =>
-          ctx.db
-            .query("users")
-            .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId).eq("status", "active"))
-            .collect()
-        )
-      ),
-      Promise.all(
-        districtIds.map((districtId) =>
-          ctx.db
-            .query("users")
-            .withIndex("by_district_status", (q) => q.eq("districtId", districtId).eq("status", "active"))
-            .collect()
-        )
-      ),
-    ])
-
-    for (const rows of muniBatches) {
-      for (const row of rows) seen.add(row._id)
-    }
-    for (const rows of districtBatches) {
-      for (const row of rows) seen.add(row._id)
-    }
-    return seen.size
+    return countUsersByStatusBounded(ctx, me, "active")
   },
 })
 
-/** Disabled user count for admin directory KPIs. */
+/** Disabled user count for admin directory KPIs (bounded take — no full-table collect). */
 export const countDisabledUsers = query({
   args: {},
   returns: v.number(),
   handler: async (ctx) => {
     const me = await requireUser(ctx)
     await assertCanListUsers(ctx, me)
-
-    if (me.role === "admin") {
-      const rows = await ctx.db
-        .query("users")
-        .withIndex("by_status", (q) => q.eq("status", "disabled"))
-        .collect()
-      return rows.length
-    }
-
-    const scope = await resolveTenantScope(ctx, me)
-    const muniIds = [...tenantMunicipalityIds(scope)]
-    const districtIds = [...tenantDistrictIds(scope)]
-    const seen = new Set<string>()
-
-    const [muniBatches, districtBatches] = await Promise.all([
-      Promise.all(
-        muniIds.map((municipalityId) =>
-          ctx.db
-            .query("users")
-            .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId).eq("status", "disabled"))
-            .collect()
-        )
-      ),
-      Promise.all(
-        districtIds.map((districtId) =>
-          ctx.db
-            .query("users")
-            .withIndex("by_district_status", (q) => q.eq("districtId", districtId).eq("status", "disabled"))
-            .collect()
-        )
-      ),
-    ])
-
-    for (const rows of muniBatches) {
-      for (const row of rows) seen.add(row._id)
-    }
-    for (const rows of districtBatches) {
-      for (const row of rows) seen.add(row._id)
-    }
-    return seen.size
+    return countUsersByStatusBounded(ctx, me, "disabled")
   },
 })
 

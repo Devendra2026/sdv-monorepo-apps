@@ -234,7 +234,8 @@ const dashboardCountsShape = {
  * can see — surveyor sees own, supervisor sees ULB, admin sees all.
  */
 export const dashboardCounts = query({
-  args: { nowMs: v.optional(v.number()) },
+  // Require client clock — Date.now() in queries breaks caching/reactivity.
+  args: { nowMs: v.number() },
   returns: v.object(dashboardCountsShape),
   handler: async (ctx, args) => {
     const me = await requireUser(ctx, { allowPending: true })
@@ -242,8 +243,7 @@ export const dashboardCounts = query({
       return { total: 0, today: 0, drafts: 0, pending: 0, submittedToday: 0, approved: 0, submitted: 0, rejected: 0 }
     }
 
-    const nowMs = args.nowMs ?? Date.now()
-    const todayStart = new Date(nowMs)
+    const todayStart = new Date(args.nowMs)
     todayStart.setHours(0, 0, 0, 0)
     return loadDashboardCountsForHome(ctx, me, todayStart.getTime())
   },

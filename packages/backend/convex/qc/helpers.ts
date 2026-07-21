@@ -1,7 +1,8 @@
 import { v } from "convex/values"
 import { qcSections, qcStatus, surveyStatus } from "../schema"
 
-export const COMMAND_CENTER_WARD_SCAN_LIMIT = 2500
+/** Kept in sync with surveys/helpers — live command-center fallback budget. */
+export const COMMAND_CENTER_WARD_SCAN_LIMIT = 800
 
 export const wardStatsEntryShape = {
   wardNo: v.string(),

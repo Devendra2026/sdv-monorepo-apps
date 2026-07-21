@@ -43,9 +43,18 @@ import {
 
 const ANALYTICS_SURVEYOR_SLICE_LIMIT = 2000
 const MS_PER_DAY = 86_400_000
-const DASHBOARD_QC_DECISIONS_PER_REVIEWER_CAP = 400
+/** Per-ULB QC decisions loaded for dashboard / Reports (lowered to stay under syscall limits). */
+const DASHBOARD_QC_DECISIONS_PER_REVIEWER_CAP = 200
+/**
+ * Max municipalities processed in QC decision fan-out for large admin scopes.
+ * Before: every ULB in scope × take(400) → SystemTimeout.
+ * After: hard ULB budget; remaining ULBs omitted from QC throughput tables.
+ */
+const DASHBOARD_QC_ULB_CAP = 12
 const DASHBOARD_ANALYTICS_WINDOW_BUFFER_DAYS = 14
 const DASHBOARD_SURVEYOR_SLICE_LIMIT = 2000
+/** Max active users loaded per municipality for role-scoped filter options. */
+const DASHBOARD_USERS_PER_MUNI_CAP = 200
 
 export const surveyCountsShape = {
   total: v.number(),
@@ -313,12 +322,15 @@ async function loadActiveUsersInScopeByRole(
 ): Promise<Doc<"users">[]> {
   if (scopedMunicipalityIds.length === 0) return []
 
+  // Cap ULB fan-out for huge admin scopes (same budget as QC decisions).
+  const targetMunis = scopedMunicipalityIds.slice(0, DASHBOARD_QC_ULB_CAP)
+
   const batches = await Promise.all(
-    scopedMunicipalityIds.map((municipalityId) =>
+    targetMunis.map((municipalityId) =>
       ctx.db
         .query("users")
         .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId).eq("status", "active"))
-        .collect()
+        .take(DASHBOARD_USERS_PER_MUNI_CAP)
     )
   )
 
@@ -390,8 +402,10 @@ async function loadScopedQcDecisionsByReviewer(
   const perMuniCap = DASHBOARD_QC_DECISIONS_PER_REVIEWER_CAP
 
   if (scopedMunicipalityIds.size > 0) {
+    // Hard-cap ULBs so multi-district admins cannot exceed syscall budget.
+    const muniList = [...scopedMunicipalityIds].slice(0, DASHBOARD_QC_ULB_CAP)
     const batches = await Promise.all(
-      [...scopedMunicipalityIds].map(async (municipalityId) => {
+      muniList.map(async (municipalityId) => {
         if (fromMs > 0) {
           return await ctx.db
             .query("qcDecisions")
@@ -705,7 +719,8 @@ async function buildQcSupervisorBundle(
   const scope = await resolveDashboardTenantScope(ctx, me)
   const districtIds = tenantDistrictIds(scope)
   const muniIds = tenantMunicipalityIds(scope)
-  const scopedMuniList = [...muniIds]
+  // Cap ULB list before user + decision fan-out for large admin scopes.
+  const scopedMuniList = [...muniIds].slice(0, DASHBOARD_QC_ULB_CAP)
 
   const activeQcSupervisors = await loadActiveUsersInScopeByRole(
     ctx,

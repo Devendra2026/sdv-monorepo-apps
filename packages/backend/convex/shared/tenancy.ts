@@ -215,7 +215,9 @@ export async function resolveTenantScope(
   ctx: QueryCtx,
   me: Doc<"users">
 ): Promise<{ districts: Doc<"districts">[]; municipalities: Doc<"municipalities">[] }> {
-  return resolveTenantScopeInternal(ctx, me, { allowCatalogFallback: true })
+  // Field roles with no allotment/profile must get empty scope — never the full catalog.
+  // (Previous allowCatalogFallback:true over-granted cross-tenant reads.)
+  return resolveTenantScopeInternal(ctx, me, { allowCatalogFallback: false })
 }
 
 /**

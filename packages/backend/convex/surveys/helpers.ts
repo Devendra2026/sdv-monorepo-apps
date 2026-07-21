@@ -610,7 +610,13 @@ export function applySurveyListFilters(
  */
 export const LIST_PAGINATED_SCOPE_LIMIT = 800
 export const LIST_PAGINATED_PAGE_BUFFER = 100
-export const COMMAND_CENTER_WARD_SCAN_LIMIT = 2500
+/**
+ * Max survey rows for command-center live fallback (date/status/QC filters).
+ *
+ * Before: 2500 — multi-ULB live scans caused SystemTimeout / 503.
+ * After: 800 — same budget as listPaginated; rollup fast-path unchanged.
+ */
+export const COMMAND_CENTER_WARD_SCAN_LIMIT = 800
 
 export type SurveyListFilterArgs = {
   status?: Doc<"surveys">["status"]

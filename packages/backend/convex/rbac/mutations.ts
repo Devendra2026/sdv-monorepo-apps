@@ -73,6 +73,16 @@ export const updateRole = rolesManageMutation({
     const role = await ctx.db.get(args.roleId)
     if (!role) clientError("NOT_FOUND", "Role not found")
 
+    // System roles (admin, pending, …) must not have permissionKeys / deactivation mutated.
+    if (role.isSystem) {
+      if (args.permissionKeys !== undefined) {
+        clientError("FORBIDDEN", "Cannot change permissions on a system role")
+      }
+      if (args.isActive !== undefined && args.isActive === false) {
+        clientError("FORBIDDEN", "Cannot deactivate a system role")
+      }
+    }
+
     const patch: { name?: string; description?: string; isActive?: boolean } = {}
     if (args.name !== undefined) patch.name = args.name.trim()
     if (args.description !== undefined) patch.description = args.description.trim()

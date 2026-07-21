@@ -5,6 +5,16 @@ import { canReadWard } from "../shared/helpers"
 import { resolveTenantScope, tenantMunicipalityIds } from "../shared/tenancy"
 import { normalizeWardNo } from "./qcWardStats"
 
+/** Max ward rollup rows loaded per municipality (avoids huge ULB collects). */
+const WARD_STATS_PER_MUNI_CAP = 400
+/** Max surveyor rollup rows loaded per municipality. */
+const SURVEYOR_STATS_PER_MUNI_CAP = 500
+/**
+ * Max municipalities processed for unbounded rollup loads (analytics / command center).
+ * Filtered single-ULB / ward paths are uncapped beyond this budget.
+ */
+const ROLLUP_ULB_CAP = 40
+
 export type WardStatsRollup = {
   municipalityId: Id<"municipalities">
   wardNo: string
@@ -404,6 +414,7 @@ export async function loadWardStatsForScope(
 
   let targetMunis = scopedMuniIds
   if (filters.municipalityId) targetMunis = [filters.municipalityId]
+  else if (!filters.wardNo) targetMunis = scopedMuniIds.slice(0, ROLLUP_ULB_CAP)
 
   const batchResults = await Promise.all(
     targetMunis.map(async (municipalityId) => {
@@ -436,7 +447,7 @@ export async function loadWardStatsForScope(
       const wardRows = await ctx.db
         .query("surveyWardStats")
         .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
-        .collect()
+        .take(WARD_STATS_PER_MUNI_CAP)
 
       const rows: WardStatsRollup[] = []
       for (const row of wardRows) {
@@ -482,12 +493,14 @@ export async function loadSurveyorStatsForScope(
   const scopedMuniIds = await resolveScopedMunicipalityIdsForRollups(ctx, me, filters)
   if (!scopedMuniIds) return []
 
+  const targetMunis = filters.municipalityId ? [filters.municipalityId] : scopedMuniIds.slice(0, ROLLUP_ULB_CAP)
+
   const batchResults = await Promise.all(
-    scopedMuniIds.map(async (municipalityId) => {
+    targetMunis.map(async (municipalityId) => {
       const muniRows = await ctx.db
         .query("surveySurveyorStats")
         .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
-        .collect()
+        .take(SURVEYOR_STATS_PER_MUNI_CAP)
 
       const rows: SurveyorStatsRollup[] = []
       for (const row of muniRows) {

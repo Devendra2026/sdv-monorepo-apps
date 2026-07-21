@@ -53,6 +53,10 @@ export const approveUser = mutation({
     if (args.role === "pending") {
       clientError("BAD_REQUEST", "Cannot approve with pending role")
     }
+    // Only platform admins may grant the admin role (users.approve alone is insufficient).
+    if (args.role === "admin" && me.role !== "admin") {
+      clientError("FORBIDDEN", "Only admins can grant the admin role")
+    }
 
     if (args.role !== "admin") {
       if (!args.municipalityId && !args.districtId && !hasAllotments) {
@@ -208,7 +212,16 @@ export const updateUser = mutation({
     await assertUserVisibleToCaller(ctx, me, target)
 
     const patch: Record<string, unknown> = {}
-    if (args.role !== undefined) patch.role = args.role
+    if (args.role !== undefined) {
+      // Only platform admins may elevate (or reassign) the admin role.
+      if (args.role === "admin" && me.role !== "admin") {
+        clientError("FORBIDDEN", "Only admins can grant the admin role")
+      }
+      if (target.role === "admin" && args.role !== "admin" && me.role !== "admin") {
+        clientError("FORBIDDEN", "Only admins can change an admin's role")
+      }
+      patch.role = args.role
+    }
     if (args.municipalityId !== undefined) {
       patch.municipalityId = args.municipalityId
       const muni = await ctx.db.get(args.municipalityId)
