@@ -22,12 +22,14 @@ export function registerPropertyIdMapping(
 export async function enrichSurveysForExport(
   ctx: QueryCtx,
   surveys: Doc<"surveys">[],
-  codes: Map<Id<"municipalities">, string>
+  codes: Map<Id<"municipalities">, string>,
+  options?: { includePhotoUrls?: boolean }
 ) {
   if (surveys.length === 0) {
     return []
   }
 
+  const includePhotoUrls = options?.includePhotoUrls === true
   const enriched = enrichSurveyPropertyIds(surveys, codes)
 
   const muniIdSet = [...new Set(enriched.map((r) => r.municipalityId))]
@@ -64,7 +66,8 @@ export async function enrichSurveysForExport(
           width: p.width,
           height: p.height,
           capturedAt: p.capturedAt,
-          url: await ctx.storage.getUrl(p.storageId),
+          // Skip storage URL resolution unless requested — up to 640 syscalls per page.
+          url: includePhotoUrls ? await ctx.storage.getUrl(p.storageId) : null,
         }))
       )
 

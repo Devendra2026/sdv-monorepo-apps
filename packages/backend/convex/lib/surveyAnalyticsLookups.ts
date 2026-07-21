@@ -69,6 +69,48 @@ export async function getLegacyDailyStatsRow(
   return pickUniqueLegacyRow(rows, `municipality ${municipalityId} date ${dateKey}`)
 }
 
+/** Page size for full-table legacy municipality stats scans. */
+const MUNICIPALITY_STATS_PAGE_SIZE = 128
+/** Cap for one-day daily-stats scan across all ULBs (legacy + generated rows). */
+const DAILY_STATS_FOR_DATE_CAP = 2000
+
+/**
+ * Load all legacy municipality stats rows in a few pages.
+ * Prefer this over N point lookups when the caller scopes many ULBs.
+ */
+export async function loadAllLegacyMunicipalityStatsRows(
+  ctx: DbCtx
+): Promise<Doc<"surveyMunicipalityStats">[]> {
+  const legacyRows: Doc<"surveyMunicipalityStats">[] = []
+  let cursor: string | null = null
+
+  while (true) {
+    const page = await ctx.db
+      .query("surveyMunicipalityStats")
+      .paginate({ numItems: MUNICIPALITY_STATS_PAGE_SIZE, cursor })
+    legacyRows.push(...filterLegacyAnalyticsRows(page.page))
+    if (page.isDone) break
+    cursor = page.continueCursor
+  }
+
+  return legacyRows
+}
+
+/**
+ * Load all legacy daily stats for a single dateKey across municipalities.
+ * One indexed range instead of N by_municipality_date point reads.
+ */
+export async function loadLegacyDailyStatsForDate(
+  ctx: DbCtx,
+  dateKey: string
+): Promise<Doc<"surveyDailyStats">[]> {
+  const rows = await ctx.db
+    .query("surveyDailyStats")
+    .withIndex("by_date", (q) => q.eq("dateKey", dateKey))
+    .take(DAILY_STATS_FOR_DATE_CAP)
+  return filterLegacyAnalyticsRows(rows)
+}
+
 /**
  * Load all legacy daily stats in [startKey, endKey] for one municipality.
  * Paginates the legacy index so coexisting generated rows cannot truncate legacy history.

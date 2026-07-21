@@ -1,6 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "../_generated/server"
-import { fieldSurveyAccess } from "../shared/fieldAccess"
+import { fieldSurveyAccess, type PrecomputedFieldContext } from "../shared/fieldAccess"
 import { canReadWard } from "../shared/helpers"
 import { resolveTenantScope, tenantMunicipalityIds } from "../shared/tenancy"
 import { normalizeWardNo } from "./qcWardStats"
@@ -367,12 +367,13 @@ export type WardStatsFilters = {
 async function resolveScopedMunicipalityIdsForRollups(
   ctx: QueryCtx,
   me: Doc<"users">,
-  filters: Pick<WardStatsFilters, "districtId" | "municipalityId"> = {}
+  filters: Pick<WardStatsFilters, "districtId" | "municipalityId"> = {},
+  precomputed?: PrecomputedFieldContext
 ): Promise<Id<"municipalities">[] | null> {
-  const access = await fieldSurveyAccess(ctx, me)
+  const access = precomputed?.access ?? (await fieldSurveyAccess(ctx, me))
   if (access === "none" || access === "own") return null
 
-  const scope = await resolveTenantScope(ctx, me)
+  const scope = precomputed?.scope ?? (await resolveTenantScope(ctx, me))
   const muniIds = tenantMunicipalityIds(scope)
   let scopedMuniIds = scope.municipalities.length > 0 ? scope.municipalities.map((m) => m._id) : [...muniIds]
 
@@ -402,12 +403,13 @@ function wardNumbersMatch(rowWard: string, filterWard: string): boolean {
 export async function loadWardStatsForScope(
   ctx: QueryCtx,
   me: Doc<"users">,
-  filters: WardStatsFilters = {}
+  filters: WardStatsFilters = {},
+  precomputed?: PrecomputedFieldContext
 ): Promise<WardStatsRollup[]> {
-  const scopedMuniIds = await resolveScopedMunicipalityIdsForRollups(ctx, me, filters)
+  const scopedMuniIds = await resolveScopedMunicipalityIdsForRollups(ctx, me, filters, precomputed)
   if (!scopedMuniIds) return []
 
-  const scope = await resolveTenantScope(ctx, me)
+  const scope = precomputed?.scope ?? (await resolveTenantScope(ctx, me))
   const muniIds = tenantMunicipalityIds(scope)
   const muniMap = new Map(scope.municipalities.map((m) => [m._id, m]))
 
@@ -486,9 +488,10 @@ export async function loadWardStatsForScope(
 export async function loadSurveyorStatsForScope(
   ctx: QueryCtx,
   me: Doc<"users">,
-  filters: { districtId?: Id<"districts">; municipalityId?: Id<"municipalities"> } = {}
+  filters: { districtId?: Id<"districts">; municipalityId?: Id<"municipalities"> } = {},
+  precomputed?: PrecomputedFieldContext
 ): Promise<SurveyorStatsRollup[]> {
-  const scopedMuniIds = await resolveScopedMunicipalityIdsForRollups(ctx, me, filters)
+  const scopedMuniIds = await resolveScopedMunicipalityIdsForRollups(ctx, me, filters, precomputed)
   if (!scopedMuniIds) return []
 
   const targetMunis = filters.municipalityId ? [filters.municipalityId] : scopedMuniIds.slice(0, ROLLUP_ULB_CAP)

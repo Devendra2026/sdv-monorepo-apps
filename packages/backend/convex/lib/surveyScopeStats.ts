@@ -1,7 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "../_generated/server"
 import { dayEndMs, formatDateKey, startOfDayMs, startOfDayMsFromKey } from "../shared/calendar"
-import { fieldSurveyAccess } from "../shared/fieldAccess"
+import { fieldSurveyAccess, type PrecomputedFieldContext } from "../shared/fieldAccess"
 import { canReadWard } from "../shared/helpers"
 import { resolveDashboardTenantScope, resolveTenantScope, tenantMunicipalityIds } from "../shared/tenancy"
 import {
@@ -12,6 +12,8 @@ import {
 import {
   getLegacyDailyStatsRow,
   getLegacyMunicipalityStatsRow,
+  loadAllLegacyMunicipalityStatsRows,
+  loadLegacyDailyStatsForDate,
   loadLegacyDailyStatsInDateRange,
 } from "./surveyAnalyticsLookups"
 import {
@@ -33,6 +35,11 @@ export const DASHBOARD_BOUNDED_ROW_CAP = 2500
  * After: O(1) indexed rollup reads; live only for ≤ this many ULBs (or ward-scoped users).
  */
 export const DASHBOARD_LIVE_FALLBACK_ULB_CAP = 3
+
+/**
+ * Prefer one batched read over N point lookups when scoped ULB count exceeds this.
+ */
+export const STATS_BATCH_SCOPE_THRESHOLD = 10
 
 const MS_PER_DAY = 86_400_000
 
@@ -108,11 +115,15 @@ function toStatsSlice(row: Doc<"surveys">): SurveyStatsSlice {
 }
 
 /** Municipality ids for accurate dashboard reads (includes ward-narrowed roles). */
-async function resolveDashboardMunicipalityIds(ctx: QueryCtx, me: Doc<"users">): Promise<Id<"municipalities">[]> {
-  const access = await fieldSurveyAccess(ctx, me)
+async function resolveDashboardMunicipalityIds(
+  ctx: QueryCtx,
+  me: Doc<"users">,
+  precomputed?: PrecomputedFieldContext
+): Promise<Id<"municipalities">[]> {
+  const access = precomputed?.access ?? (await fieldSurveyAccess(ctx, me))
   if (access === "none") return []
 
-  const scope = await resolveDashboardTenantScope(ctx, me)
+  const scope = precomputed?.scope ?? (await resolveDashboardTenantScope(ctx, me))
   const muniIds = [...tenantMunicipalityIds(scope)]
 
   if (access === "admin") {
@@ -609,7 +620,8 @@ async function computeTodayMetricsForMunicipality(
  * Load municipality stats rollups with optional live fallback.
  *
  * Before: sequential per-ULB; missing stats → live take(2500) each (timeout on admin).
- * After: parallel indexed `.unique()`; live only when scope ≤ DASHBOARD_LIVE_FALLBACK_ULB_CAP.
+ * After: parallel indexed `.unique()` for small scopes; one table scan for large scopes;
+ * live only when scope ≤ DASHBOARD_LIVE_FALLBACK_ULB_CAP.
  */
 async function loadMunicipalityStatsRollupsResilient(
   ctx: QueryCtx,
@@ -620,6 +632,30 @@ async function loadMunicipalityStatsRollupsResilient(
   const wardScoped = userRequiresWardScopedSurveyCounts(me)
   const allowLiveFallback = mayUseLiveMunicipalityFallback(me, scopedMuniIds.length, wardScoped)
   const todayStart = startOfDayMsFromKey(formatDateKey(todayMs))
+  const scopedSet = new Set(scopedMuniIds)
+
+  // Large scopes: one paginated table read instead of N × take(16) point queries.
+  if (!wardScoped && scopedMuniIds.length > STATS_BATCH_SCOPE_THRESHOLD) {
+    const allRows = await loadAllLegacyMunicipalityStatsRows(ctx)
+    const byMuni = new Map<Id<"municipalities">, MunicipalityStatsRollup>()
+    for (const row of allRows) {
+      if (!scopedSet.has(row.municipalityId)) continue
+      const rollup: MunicipalityStatsRollup = {
+        municipalityId: row.municipalityId,
+        total: row.total,
+        drafts: row.drafts,
+        submitted: row.submitted,
+        qcApproved: row.qcApproved,
+        qcRejected: row.qcRejected,
+        qcPending: row.qcPending,
+      }
+      if (municipalityStatsRowLooksConsistent(rollup)) {
+        byMuni.set(row.municipalityId, rollup)
+      }
+    }
+
+    return scopedMuniIds.map((municipalityId) => byMuni.get(municipalityId) ?? emptyMunicipalityRollup(municipalityId))
+  }
 
   const results = await Promise.all(
     scopedMuniIds.map(async (municipalityId) => {
@@ -665,13 +701,14 @@ async function loadMunicipalityStatsRollupsResilient(
 export async function resolveScopedMunicipalityIds(
   ctx: QueryCtx,
   me: Doc<"users">,
-  filters: Pick<ScopeStatsFilters, "districtId" | "municipalityId"> = {}
+  filters: Pick<ScopeStatsFilters, "districtId" | "municipalityId"> = {},
+  precomputed?: PrecomputedFieldContext
 ): Promise<Id<"municipalities">[] | null> {
-  const access = await fieldSurveyAccess(ctx, me)
+  const access = precomputed?.access ?? (await fieldSurveyAccess(ctx, me))
   if (access === "none" || access === "own") return null
 
-  const scope = await resolveTenantScope(ctx, me)
-  let scopedMuniIds = await resolveDashboardMunicipalityIds(ctx, me)
+  const scope = precomputed?.scope ?? (await resolveTenantScope(ctx, me))
+  let scopedMuniIds = await resolveDashboardMunicipalityIds(ctx, me, precomputed ?? { scope, access })
 
   if (filters.municipalityId) {
     if (!scopedMuniIds.includes(filters.municipalityId)) return null
@@ -688,9 +725,10 @@ export async function resolveScopedMunicipalityIds(
 export async function loadScopeCompletionPct(
   ctx: QueryCtx,
   me: Doc<"users">,
-  filters: ScopeStatsFilters = {}
+  filters: ScopeStatsFilters = {},
+  precomputed?: PrecomputedFieldContext
 ): Promise<number | null> {
-  const scopedMuniIds = await resolveScopedMunicipalityIds(ctx, me, filters)
+  const scopedMuniIds = await resolveScopedMunicipalityIds(ctx, me, filters, precomputed)
   if (!scopedMuniIds) return null
 
   let sum = 0
@@ -724,18 +762,17 @@ export async function loadScopeStatsSummary(
   ctx: QueryCtx,
   me: Doc<"users">,
   todayMs: number,
-  filters: ScopeStatsFilters = {}
+  filters: ScopeStatsFilters = {},
+  precomputed?: PrecomputedFieldContext
 ): Promise<ScopeStatsSummary | null> {
-  const scopedMuniIds = await resolveScopedMunicipalityIds(ctx, me, filters)
+  const scopedMuniIds = await resolveScopedMunicipalityIds(ctx, me, filters, precomputed)
   if (!scopedMuniIds) return null
 
   const rollups = await loadMunicipalityStatsRollups(ctx, me, scopedMuniIds, todayMs)
   if (!rollups) return null
 
   const dateKey = formatDateKey(todayMs)
-  const dailyStats = await Promise.all(
-    scopedMuniIds.map((municipalityId) => getLegacyDailyStatsRow(ctx, municipalityId, dateKey))
-  )
+  const todayByMuni = await loadTodayCreatedByMunicipality(ctx, scopedMuniIds, dateKey)
 
   const totals: ScopeStatsSummary = {
     municipalityId: scopedMuniIds[0]!,
@@ -758,8 +795,7 @@ export async function loadScopeStatsSummary(
     totals.qcPending += row.qcPending
   }
 
-  for (let index = 0; index < scopedMuniIds.length; index++) {
-    const municipalityId = scopedMuniIds[index]!
+  for (const municipalityId of scopedMuniIds) {
     if (userRequiresWardScopedSurveyCounts(me)) {
       const today = await computeTodayMetricsForMunicipality(ctx, me, municipalityId, todayMs)
       totals.todayCreated += today.created
@@ -767,10 +803,10 @@ export async function loadScopeStatsSummary(
       continue
     }
 
-    const row = dailyStats[index]
-    if (row) {
-      totals.todayCreated += row.created
-      totals.submittedToday += row.submitted
+    const daily = todayByMuni.get(municipalityId)
+    if (daily) {
+      totals.todayCreated += daily.created
+      totals.submittedToday += daily.submitted
     } else {
       const today = await computeTodayMetricsForMunicipality(ctx, me, municipalityId, todayMs)
       totals.todayCreated += today.created
@@ -779,6 +815,40 @@ export async function loadScopeStatsSummary(
   }
 
   return totals
+}
+
+/**
+ * Load today's daily stats for a set of ULBs.
+ * Large scopes: one by_date index read; small scopes: parallel point reads.
+ */
+async function loadTodayCreatedByMunicipality(
+  ctx: QueryCtx,
+  scopedMuniIds: Id<"municipalities">[],
+  dateKey: string
+): Promise<Map<Id<"municipalities">, { created: number; submitted: number }>> {
+  const result = new Map<Id<"municipalities">, { created: number; submitted: number }>()
+  if (scopedMuniIds.length === 0) return result
+
+  if (scopedMuniIds.length > STATS_BATCH_SCOPE_THRESHOLD) {
+    const scopedSet = new Set(scopedMuniIds)
+    const rows = await loadLegacyDailyStatsForDate(ctx, dateKey)
+    for (const row of rows) {
+      if (!scopedSet.has(row.municipalityId)) continue
+      result.set(row.municipalityId, { created: row.created, submitted: row.submitted })
+    }
+    return result
+  }
+
+  const dailyStats = await Promise.all(
+    scopedMuniIds.map((municipalityId) => getLegacyDailyStatsRow(ctx, municipalityId, dateKey))
+  )
+  for (let index = 0; index < scopedMuniIds.length; index++) {
+    const row = dailyStats[index]
+    if (row) {
+      result.set(scopedMuniIds[index]!, { created: row.created, submitted: row.submitted })
+    }
+  }
+  return result
 }
 
 /** Total list rows matching filters without scanning surveys (when eligible). */
@@ -799,7 +869,8 @@ export async function loadAnalyticsBreakdownFromStats(
   me: Doc<"users">,
   todayMs: number,
   scope: { districts: Doc<"districts">[]; municipalities: Doc<"municipalities">[] },
-  filters: ScopeStatsFilters = {}
+  filters: ScopeStatsFilters = {},
+  precomputed?: PrecomputedFieldContext
 ): Promise<{
   summary: SurveyCounts
   byDistrict: Array<{
@@ -827,20 +898,18 @@ export async function loadAnalyticsBreakdownFromStats(
     rejected: number
   }>
 } | null> {
-  const scopedMuniIds = await resolveScopedMunicipalityIds(ctx, me, filters)
+  const scopedMuniIds = await resolveScopedMunicipalityIds(ctx, me, filters, precomputed)
   if (!scopedMuniIds) return null
 
   const rollups = await loadMunicipalityStatsRollups(ctx, me, scopedMuniIds, todayMs)
   if (!rollups) return null
 
   const dateKey = formatDateKey(todayMs)
-  const dailyStats = await Promise.all(
-    scopedMuniIds.map((municipalityId) => getLegacyDailyStatsRow(ctx, municipalityId, dateKey))
-  )
+  const todayByMuniDaily = await loadTodayCreatedByMunicipality(ctx, scopedMuniIds, dateKey)
   const todayByMuni = new Map<Id<"municipalities">, number>()
-  scopedMuniIds.forEach((municipalityId, index) => {
-    todayByMuni.set(municipalityId, dailyStats[index]?.created ?? 0)
-  })
+  for (const municipalityId of scopedMuniIds) {
+    todayByMuni.set(municipalityId, todayByMuniDaily.get(municipalityId)?.created ?? 0)
+  }
 
   const districtMap = new Map(scope.districts.map((d) => [d._id, d]))
   const muniMap = new Map(scope.municipalities.map((m) => [m._id, m]))

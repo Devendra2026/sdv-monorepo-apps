@@ -6,8 +6,13 @@
  *   - districtId on user: all ULBs in that district
  *   - municipalityId on user: single ULB (+ its district for display)
  *   - surveyor ward checks remain in helpers.assertCanReadWard
+ *
+ * listForAdmin loads sequentially (no nested Promise.all fan-out) so a slow
+ * or failing read stays on the main UDF promise chain — avoids self-hosted
+ * UnhandledPromiseRejection → "Restarting Isolate" under export load.
  */
 import { capabilityQuery } from "../lib/customFunctions"
+import { buildAdminTenantTree, type AdminUlbInput, type AdminWardInput } from "./adminTree"
 
 const tenantsManageQuery = capabilityQuery("tenants.manage")
 
@@ -20,31 +25,53 @@ export const listForAdmin = tenantsManageQuery({
       .withIndex("by_active", (q) => q.eq("isActive", true))
       .collect()
 
-    const sortedDistricts = districts.sort((a, b) => a.name.localeCompare(b.name))
+    const municipalities: AdminUlbInput[] = []
+    for (const d of districts) {
+      const ulbs = await ctx.db
+        .query("municipalities")
+        .withIndex("by_district_active", (q) => q.eq("districtId", d._id).eq("isActive", true))
+        .collect()
+      for (const m of ulbs) {
+        const row: AdminUlbInput = {
+          _id: m._id,
+          districtId: m.districtId,
+          code: m.code,
+          name: m.name,
+          bodyType: m.bodyType,
+          isActive: m.isActive,
+        }
+        if (m.postalCode !== undefined) row.postalCode = m.postalCode
+        municipalities.push(row)
+      }
+    }
 
-    return Promise.all(
-      sortedDistricts.map(async (d) => {
-        const ulbs = (
-          await ctx.db
-            .query("municipalities")
-            .withIndex("by_district_active", (q) => q.eq("districtId", d._id).eq("isActive", true))
-            .collect()
-        ).sort((a, b) => a.name.localeCompare(b.name))
+    const wards: AdminWardInput[] = []
+    for (const m of municipalities) {
+      const wardRows = await ctx.db
+        .query("wards")
+        .withIndex("by_municipality", (q) => q.eq("municipalityId", m._id))
+        .collect()
+      for (const w of wardRows) {
+        wards.push({
+          _id: w._id,
+          municipalityId: w.municipalityId,
+          wardNo: w.wardNo,
+          wardCode: w.wardCode,
+          name: w.name,
+        })
+      }
+    }
 
-        const ulbsWithWards = await Promise.all(
-          ulbs.map(async (m) => ({
-            ...m,
-            wards: (
-              await ctx.db
-                .query("wards")
-                .withIndex("by_municipality", (q) => q.eq("municipalityId", m._id))
-                .collect()
-            ).sort((a, b) => a.wardNo.localeCompare(b.wardNo, undefined, { numeric: true })),
-          }))
-        )
-
-        return { ...d, ulbs: ulbsWithWards }
-      })
+    return buildAdminTenantTree(
+      districts.map((d) => ({
+        _id: d._id,
+        code: d.code,
+        name: d.name,
+        stateName: d.stateName,
+        isActive: d.isActive,
+      })),
+      municipalities,
+      wards
     )
   },
 })

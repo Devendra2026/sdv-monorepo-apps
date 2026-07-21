@@ -192,6 +192,8 @@ export const listExportIds = query({
 export const getExportBundlesByIds = query({
   args: {
     surveyIds: v.array(v.id("surveys")),
+    /** When true, resolve Convex storage URLs for photos (expensive). Default false. */
+    includePhotoUrls: v.optional(v.boolean()),
   },
   returns: v.object({
     bundles: v.array(exportBundleValidator),
@@ -222,7 +224,9 @@ export const getExportBundlesByIds = query({
       ctx,
       surveys.map((r) => r.municipalityId)
     )
-    const bundles = await enrichSurveysForExport(ctx, surveys, codes)
+    const bundles = await enrichSurveysForExport(ctx, surveys, codes, {
+      includePhotoUrls: args.includePhotoUrls === true,
+    })
     if (bundles.length !== ids.length) {
       // Missing docs are expected if IDs were deleted mid-export; never silently drop by page size.
       logBudgetEvent("export.getExportBundlesByIds.partial", {
@@ -233,6 +237,7 @@ export const getExportBundlesByIds = query({
     logSlowPath("export.getExportBundlesByIds", startedAt, {
       surveyCount: ids.length,
       bundleCount: bundles.length,
+      includePhotoUrls: args.includePhotoUrls === true,
     })
     return { bundles }
   },
@@ -262,7 +267,7 @@ export const listForExport = query({
       ctx,
       page.map((r) => r.municipalityId)
     )
-    const bundles = await enrichSurveysForExport(ctx, page, codes)
+    const bundles = await enrichSurveysForExport(ctx, page, codes, { includePhotoUrls: true })
     const nextOffset = offset + pageSize < total ? offset + pageSize : null
 
     return { bundles, total, nextOffset }
