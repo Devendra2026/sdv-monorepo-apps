@@ -2,7 +2,6 @@
  * Multi-district / multi-ULB allotments for supervisors and surveyors.
  * Example: supervisor active on Agra MC + Mathura MC + Hathras district-wide.
  */
-import { v } from "convex/values"
 import type { Id } from "../_generated/dataModel"
 import { type MutationCtx } from "../_generated/server"
 import { clientError } from "../shared/helpers"

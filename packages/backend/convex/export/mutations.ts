@@ -5,7 +5,7 @@ import { normalizeAddressFields } from "../masters/helpers"
 import { normalizeFloorFields, usageTypeToOccupied, validateFloorRow } from "../lib/masters/areaMasters"
 import { requireCapability } from "../shared/capabilities"
 import { assertCanAccessSurvey } from "../shared/fieldAccess"
-import { assertCanReadWard, clientError, requireUser, writeAudit } from "../shared/helpers"
+import { assertCanReadWard, requireUser, writeAudit } from "../shared/helpers"
 import { lookupSurveyByPropertyId } from "../lib/propertyIdLookup"
 import { recordSurveyStatsInsert, recordSurveyStatsUpdate } from "../lib/surveyScopeStats"
 import {

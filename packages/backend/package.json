@@ -10,7 +10,9 @@
     "deploy:production": "node ./scripts/deploy-convex-production.mjs",
     "codegen": "convex codegen",
     "typecheck": "tsc --noEmit -p convex/tsconfig.json",
-    "convex:backup": "node ./scripts/backup-convex.mjs"
+    "convex:backup": "node ./scripts/backup-convex.mjs",
+    "test": "vitest run --config vitest.config.ts",
+    "lint": "eslint convex --max-warnings=0"
   },
   "exports": {
     "./convex/*": "./convex/*"
@@ -21,8 +23,14 @@
     "svix": "^1.96.1"
   },
   "devDependencies": {
+    "@convex-dev/eslint-plugin": "^1.0.0",
+    "@edge-runtime/vm": "^5.0.0",
     "@types/node": "^26.1.1",
     "@workspace/typescript-config": "workspace:*",
-    "typescript": "catalog:"
+    "convex-test": "^0.0.38",
+    "eslint": "9.39.4",
+    "typescript": "catalog:",
+    "typescript-eslint": "^8.63.0",
+    "vitest": "^3.2.4"
   }
 }

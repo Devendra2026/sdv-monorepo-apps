@@ -1,5 +1,5 @@
 import { v } from "convex/values"
-import type { Doc, Id } from "../_generated/dataModel"
+import type { Id } from "../_generated/dataModel"
 import { query } from "../_generated/server"
 import { requireCapability } from "../shared/capabilities"
 import { requireUser } from "../shared/helpers"

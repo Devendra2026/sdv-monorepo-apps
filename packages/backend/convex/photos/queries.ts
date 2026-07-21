@@ -13,7 +13,6 @@ import { v } from "convex/values"
 import { query } from "../_generated/server"
 import { assertCanAccessSurvey } from "../shared/fieldAccess"
 import { requireUser } from "../shared/helpers"
-import { photoSlot } from "../schema"
 
 /** Signed preview URLs — only for blobs linked to accessible surveys. */
 export const resolveStorageUrls = query({
