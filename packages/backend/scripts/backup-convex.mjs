@@ -11,6 +11,10 @@
  *   - Prunes oldest matching ZIPs beyond MAX_BACKUPS (default 30).
  *   - Does not VACUUM SQLite, delete Docker volumes, or touch production mounts.
  *   - Copy successful ZIPs off the Dokploy host; same-disk copies are not DR.
+ *   - Do not restart the Convex backend mid-export; on failure wait for healthy
+ *     GET /version then re-run this script.
+ *   - Prefer off-peak; avoid overlapping heavy retention / rollup backfills.
+ *   - Default documents-only; use BACKUP_INCLUDE_STORAGE=1 only off-peak.
  *
  * --env-file is supported via shared deployment selection options but is not listed
  * in `convex export --help`. If a future CLI removes it, load .env.production into
@@ -65,11 +69,50 @@ async function assertEnoughDiskSpace(targetDir) {
       process.exit(1);
     }
     console.log(`Free disk for backups: ${free} bytes (min ${MIN_FREE_BYTES}).`);
+
+    // Non-destructive heuristic: warn (do not abort) if free < 2× newest prior ZIP.
+    const prior = await findNewestPriorBackupSize(targetDir);
+    if (prior !== null) {
+      const needed = prior * 2;
+      if (free < needed) {
+        console.warn(
+          `WARN: free disk (${free} bytes) is less than 2× newest prior backup (${prior} bytes → need ~${needed}). Export may fail mid-write; free space or set BACKUP_DIR on a larger volume. Continuing.`,
+        );
+      } else {
+        console.log(
+          `Prior backup size check OK: newest ZIP ${prior} bytes; free ${free} ≥ 2× (${needed}).`,
+        );
+      }
+    }
   } catch (error) {
     console.warn(
       "Could not check free disk space (statfs failed); continuing.",
       error instanceof Error ? error.message : String(error),
     );
+  }
+}
+
+/** Newest matching ZIP size in bytes, or null if none. Read-only. */
+async function findNewestPriorBackupSize(targetDir) {
+  try {
+    const entries = await readdir(targetDir);
+    let newest = null;
+    for (const entry of entries) {
+      if (!BACKUP_PATTERN.test(entry)) {
+        continue;
+      }
+      const filePath = path.join(targetDir, entry);
+      const fileStat = await stat(filePath);
+      if (!fileStat.isFile() || fileStat.size === 0) {
+        continue;
+      }
+      if (newest === null || fileStat.mtimeMs > newest.mtimeMs) {
+        newest = { mtimeMs: fileStat.mtimeMs, size: fileStat.size };
+      }
+    }
+    return newest?.size ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -255,6 +298,12 @@ async function main() {
 
   console.log(`Backup complete: ${absoluteBackupPath}`);
   console.log(`Backup size: ${zipStat.size} bytes`);
+  console.log(
+    "DR reminder: copy this ZIP off the Dokploy/EC2 host (object storage or offline media).",
+  );
+  console.log(
+    "Same-disk copies are not disaster recovery. Do not restart Convex mid-export next time.",
+  );
   printZipVerificationHint(absoluteBackupPath);
 }
 

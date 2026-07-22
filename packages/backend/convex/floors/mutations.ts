@@ -6,6 +6,7 @@ import {
   usageTypeToOccupied,
   validateFloorRow,
 } from "../lib/masters/areaMasters";
+import { refreshSurveyCompletionPct } from "../lib/surveyProgress";
 import { assertCanAccessSurvey } from "../shared/fieldAccess";
 import { clientError, requireUser, writeAudit } from "../shared/helpers";
 import { assertSurveyWritable } from "../surveys/helpers";
@@ -88,6 +89,7 @@ export const upsert = mutation({
       plinthSqft: plinthSqftFromFloors(floorRows),
       serverVersion: survey.serverVersion + 1,
     });
+    await refreshSurveyCompletionPct(ctx, survey);
 
     return floorId!;
   },
@@ -114,6 +116,15 @@ export const removeOrphans = mutation({
       if (!keep.has(row.clientFloorId)) deleteOps.push(ctx.db.delete(row._id));
     }
     await Promise.all(deleteOps);
+    const floorRows = await ctx.db
+      .query("floors")
+      .withIndex("by_survey", (q) => q.eq("surveyId", args.surveyId))
+      .collect();
+    await ctx.db.patch(args.surveyId, {
+      plinthSqft: plinthSqftFromFloors(floorRows),
+      serverVersion: survey.serverVersion + 1,
+    });
+    await refreshSurveyCompletionPct(ctx, survey);
   },
 });
 
@@ -135,6 +146,7 @@ export const remove = mutation({
       plinthSqft: plinthSqftFromFloors(floorRows),
       serverVersion: survey.serverVersion + 1,
     });
+    await refreshSurveyCompletionPct(ctx, survey);
   },
 });
 

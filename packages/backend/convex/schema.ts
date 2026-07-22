@@ -482,6 +482,7 @@ export default defineSchema({
     rejected: v.optional(v.number()),
   })
     .index("by_municipality_date", ["municipalityId", "dateKey"])
+    .index("by_date", ["dateKey"])
     .index("by_generation_and_municipalityId_and_dateKey", ["generation", "municipalityId", "dateKey"]),
 
   /** Per-ward survey counters for command-center ward tables. */

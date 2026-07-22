@@ -1,9 +1,15 @@
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "../_generated/server"
 import { dayEndMs, formatDateKey, startOfDayMs, startOfDayMsFromKey } from "../shared/calendar"
-import { fieldSurveyAccess } from "../shared/fieldAccess"
+import { fieldSurveyAccess, type PrecomputedFieldContext } from "../shared/fieldAccess"
 import { canReadWard } from "../shared/helpers"
 import { resolveDashboardTenantScope, resolveTenantScope, tenantMunicipalityIds } from "../shared/tenancy"
+import {
+  getLegacyDailyStatsRow,
+  getLegacyMunicipalityStatsRow,
+  loadLegacyDailyStatsForDate,
+  loadLegacyMunicipalityStatsForMunicipalities,
+} from "./surveyAnalyticsLookups"
 import {
   recordSurveyAnalyticsInsert,
   recordSurveyAnalyticsRemove,
@@ -28,6 +34,23 @@ export const DASHBOARD_BOUNDED_ROW_CAP = 2500
  * After: O(1) indexed rollup reads; live only for ≤ this many ULBs (or ward-scoped users).
  */
 export const DASHBOARD_LIVE_FALLBACK_ULB_CAP = 3
+
+/**
+ * Prefer one batched read over N point lookups when scoped ULB count exceeds this.
+ */
+export const STATS_BATCH_SCOPE_THRESHOLD = 10
+
+/**
+ * Max ULBs for live survey / QC-decision fan-out on dashboard paths.
+ * Aligns with analyticsBundle QC budget — prevents admin scopes from saturating SQLite.
+ */
+export const DASHBOARD_FANOUT_ULB_CAP = 12
+
+/**
+ * Max QC decisions loaded per municipality for dashboard daily trend.
+ * Before: 800 × every ULB → SystemTimeout / 32k doc scan.
+ */
+const DASHBOARD_QC_TREND_DECISIONS_CAP = 200
 
 const MS_PER_DAY = 86_400_000
 
@@ -103,11 +126,15 @@ function toStatsSlice(row: Doc<"surveys">): SurveyStatsSlice {
 }
 
 /** Municipality ids for accurate dashboard reads (includes ward-narrowed roles). */
-async function resolveDashboardMunicipalityIds(ctx: QueryCtx, me: Doc<"users">): Promise<Id<"municipalities">[]> {
-  const access = await fieldSurveyAccess(ctx, me)
+async function resolveDashboardMunicipalityIds(
+  ctx: QueryCtx,
+  me: Doc<"users">,
+  precomputed?: PrecomputedFieldContext
+): Promise<Id<"municipalities">[]> {
+  const access = precomputed?.access ?? (await fieldSurveyAccess(ctx, me))
   if (access === "none") return []
 
-  const scope = await resolveDashboardTenantScope(ctx, me)
+  const scope = precomputed?.scope ?? (await resolveDashboardTenantScope(ctx, me))
   const muniIds = [...tenantMunicipalityIds(scope)]
 
   if (access === "admin") {
@@ -139,11 +166,14 @@ export async function loadBoundedScopedSurveyRows(
   const scopedMunis = await resolveDashboardMunicipalityIds(ctx, me)
   if (scopedMunis.length === 0) return []
 
+  // Cap ULB fan-out — prefer rollup paths; this is fallback for filtered charts only.
+  const targetMunis = scopedMunis.slice(0, DASHBOARD_FANOUT_ULB_CAP)
+
   // Before: sequential await per municipality (O(M) wall time).
   // After: parallel indexed takes; merge until maxRows.
-  const perMuniTake = Math.min(maxRows, Math.ceil(maxRows / Math.max(scopedMunis.length, 1)) + 20)
+  const perMuniTake = Math.min(maxRows, Math.ceil(maxRows / Math.max(targetMunis.length, 1)) + 20)
   const batches = await Promise.all(
-    scopedMunis.map((municipalityId) =>
+    targetMunis.map((municipalityId) =>
       ctx.db
         .query("surveys")
         .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId))
@@ -247,10 +277,7 @@ async function loadMunicipalityDashboardCounts(
     return liveSnapshotToDashboardPart(live)
   }
 
-  const statsRow = await ctx.db
-    .query("surveyMunicipalityStats")
-    .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
-    .unique()
+  const statsRow = await getLegacyMunicipalityStatsRow(ctx, municipalityId)
 
   if (statsRow) {
     const rollup: MunicipalityStatsRollup = {
@@ -280,10 +307,7 @@ async function loadMunicipalityDashboardCounts(
     }
 
     const dateKey = formatDateKey(todayMs)
-    const dailyRow = await ctx.db
-      .query("surveyDailyStats")
-      .withIndex("by_municipality_date", (q) => q.eq("municipalityId", municipalityId).eq("dateKey", dateKey))
-      .unique()
+    const dailyRow = await getLegacyDailyStatsRow(ctx, municipalityId, dateKey)
 
     if (dailyRow) {
       part.today = dailyRow.created
@@ -327,6 +351,30 @@ export async function loadDashboardCountsForHome(
 
   const wardScoped = userRequiresWardScopedSurveyCounts(me)
   const allowLiveFallback = mayUseLiveMunicipalityFallback(me, scopedMuniIds.length, wardScoped)
+
+  // Large scopes: batch municipality + today daily stats (avoid N×2 point lookups).
+  if (!wardScoped && scopedMuniIds.length > STATS_BATCH_SCOPE_THRESHOLD) {
+    const dateKey = formatDateKey(todayMs)
+    const [rollups, todayByMuni] = await Promise.all([
+      loadMunicipalityStatsRollupsResilient(ctx, me, scopedMuniIds, todayMs),
+      loadTodayCreatedByMunicipality(ctx, scopedMuniIds, dateKey),
+    ])
+    const parts = rollups.map((row) => {
+      const daily = todayByMuni.get(row.municipalityId)
+      return {
+        total: row.total,
+        today: daily?.created ?? 0,
+        drafts: row.drafts,
+        pending: row.qcPending,
+        submittedToday: daily?.submitted ?? 0,
+        approved: row.qcApproved,
+        submitted: row.submitted,
+        rejected: row.qcRejected,
+      } satisfies DashboardCountPart
+    })
+    return mergeDashboardCountParts(parts)
+  }
+
   const parts = await Promise.all(
     scopedMuniIds.map((municipalityId) =>
       loadMunicipalityDashboardCounts(ctx, me, municipalityId, todayMs, wardScoped, allowLiveFallback)
@@ -349,52 +397,58 @@ export function liveScopedStatsSlices(rows: Doc<"surveys">[]): SurveyStatsSlice[
   return rows.map(toStatsSlice)
 }
 
-/** Max QC decisions loaded per municipality for dashboard daily trend. */
-const DASHBOARD_QC_TREND_DECISIONS_CAP = 800
-
 /** QC approve/reject counts per day from decision records (no full survey scan). */
 async function loadDailyQcTrendFromDecisions(
   ctx: QueryCtx,
   me: Doc<"users">,
   days: number,
-  nowMs: number
+  nowMs: number,
+  precomputed?: PrecomputedFieldContext,
+  municipalityIds?: Id<"municipalities">[]
 ): Promise<Map<string, { approved: number; rejected: number }>> {
   const safeDays = Math.min(Math.max(days, 1), 180)
-  const scopedMunis = await resolveDashboardMunicipalityIds(ctx, me)
+  const scopedMunis = municipalityIds ?? (await resolveDashboardMunicipalityIds(ctx, me, precomputed))
   const { startMs, buckets } = istTrendBuckets(safeDays, nowMs, () => ({ approved: 0, rejected: 0 }))
 
   if (scopedMunis.length === 0) return buckets
 
-  await Promise.all(
-    scopedMunis.map(async (municipalityId) => {
-      const decisions = await ctx.db
-        .query("qcDecisions")
-        .withIndex("by_municipality_decided", (q) => q.eq("municipalityId", municipalityId).gte("decidedAt", startMs))
-        .take(DASHBOARD_QC_TREND_DECISIONS_CAP)
+  // Cap ULB fan-out so admin home cannot exceed syscall / document-scan budgets.
+  // Remaining ULBs omit QC series points (created/submitted still accurate from daily stats).
+  const targetMunis = scopedMunis.slice(0, DASHBOARD_FANOUT_ULB_CAP)
 
-      for (const decision of decisions) {
-        const bucket = buckets.get(formatDateKey(decision.decidedAt))
-        if (!bucket) continue
-        if (decision.decision === "approve") bucket.approved += 1
-        else if (decision.decision === "reject") bucket.rejected += 1
-      }
-    })
-  )
+  // Sequential per-ULB reads — parallel fan-out contended with daily-stats streams on SQLite.
+  for (const municipalityId of targetMunis) {
+    const decisions = await ctx.db
+      .query("qcDecisions")
+      .withIndex("by_municipality_decided", (q) => q.eq("municipalityId", municipalityId).gte("decidedAt", startMs))
+      .take(DASHBOARD_QC_TREND_DECISIONS_CAP)
+
+    for (const decision of decisions) {
+      const bucket = buckets.get(formatDateKey(decision.decidedAt))
+      if (!bucket) continue
+      if (decision.decision === "approve") bucket.approved += 1
+      else if (decision.decision === "reject") bucket.rejected += 1
+    }
+  }
 
   return buckets
 }
 
-/** Full daily trend: created/submitted from stats tables, QC from decision records. */
+/**
+ * Full daily trend: created/submitted from stats tables, QC from decision records.
+ *
+ * Runs base trend then QC sequentially (not Promise.all) to avoid SQLite stream contention.
+ */
 export async function loadDashboardDailyTrend(
   ctx: QueryCtx,
   me: Doc<"users">,
   days: number,
-  nowMs: number
+  nowMs: number,
+  precomputed?: PrecomputedFieldContext
 ): Promise<Array<{ date: string; created: number; submitted: number; approved: number; rejected: number }>> {
-  const [baseTrend, qcBuckets] = await Promise.all([
-    loadDailyTrendFromDailyStats(ctx, me, days, nowMs),
-    loadDailyQcTrendFromDecisions(ctx, me, days, nowMs),
-  ])
+  const municipalityIds = await resolveDashboardMunicipalityIds(ctx, me, precomputed)
+  const baseTrend = await loadDailyTrendFromDailyStats(ctx, me, days, nowMs, undefined, precomputed, municipalityIds)
+  const qcBuckets = await loadDailyQcTrendFromDecisions(ctx, me, days, nowMs, precomputed, municipalityIds)
 
   return baseTrend.map((point) => {
     const qc = qcBuckets.get(point.date)
@@ -406,15 +460,23 @@ export async function loadDashboardDailyTrend(
   })
 }
 
-/** Daily created/submitted trend from denormalized daily stats (full history, no row cap). */
+/**
+ * Daily created/submitted trend from denormalized daily stats.
+ *
+ * Before: large scopes ran Promise.all(days × take(2000) by_date) — concurrent queryStreamNext
+ * saturation and SystemTimeout. Small scopes paginated mixed-generation ranges in parallel.
+ * After: exact (municipalityId, dateKey) indexed point lookups, one day at a time.
+ */
 export async function loadDailyTrendFromDailyStats(
   ctx: QueryCtx,
   me: Doc<"users">,
   days: number,
   nowMs: number,
-  qcRows?: SurveyStatsSlice[]
+  qcRows?: SurveyStatsSlice[],
+  precomputed?: PrecomputedFieldContext,
+  municipalityIds?: Id<"municipalities">[]
 ): Promise<Array<{ date: string; created: number; submitted: number; approved: number; rejected: number }>> {
-  const scopedMunis = await resolveDashboardMunicipalityIds(ctx, me)
+  const scopedMunis = municipalityIds ?? (await resolveDashboardMunicipalityIds(ctx, me, precomputed))
   const safeDays = Math.min(Math.max(days, 1), 180)
   const { buckets } = istTrendBuckets(safeDays, nowMs, () => ({
     created: 0,
@@ -428,26 +490,26 @@ export async function loadDailyTrendFromDailyStats(
   }
 
   const dateKeys = [...buckets.keys()].sort()
-  const startKey = dateKeys[0]!
-  const endKey = dateKeys[dateKeys.length - 1]!
 
-  await Promise.all(
-    scopedMunis.map(async (municipalityId) => {
-      const rows = await ctx.db
-        .query("surveyDailyStats")
-        .withIndex("by_municipality_date", (q) =>
-          q.eq("municipalityId", municipalityId).gte("dateKey", startKey).lte("dateKey", endKey)
-        )
-        .take(safeDays + 5)
-
-      for (const row of rows) {
-        const bucket = buckets.get(row.dateKey)
-        if (!bucket) continue
+  // One day at a time: chunked parallel point lookups across ULBs (take(16) each).
+  // Eliminates 30× concurrent by_date take(2000) streams that caused queryStreamNext > 15s.
+  // Chunking controls SQLite concurrency — every scoped ULB is still read.
+  const POINT_LOOKUP_CHUNK = 20
+  for (const dateKey of dateKeys) {
+    const bucket = buckets.get(dateKey)
+    if (!bucket) continue
+    for (let i = 0; i < scopedMunis.length; i += POINT_LOOKUP_CHUNK) {
+      const chunk = scopedMunis.slice(i, i + POINT_LOOKUP_CHUNK)
+      const dailyRows = await Promise.all(
+        chunk.map((municipalityId) => getLegacyDailyStatsRow(ctx, municipalityId, dateKey))
+      )
+      for (const row of dailyRows) {
+        if (!row) continue
         bucket.created += row.created
         bucket.submitted += row.submitted
       }
-    })
-  )
+    }
+  }
 
   if (qcRows && qcRows.length > 0) {
     const qcTrend = computeDailyTrendFromSlice(qcRows, safeDays, nowMs)
@@ -615,7 +677,8 @@ async function computeTodayMetricsForMunicipality(
  * Load municipality stats rollups with optional live fallback.
  *
  * Before: sequential per-ULB; missing stats → live take(2500) each (timeout on admin).
- * After: parallel indexed `.unique()`; live only when scope ≤ DASHBOARD_LIVE_FALLBACK_ULB_CAP.
+ * After: parallel indexed `.unique()` for small scopes; one table scan for large scopes;
+ * live only when scope ≤ DASHBOARD_LIVE_FALLBACK_ULB_CAP.
  */
 async function loadMunicipalityStatsRollupsResilient(
   ctx: QueryCtx,
@@ -626,14 +689,36 @@ async function loadMunicipalityStatsRollupsResilient(
   const wardScoped = userRequiresWardScopedSurveyCounts(me)
   const allowLiveFallback = mayUseLiveMunicipalityFallback(me, scopedMuniIds.length, wardScoped)
   const todayStart = startOfDayMsFromKey(formatDateKey(todayMs))
+  const scopedSet = new Set(scopedMuniIds)
+
+  // Large scopes: indexed point lookups per scoped ULB (never full-table paginate).
+  // Before: loadAllLegacyMunicipalityStatsRows streamed every generation row → queryStreamNext timeouts.
+  if (!wardScoped && scopedMuniIds.length > STATS_BATCH_SCOPE_THRESHOLD) {
+    const allRows = await loadLegacyMunicipalityStatsForMunicipalities(ctx, scopedMuniIds)
+    const byMuni = new Map<Id<"municipalities">, MunicipalityStatsRollup>()
+    for (const row of allRows) {
+      if (!scopedSet.has(row.municipalityId)) continue
+      const rollup: MunicipalityStatsRollup = {
+        municipalityId: row.municipalityId,
+        total: row.total,
+        drafts: row.drafts,
+        submitted: row.submitted,
+        qcApproved: row.qcApproved,
+        qcRejected: row.qcRejected,
+        qcPending: row.qcPending,
+      }
+      if (municipalityStatsRowLooksConsistent(rollup)) {
+        byMuni.set(row.municipalityId, rollup)
+      }
+    }
+
+    return scopedMuniIds.map((municipalityId) => byMuni.get(municipalityId) ?? emptyMunicipalityRollup(municipalityId))
+  }
 
   const results = await Promise.all(
     scopedMuniIds.map(async (municipalityId) => {
       if (!wardScoped) {
-        const row = await ctx.db
-          .query("surveyMunicipalityStats")
-          .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
-          .unique()
+        const row = await getLegacyMunicipalityStatsRow(ctx, municipalityId)
         if (row) {
           const rollup: MunicipalityStatsRollup = {
             municipalityId: row.municipalityId,
@@ -674,13 +759,14 @@ async function loadMunicipalityStatsRollupsResilient(
 export async function resolveScopedMunicipalityIds(
   ctx: QueryCtx,
   me: Doc<"users">,
-  filters: Pick<ScopeStatsFilters, "districtId" | "municipalityId"> = {}
+  filters: Pick<ScopeStatsFilters, "districtId" | "municipalityId"> = {},
+  precomputed?: PrecomputedFieldContext
 ): Promise<Id<"municipalities">[] | null> {
-  const access = await fieldSurveyAccess(ctx, me)
+  const access = precomputed?.access ?? (await fieldSurveyAccess(ctx, me))
   if (access === "none" || access === "own") return null
 
-  const scope = await resolveTenantScope(ctx, me)
-  let scopedMuniIds = await resolveDashboardMunicipalityIds(ctx, me)
+  const scope = precomputed?.scope ?? (await resolveTenantScope(ctx, me))
+  let scopedMuniIds = await resolveDashboardMunicipalityIds(ctx, me, precomputed ?? { scope, access })
 
   if (filters.municipalityId) {
     if (!scopedMuniIds.includes(filters.municipalityId)) return null
@@ -697,20 +783,16 @@ export async function resolveScopedMunicipalityIds(
 export async function loadScopeCompletionPct(
   ctx: QueryCtx,
   me: Doc<"users">,
-  filters: ScopeStatsFilters = {}
+  filters: ScopeStatsFilters = {},
+  precomputed?: PrecomputedFieldContext
 ): Promise<number | null> {
-  const scopedMuniIds = await resolveScopedMunicipalityIds(ctx, me, filters)
+  const scopedMuniIds = await resolveScopedMunicipalityIds(ctx, me, filters, precomputed)
   if (!scopedMuniIds) return null
 
   let sum = 0
   let count = 0
   const rows = await Promise.all(
-    scopedMuniIds.map((municipalityId) =>
-      ctx.db
-        .query("surveyMunicipalityStats")
-        .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
-        .unique()
-    )
+    scopedMuniIds.map((municipalityId) => getLegacyMunicipalityStatsRow(ctx, municipalityId))
   )
 
   for (const row of rows) {
@@ -738,23 +820,17 @@ export async function loadScopeStatsSummary(
   ctx: QueryCtx,
   me: Doc<"users">,
   todayMs: number,
-  filters: ScopeStatsFilters = {}
+  filters: ScopeStatsFilters = {},
+  precomputed?: PrecomputedFieldContext
 ): Promise<ScopeStatsSummary | null> {
-  const scopedMuniIds = await resolveScopedMunicipalityIds(ctx, me, filters)
+  const scopedMuniIds = await resolveScopedMunicipalityIds(ctx, me, filters, precomputed)
   if (!scopedMuniIds) return null
 
   const rollups = await loadMunicipalityStatsRollups(ctx, me, scopedMuniIds, todayMs)
   if (!rollups) return null
 
   const dateKey = formatDateKey(todayMs)
-  const dailyStats = await Promise.all(
-    scopedMuniIds.map((municipalityId) =>
-      ctx.db
-        .query("surveyDailyStats")
-        .withIndex("by_municipality_date", (q) => q.eq("municipalityId", municipalityId).eq("dateKey", dateKey))
-        .unique()
-    )
-  )
+  const todayByMuni = await loadTodayCreatedByMunicipality(ctx, scopedMuniIds, dateKey)
 
   const totals: ScopeStatsSummary = {
     municipalityId: scopedMuniIds[0]!,
@@ -777,8 +853,7 @@ export async function loadScopeStatsSummary(
     totals.qcPending += row.qcPending
   }
 
-  for (let index = 0; index < scopedMuniIds.length; index++) {
-    const municipalityId = scopedMuniIds[index]!
+  for (const municipalityId of scopedMuniIds) {
     if (userRequiresWardScopedSurveyCounts(me)) {
       const today = await computeTodayMetricsForMunicipality(ctx, me, municipalityId, todayMs)
       totals.todayCreated += today.created
@@ -786,10 +861,10 @@ export async function loadScopeStatsSummary(
       continue
     }
 
-    const row = dailyStats[index]
-    if (row) {
-      totals.todayCreated += row.created
-      totals.submittedToday += row.submitted
+    const daily = todayByMuni.get(municipalityId)
+    if (daily) {
+      totals.todayCreated += daily.created
+      totals.submittedToday += daily.submitted
     } else {
       const today = await computeTodayMetricsForMunicipality(ctx, me, municipalityId, todayMs)
       totals.todayCreated += today.created
@@ -798,6 +873,40 @@ export async function loadScopeStatsSummary(
   }
 
   return totals
+}
+
+/**
+ * Load today's daily stats for a set of ULBs.
+ * Large scopes: one by_date index read; small scopes: parallel point reads.
+ */
+async function loadTodayCreatedByMunicipality(
+  ctx: QueryCtx,
+  scopedMuniIds: Id<"municipalities">[],
+  dateKey: string
+): Promise<Map<Id<"municipalities">, { created: number; submitted: number }>> {
+  const result = new Map<Id<"municipalities">, { created: number; submitted: number }>()
+  if (scopedMuniIds.length === 0) return result
+
+  if (scopedMuniIds.length > STATS_BATCH_SCOPE_THRESHOLD) {
+    const scopedSet = new Set(scopedMuniIds)
+    const rows = await loadLegacyDailyStatsForDate(ctx, dateKey)
+    for (const row of rows) {
+      if (!scopedSet.has(row.municipalityId)) continue
+      result.set(row.municipalityId, { created: row.created, submitted: row.submitted })
+    }
+    return result
+  }
+
+  const dailyStats = await Promise.all(
+    scopedMuniIds.map((municipalityId) => getLegacyDailyStatsRow(ctx, municipalityId, dateKey))
+  )
+  for (let index = 0; index < scopedMuniIds.length; index++) {
+    const row = dailyStats[index]
+    if (row) {
+      result.set(scopedMuniIds[index]!, { created: row.created, submitted: row.submitted })
+    }
+  }
+  return result
 }
 
 /** Total list rows matching filters without scanning surveys (when eligible). */
@@ -818,7 +927,8 @@ export async function loadAnalyticsBreakdownFromStats(
   me: Doc<"users">,
   todayMs: number,
   scope: { districts: Doc<"districts">[]; municipalities: Doc<"municipalities">[] },
-  filters: ScopeStatsFilters = {}
+  filters: ScopeStatsFilters = {},
+  precomputed?: PrecomputedFieldContext
 ): Promise<{
   summary: SurveyCounts
   byDistrict: Array<{
@@ -846,25 +956,18 @@ export async function loadAnalyticsBreakdownFromStats(
     rejected: number
   }>
 } | null> {
-  const scopedMuniIds = await resolveScopedMunicipalityIds(ctx, me, filters)
+  const scopedMuniIds = await resolveScopedMunicipalityIds(ctx, me, filters, precomputed)
   if (!scopedMuniIds) return null
 
   const rollups = await loadMunicipalityStatsRollups(ctx, me, scopedMuniIds, todayMs)
   if (!rollups) return null
 
   const dateKey = formatDateKey(todayMs)
-  const dailyStats = await Promise.all(
-    scopedMuniIds.map((municipalityId) =>
-      ctx.db
-        .query("surveyDailyStats")
-        .withIndex("by_municipality_date", (q) => q.eq("municipalityId", municipalityId).eq("dateKey", dateKey))
-        .unique()
-    )
-  )
+  const todayByMuniDaily = await loadTodayCreatedByMunicipality(ctx, scopedMuniIds, dateKey)
   const todayByMuni = new Map<Id<"municipalities">, number>()
-  scopedMuniIds.forEach((municipalityId, index) => {
-    todayByMuni.set(municipalityId, dailyStats[index]?.created ?? 0)
-  })
+  for (const municipalityId of scopedMuniIds) {
+    todayByMuni.set(municipalityId, todayByMuniDaily.get(municipalityId)?.created ?? 0)
+  }
 
   const districtMap = new Map(scope.districts.map((d) => [d._id, d]))
   const muniMap = new Map(scope.municipalities.map((m) => [m._id, m]))

@@ -20,6 +20,26 @@ import { FileSpreadsheet, Loader2 } from "lucide-react"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
 
+/** Pause between pages so exports do not starve live dashboard queries. */
+const EXPORT_PAGE_DELAY_MS = 200
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+async function fetchExportBundlesWithRetry(convex: ReturnType<typeof useConvex>, surveyIds: Id<"surveys">[]) {
+  try {
+    return await convex.query(api.export.queries.getExportBundlesByIds, { surveyIds })
+  } catch (firstError) {
+    await sleep(EXPORT_PAGE_DELAY_MS)
+    try {
+      return await convex.query(api.export.queries.getExportBundlesByIds, { surveyIds })
+    } catch {
+      throw firstError
+    }
+  }
+}
+
 type QcFinalReportExportButtonProps = {
   filters: FilterState
   disabled?: boolean
@@ -66,11 +86,14 @@ export function QcFinalReportExportButton({ filters, disabled }: QcFinalReportEx
       const pageSize = 40
       for (let i = 0; i < surveyIds.length; i += pageSize) {
         const chunk = surveyIds.slice(i, i + pageSize)
-        const page = await convex.query(api.export.queries.getExportBundlesByIds, { surveyIds: chunk })
+        const page = await fetchExportBundlesWithRetry(convex, chunk)
         allBundles.push(...(page.bundles as SurveyExportBundle[]))
         toast.loading(`Loading ${allBundles.length.toLocaleString()} / ${total.toLocaleString()}…`, {
           id: progress,
         })
+        if (i + pageSize < surveyIds.length) {
+          await sleep(EXPORT_PAGE_DELAY_MS)
+        }
       }
 
       if (total > QC_FINAL_EXPORT_SCOPE_LIMIT) {

@@ -210,10 +210,13 @@ export const unreadCount = query({
   args: {},
   handler: async (ctx) => {
     const me = await requireUser(ctx, { allowPending: true })
+    // Before: unbounded `.collect()` of unread → grows with notification history.
+    // After: capped take; badge semantics unchanged for practical counts.
+    const UNREAD_BADGE_CAP = 100
     const rows = await ctx.db
       .query("notifications")
       .withIndex("by_user_read", (q) => q.eq("userId", me._id).eq("readAt", undefined))
-      .collect()
+      .take(UNREAD_BADGE_CAP)
     return rows.length
   },
 })

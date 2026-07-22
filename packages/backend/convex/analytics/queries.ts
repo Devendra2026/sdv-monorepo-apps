@@ -9,6 +9,7 @@
 import { v } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import { query, type QueryCtx } from "../_generated/server"
+import { logPhaseTiming } from "../lib/observability"
 import {
   loadSurveyorStatsForScope,
   loadWardStatsForScope,
@@ -31,7 +32,7 @@ import {
 import { qcStatus, surveyStatus } from "../schema"
 import { startOfDayMs } from "../shared/calendar"
 import { hasCapability, requireCapability } from "../shared/capabilities"
-import { querySurveysInFieldScope } from "../shared/fieldAccess"
+import { fieldSurveyAccess, querySurveysInFieldScope, type PrecomputedFieldContext } from "../shared/fieldAccess"
 import { clientError, requireUser } from "../shared/helpers"
 import {
   assertMunicipalityInScope,
@@ -44,7 +45,7 @@ import {
 const ANALYTICS_SURVEYOR_SLICE_LIMIT = 2000
 const MS_PER_DAY = 86_400_000
 /** Per-ULB QC decisions loaded for dashboard / Reports (lowered to stay under syscall limits). */
-const DASHBOARD_QC_DECISIONS_PER_REVIEWER_CAP = 200
+const DASHBOARD_QC_DECISIONS_PER_REVIEWER_CAP = 150
 /**
  * Max municipalities processed in QC decision fan-out for large admin scopes.
  * Before: every ULB in scope × take(400) → SystemTimeout.
@@ -53,7 +54,7 @@ const DASHBOARD_QC_DECISIONS_PER_REVIEWER_CAP = 200
 const DASHBOARD_QC_ULB_CAP = 12
 const DASHBOARD_ANALYTICS_WINDOW_BUFFER_DAYS = 14
 /** Max active users loaded per municipality for role-scoped filter options. */
-const DASHBOARD_USERS_PER_MUNI_CAP = 200
+const DASHBOARD_USERS_PER_MUNI_CAP = 100
 
 export const surveyCountsShape = {
   total: v.number(),
@@ -230,14 +231,20 @@ async function loadBoundedSurveysForAnalytics(
     districtId?: Id<"districts">
     municipalityId?: Id<"municipalities">
     surveyorId?: Id<"users">
-  }
+  },
+  precomputed?: PrecomputedFieldContext
 ): Promise<Doc<"surveys">[]> {
-  return querySurveysInFieldScope(ctx, me, {
-    districtId: filters.districtId,
-    municipalityId: filters.municipalityId,
-    surveyorId: filters.surveyorId,
-    limit: ANALYTICS_SURVEYOR_SLICE_LIMIT,
-  })
+  return querySurveysInFieldScope(
+    ctx,
+    me,
+    {
+      districtId: filters.districtId,
+      municipalityId: filters.municipalityId,
+      surveyorId: filters.surveyorId,
+      limit: ANALYTICS_SURVEYOR_SLICE_LIMIT,
+    },
+    precomputed
+  )
 }
 
 async function assertDistrictInScope(
@@ -640,20 +647,47 @@ async function buildAnalyticsBundle(
   trendDays: number,
   nowMs: number
 ) {
+  const bundleStartedAt = Date.now()
+  let phaseAt = bundleStartedAt
+
   const canViewAnalytics = await hasCapability(ctx, me, "analytics.view")
   if (!canViewAnalytics) return null
+  phaseAt = logPhaseTiming("analyticsBundle.hasCapability", phaseAt)
 
   const days = Math.min(Math.max(trendDays, 1), 180)
   const analyticsFromMs = nowMs - (days + DASHBOARD_ANALYTICS_WINDOW_BUFFER_DAYS) * MS_PER_DAY
-  const scope = await resolveDashboardTenantScope(ctx, me)
+
+  // Scope once — downstream helpers must reuse precomputed (no catalog re-scan).
+  const [scope, access] = await Promise.all([resolveDashboardTenantScope(ctx, me), fieldSurveyAccess(ctx, me)])
+  phaseAt = logPhaseTiming("analyticsBundle.scope", phaseAt, {
+    municipalities: scope.municipalities.length,
+    districts: scope.districts.length,
+    access,
+  })
+
+  const precomputed: PrecomputedFieldContext = { scope, access }
   const muniMap = new Map(scope.municipalities.map((m) => [m._id, m]))
 
-  const [statsBreakdown, wardRows, surveyorRollups, dailyTrend] = await Promise.all([
-    loadAnalyticsBreakdownFromStats(ctx, me, todayMs, scope),
-    loadWardStatsForScope(ctx, me),
-    loadSurveyorStatsForScope(ctx, me),
-    loadDashboardDailyTrend(ctx, me, days, nowMs),
+  // Phase A — district/ULB breakdown from municipality stats (indexed, scoped).
+  // Must NOT run in parallel with daily-trend streams (SQLite queryStreamNext contention).
+  const statsBreakdown = await loadAnalyticsBreakdownFromStats(ctx, me, todayMs, scope, {}, precomputed)
+  phaseAt = logPhaseTiming("analyticsBundle.statsBreakdown", phaseAt, {
+    byUlb: statsBreakdown?.byUlb.length ?? 0,
+  })
+
+  // Phase B — ward + surveyor rollups (independent indexed reads).
+  const [wardRows, surveyorRollups] = await Promise.all([
+    loadWardStatsForScope(ctx, me, {}, precomputed),
+    loadSurveyorStatsForScope(ctx, me, {}, precomputed),
   ])
+  phaseAt = logPhaseTiming("analyticsBundle.wardSurveyorRollups", phaseAt, {
+    wardRows: wardRows.length,
+    surveyorRollups: surveyorRollups.length,
+  })
+
+  // Phase C — daily trend alone (point lookups + sequential QC), after rollups finish.
+  const dailyTrend = await loadDashboardDailyTrend(ctx, me, days, nowMs, precomputed)
+  phaseAt = logPhaseTiming("analyticsBundle.dailyTrend", phaseAt, { days: dailyTrend.length })
 
   const wardCoverage = wardCoverageFromRollups(wardRows, muniMap)
 
@@ -666,6 +700,12 @@ async function buildAnalyticsBundle(
     analyticsFromMs,
     scope
   )
+  logPhaseTiming("analyticsBundle.breakdownHydrate", phaseAt, {
+    surveyors: breakdown.bySurveyor.length,
+  })
+  logPhaseTiming("analyticsBundle.total", bundleStartedAt, {
+    municipalities: scope.municipalities.length,
+  })
 
   return { breakdown, dailyTrend, wardCoverage }
 }
@@ -737,7 +777,8 @@ export const surveyStatsBreakdown = query({
     const me = await requireUser(ctx)
     await requireCapability(ctx, me, "analytics.view")
 
-    const scope = await resolveTenantScope(ctx, me)
+    const [scope, access] = await Promise.all([resolveTenantScope(ctx, me), fieldSurveyAccess(ctx, me)])
+    const precomputed: PrecomputedFieldContext = { scope, access }
     const districtIds = tenantDistrictIds(scope)
     const muniIds = tenantMunicipalityIds(scope)
 
@@ -746,27 +787,12 @@ export const surveyStatsBreakdown = query({
     const districtMap = new Map(scope.districts.map((d) => [d._id, d]))
     const muniMap = new Map(scope.municipalities.map((m) => [m._id, m]))
 
-    const statsBreakdown =
-      !args.surveyorId && todayStartMs !== null
-        ? await loadAnalyticsBreakdownFromStats(ctx, me, todayStartMs, scope, {
-            districtId: args.districtId,
-            municipalityId: args.municipalityId,
-          })
-        : null
-
-    let rows = await loadBoundedSurveysForAnalytics(ctx, me, {
-      districtId: args.districtId,
-      municipalityId: args.municipalityId,
-      surveyorId: args.surveyorId,
-    })
-
+    // Validate filters before any heavy data loading.
     if (args.districtId) {
       await assertDistrictInScope(me, args.districtId, districtIds)
-      rows = rows.filter((r) => r.districtId === args.districtId)
     }
     if (args.municipalityId) {
       await assertMunicipalityInScope(ctx, me, args.municipalityId)
-      rows = rows.filter((r) => r.municipalityId === args.municipalityId)
     }
     if (args.surveyorId) {
       const surveyor = await ctx.db.get("users", args.surveyorId)
@@ -774,7 +800,51 @@ export const surveyStatsBreakdown = query({
         clientError("BAD_REQUEST", "Unknown surveyor")
       }
       await assertSurveyorInScope(ctx, me, surveyor, muniIds, districtIds)
-      rows = rows.filter((r) => r.surveyorId === args.surveyorId)
+    }
+
+    const geoFilters = {
+      districtId: args.districtId,
+      municipalityId: args.municipalityId,
+    }
+
+    const statsBreakdown =
+      !args.surveyorId && todayStartMs !== null
+        ? await loadAnalyticsBreakdownFromStats(ctx, me, todayStartMs, scope, geoFilters, precomputed)
+        : null
+
+    // Fast path: denormalized stats cover district/ULB/summary — skip the 2000-doc survey scan.
+    // bySurveyor comes from surveySurveyorStats rollups (same as home dashboard).
+    let rows: Doc<"surveys">[] = []
+    let bySurveyorGroups: Map<string, SurveyCounts>
+
+    if (statsBreakdown && !args.surveyorId) {
+      const surveyorRollups = await loadSurveyorStatsForScope(ctx, me, geoFilters, precomputed)
+      bySurveyorGroups = new Map(
+        [...aggregateSurveyorRollups(surveyorRollups).entries()].map(([id, counts]) => [id as string, counts])
+      )
+    } else {
+      rows = await loadBoundedSurveysForAnalytics(
+        ctx,
+        me,
+        {
+          districtId: args.districtId,
+          municipalityId: args.municipalityId,
+          surveyorId: args.surveyorId,
+        },
+        precomputed
+      )
+
+      if (args.districtId) {
+        rows = rows.filter((r) => r.districtId === args.districtId)
+      }
+      if (args.municipalityId) {
+        rows = rows.filter((r) => r.municipalityId === args.municipalityId)
+      }
+      if (args.surveyorId) {
+        rows = rows.filter((r) => r.surveyorId === args.surveyorId)
+      }
+
+      bySurveyorGroups = groupCounts(rows, (r) => r.surveyorId, todayStartMs)
     }
 
     const byDistrict =
@@ -815,8 +885,6 @@ export const surveyStatsBreakdown = query({
           .sort((a, b) => a.name.localeCompare(b.name))
       })()
 
-    const bySurveyorGroups = groupCounts(rows, (r) => r.surveyorId, todayStartMs)
-
     // Before: global by_role_status collects for surveyor + qc_supervisor.
     // After: municipality-scoped indexed loads (O(scoped ULBs)).
     let scopedMuniList = [...muniIds]
@@ -831,7 +899,8 @@ export const surveyStatsBreakdown = query({
       loadActiveUsersInScopeByRole(ctx, "qc_supervisor", scopedMuniList, muniIds, districtIds),
     ])
 
-    const activeSurveyors = filterActiveUsersInScope(
+    // When using rollups, also hydrate surveyors present in rollup IDs (may exceed ULB user-load cap).
+    let activeSurveyors = filterActiveUsersInScope(
       scopedSurveyors,
       muniIds,
       districtIds,
@@ -839,6 +908,23 @@ export const surveyStatsBreakdown = query({
       args.municipalityId,
       muniMap
     )
+
+    if (statsBreakdown && !args.surveyorId) {
+      const rollupSurveyorIds = [...bySurveyorGroups.keys()] as Id<"users">[]
+      const rollupSurveyors = await loadActiveSurveyorsByIds(ctx, rollupSurveyorIds)
+      const surveyorById = new Map<Id<"users">, Doc<"users">>()
+      for (const u of [...rollupSurveyors, ...activeSurveyors]) {
+        surveyorById.set(u._id, u)
+      }
+      activeSurveyors = filterActiveUsersInScope(
+        [...surveyorById.values()],
+        muniIds,
+        districtIds,
+        args.districtId,
+        args.municipalityId,
+        muniMap
+      )
+    }
 
     const bySurveyor = activeSurveyors
       .map((u) => {

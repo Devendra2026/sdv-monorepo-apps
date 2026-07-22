@@ -15,18 +15,20 @@ import {
   type SurveyAnalyticsSnapshot,
   type SurveyStateCounters,
 } from "./surveyAnalyticsModel"
+import {
+  getDailyStatsRowForGeneration,
+  getMunicipalityStatsRowForGeneration,
+  getSurveyorStatsRowForGeneration,
+  getWardStatsRowForGeneration,
+  isLegacyGeneration,
+  LEGACY_GENERATION,
+  type AnalyticsGeneration,
+} from "./surveyAnalyticsLookups"
 
+export { LEGACY_GENERATION, type AnalyticsGeneration }
 export const ANALYTICS_META_KEY = "survey-analytics" as const
-/** Sentinel: legacy rows omit the generation field and use pre-migration indexes. */
-export const LEGACY_GENERATION = "legacy"
-
-export type AnalyticsGeneration = string
 
 type WritableGenerations = AnalyticsGeneration[]
-
-function isLegacyGeneration(generation: AnalyticsGeneration): boolean {
-  return generation === LEGACY_GENERATION
-}
 
 function generationIndexValue(generation: AnalyticsGeneration): string | undefined {
   return isLegacyGeneration(generation) ? undefined : generation
@@ -74,18 +76,7 @@ async function getMunicipalityStatsRow(
   generation: AnalyticsGeneration,
   municipalityId: Id<"municipalities">
 ) {
-  if (isLegacyGeneration(generation)) {
-    return await ctx.db
-      .query("surveyMunicipalityStats")
-      .withIndex("by_municipality", (q) => q.eq("municipalityId", municipalityId))
-      .unique()
-  }
-  return await ctx.db
-    .query("surveyMunicipalityStats")
-    .withIndex("by_generation_and_municipalityId", (q) =>
-      q.eq("generation", generation).eq("municipalityId", municipalityId)
-    )
-    .unique()
+  return getMunicipalityStatsRowForGeneration(ctx, generation, municipalityId)
 }
 
 async function ensureMunicipalityStatsRow(
@@ -145,18 +136,7 @@ async function getDailyStatsRow(
   municipalityId: Id<"municipalities">,
   dateKey: string
 ) {
-  if (isLegacyGeneration(generation)) {
-    return await ctx.db
-      .query("surveyDailyStats")
-      .withIndex("by_municipality_date", (q) => q.eq("municipalityId", municipalityId).eq("dateKey", dateKey))
-      .unique()
-  }
-  return await ctx.db
-    .query("surveyDailyStats")
-    .withIndex("by_generation_and_municipalityId_and_dateKey", (q) =>
-      q.eq("generation", generation).eq("municipalityId", municipalityId).eq("dateKey", dateKey)
-    )
-    .unique()
+  return getDailyStatsRowForGeneration(ctx, generation, municipalityId, dateKey)
 }
 
 async function ensureDailyStatsRow(
@@ -186,19 +166,7 @@ async function getWardStatsRow(
   municipalityId: Id<"municipalities">,
   wardNo: string
 ) {
-  const normalized = normalizeWardNo(wardNo)
-  if (isLegacyGeneration(generation)) {
-    return await ctx.db
-      .query("surveyWardStats")
-      .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", municipalityId).eq("wardNo", normalized))
-      .unique()
-  }
-  return await ctx.db
-    .query("surveyWardStats")
-    .withIndex("by_generation_and_municipalityId_and_wardNo", (q) =>
-      q.eq("generation", generation).eq("municipalityId", municipalityId).eq("wardNo", normalized)
-    )
-    .unique()
+  return getWardStatsRowForGeneration(ctx, generation, municipalityId, wardNo)
 }
 
 async function ensureWardStatsRow(
@@ -233,18 +201,7 @@ async function getSurveyorStatsRow(
   surveyorId: Id<"users">,
   municipalityId: Id<"municipalities">
 ) {
-  if (isLegacyGeneration(generation)) {
-    return await ctx.db
-      .query("surveySurveyorStats")
-      .withIndex("by_surveyor_municipality", (q) => q.eq("surveyorId", surveyorId).eq("municipalityId", municipalityId))
-      .unique()
-  }
-  return await ctx.db
-    .query("surveySurveyorStats")
-    .withIndex("by_generation_and_surveyorId_and_municipalityId", (q) =>
-      q.eq("generation", generation).eq("surveyorId", surveyorId).eq("municipalityId", municipalityId)
-    )
-    .unique()
+  return getSurveyorStatsRowForGeneration(ctx, generation, surveyorId, municipalityId)
 }
 
 async function ensureSurveyorStatsRow(

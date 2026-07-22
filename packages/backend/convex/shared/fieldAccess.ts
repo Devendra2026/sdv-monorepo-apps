@@ -93,6 +93,17 @@ type SurveyListQueryArgs = {
   limit: number
 }
 
+export type TenantScopeDocs = {
+  districts: Doc<"districts">[]
+  municipalities: Doc<"municipalities">[]
+}
+
+/** Optional pre-resolved scope/access to avoid repeated tenancy + capability reads. */
+export type PrecomputedFieldContext = {
+  scope: TenantScopeDocs
+  access: FieldSurveyAccess
+}
+
 async function queryByMunicipality(
   ctx: QueryCtx,
   municipalityId: Id<"municipalities">,
@@ -198,9 +209,11 @@ async function filterSurveysInScope(
 export async function querySurveysInFieldScope(
   ctx: QueryCtx,
   me: Doc<"users">,
-  args: SurveyListQueryArgs
+  args: SurveyListQueryArgs,
+  precomputed?: PrecomputedFieldContext
 ): Promise<Doc<"surveys">[]> {
-  const [access, scope] = await Promise.all([fieldSurveyAccess(ctx, me), resolveTenantScope(ctx, me)])
+  const access = precomputed?.access ?? (await fieldSurveyAccess(ctx, me))
+  const scope = precomputed?.scope ?? (await resolveTenantScope(ctx, me))
   const muniIds = tenantMunicipalityIds(scope)
   const districtIds = tenantDistrictIds(scope)
   const take = args.limit * 2
@@ -283,105 +296,4 @@ export async function querySurveysInFieldScope(
   }
 
   return (await filterSurveysInScope(ctx, rows, me, muniIds)).slice(0, args.limit)
-}
-
-/** Collect all surveys in assigned/admin scope (analytics dashboards). */
-export async function collectSurveysInFieldScope(ctx: QueryCtx, me: Doc<"users">): Promise<Doc<"surveys">[]> {
-  const [access, scope] = await Promise.all([fieldSurveyAccess(ctx, me), resolveTenantScope(ctx, me)])
-  const muniIds = tenantMunicipalityIds(scope)
-
-  if (access === "none") return []
-
-  if (access === "own") {
-    const rows = await ctx.db
-      .query("surveys")
-      .withIndex("by_surveyor", (q) => q.eq("surveyorId", me._id))
-      .collect()
-    return await filterSurveysInScope(ctx, rows, me, muniIds)
-  }
-
-  if (access === "admin") {
-    const scopedMunis = scope.municipalities.length > 0 ? scope.municipalities.map((m) => m._id) : [...muniIds]
-    if (scopedMunis.length > 0) {
-      const batches = await Promise.all(
-        scopedMunis.map((municipalityId) =>
-          ctx.db
-            .query("surveys")
-            .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId))
-            .collect()
-        )
-      )
-      const seen = new Set<string>()
-      const rows: Doc<"surveys">[] = []
-      for (const batch of batches) {
-        for (const row of batch) {
-          if (seen.has(row._id)) continue
-          seen.add(row._id)
-          rows.push(row)
-        }
-      }
-      return await filterSurveysInScope(ctx, rows, me, muniIds)
-    }
-    // Fallback: batch by every municipality in tenant scope (never full-table scan).
-    const allMunis = [...muniIds]
-    if (allMunis.length === 0) return []
-    const batches = await Promise.all(
-      allMunis.map((municipalityId) =>
-        ctx.db
-          .query("surveys")
-          .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId))
-          .collect()
-      )
-    )
-    const seen = new Set<string>()
-    const rows: Doc<"surveys">[] = []
-    for (const batch of batches) {
-      for (const row of batch) {
-        if (seen.has(row._id)) continue
-        seen.add(row._id)
-        rows.push(row)
-      }
-    }
-    return await filterSurveysInScope(ctx, rows, me, muniIds)
-  }
-
-  const scopedMunis =
-    scope.municipalities.length > 0
-      ? scope.municipalities.map((m) => m._id)
-      : me.municipalityId
-        ? [me.municipalityId]
-        : []
-
-  let rows: Doc<"surveys">[] = []
-
-  if (scopedMunis.length > 1) {
-    const batches = await Promise.all(
-      scopedMunis.map((id) =>
-        ctx.db
-          .query("surveys")
-          .withIndex("by_municipality_status", (q) => q.eq("municipalityId", id))
-          .collect()
-      )
-    )
-    const seen = new Set<string>()
-    for (const batch of batches) {
-      for (const row of batch) {
-        if (seen.has(row._id)) continue
-        seen.add(row._id)
-        rows.push(row)
-      }
-    }
-  } else if (scopedMunis.length === 1) {
-    rows = await ctx.db
-      .query("surveys")
-      .withIndex("by_municipality_status", (q) => q.eq("municipalityId", scopedMunis[0]!))
-      .collect()
-  } else if (scope.districts.length === 1) {
-    rows = await ctx.db
-      .query("surveys")
-      .withIndex("by_district", (q) => q.eq("districtId", scope.districts[0]!._id))
-      .collect()
-  }
-
-  return await filterSurveysInScope(ctx, rows, me, muniIds)
 }

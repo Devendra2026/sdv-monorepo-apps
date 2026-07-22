@@ -1,5 +1,6 @@
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { recordSurveyStatsUpdate } from "./surveyScopeStats";
 
 /** Rough completion % for list rows (mirrors client `lib/survey/progress.ts`). */
 export function computeSurveyCompletionPercent(input: {
@@ -53,9 +54,17 @@ export async function completionPctForSurvey(ctx: MutationCtx, survey: Doc<"surv
   });
 }
 
-export async function refreshSurveyCompletionPct(ctx: MutationCtx, surveyId: Id<"surveys">): Promise<void> {
-  const survey = await ctx.db.get("surveys", surveyId);
-  if (!survey) return;
-  const pct = await completionPctForSurvey(ctx, survey);
-  await ctx.db.patch(surveyId, { completionPct: pct });
+/**
+ * Recompute completionPct from related rows, patch the survey, and maintain
+ * analytics rollups with the mutation's before snapshot.
+ */
+export async function refreshSurveyCompletionPct(ctx: MutationCtx, before: Doc<"surveys">): Promise<void> {
+  const current = await ctx.db.get("surveys", before._id);
+  if (!current) return;
+  const pct = await completionPctForSurvey(ctx, current);
+  if (pct !== current.completionPct) {
+    await ctx.db.patch(before._id, { completionPct: pct });
+  }
+  const after: Doc<"surveys"> = pct !== current.completionPct ? { ...current, completionPct: pct } : current;
+  await recordSurveyStatsUpdate(ctx, before, after);
 }

@@ -12,6 +12,36 @@ import { toast } from "sonner"
 
 /** Must stay ≤ backend MAX_EXPORT_PAGE_SIZE (40). */
 const EXPORT_BUNDLE_PAGE_SIZE = 40
+/** Pause between pages so exports do not starve live dashboard queries. */
+const EXPORT_PAGE_DELAY_MS = 200
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+async function fetchExportBundlesWithRetry(
+  convex: ReturnType<typeof useConvex>,
+  surveyIds: Id<"surveys">[],
+  includePhotoUrls: boolean
+) {
+  try {
+    return await convex.query(api.export.queries.getExportBundlesByIds, {
+      surveyIds,
+      includePhotoUrls,
+    })
+  } catch (firstError) {
+    // One retry on transient isolate / timeout failures.
+    await sleep(EXPORT_PAGE_DELAY_MS)
+    try {
+      return await convex.query(api.export.queries.getExportBundlesByIds, {
+        surveyIds,
+        includePhotoUrls,
+      })
+    } catch {
+      throw firstError
+    }
+  }
+}
 
 export type SurveyExportFilters = {
   status?: SurveyStatus
@@ -59,11 +89,14 @@ export function SurveyExcelActions({
       const allBundles = []
       for (let i = 0; i < surveyIds.length; i += EXPORT_BUNDLE_PAGE_SIZE) {
         const chunk = surveyIds.slice(i, i + EXPORT_BUNDLE_PAGE_SIZE)
-        const page = await convex.query(api.export.queries.getExportBundlesByIds, { surveyIds: chunk })
+        const page = await fetchExportBundlesWithRetry(convex, chunk, true)
         allBundles.push(...page.bundles)
         toast.loading(`Loading ${allBundles.length.toLocaleString()} / ${total.toLocaleString()}…`, {
           id: progress,
         })
+        if (i + EXPORT_BUNDLE_PAGE_SIZE < surveyIds.length) {
+          await sleep(EXPORT_PAGE_DELAY_MS)
+        }
       }
 
       const { exportSurveysFullExcel } = await import("@/lib/survey/survey-excel")

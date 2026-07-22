@@ -1,5 +1,7 @@
 import { v } from "convex/values"
+import type { Doc } from "../_generated/dataModel"
 import { mutation } from "../_generated/server"
+import { refreshSurveyCompletionPct } from "../lib/surveyProgress"
 import { hasCapability } from "../shared/capabilities"
 import { assertCanAccessSurvey } from "../shared/fieldAccess"
 import { clientError, requireUser, writeAudit } from "../shared/helpers"
@@ -92,6 +94,7 @@ export const linkPhoto = mutation({
       entityId: args.surveyId,
       metadata: { slot: args.slot, sizeKb: args.sizeKb },
     })
+    await refreshSurveyCompletionPct(ctx, survey)
     return id
   },
 })
@@ -113,6 +116,7 @@ export const releaseStorage = mutation({
 
     if (rows.length === 0) return
 
+    const surveysBefore = new Map<string, Doc<"surveys">>()
     await Promise.all(
       rows.map(async (row) => {
         const survey = await ctx.db.get(row.surveyId)
@@ -124,6 +128,7 @@ export const releaseStorage = mutation({
         if (survey.qcStatus === "approved" && me.role === "surveyor") {
           clientError("LOCKED", "Survey is locked")
         }
+        surveysBefore.set(row.surveyId, survey)
         await ctx.db.delete(row._id)
       })
     )
@@ -136,6 +141,10 @@ export const releaseStorage = mutation({
       entity: "storage",
       entityId: args.storageId,
     })
+
+    await Promise.all(
+      [...surveysBefore.values()].map((survey) => refreshSurveyCompletionPct(ctx, survey))
+    )
   },
 })
 
@@ -169,6 +178,7 @@ export const removeBySurveySlot = mutation({
         metadata: { slot: args.slot },
       }),
     ])
+    await refreshSurveyCompletionPct(ctx, survey)
   },
 })
 
@@ -185,5 +195,6 @@ export const remove = mutation({
     }
     await deleteStorageIfPresent(ctx, photo.storageId)
     await ctx.db.delete(args.id)
+    await refreshSurveyCompletionPct(ctx, survey)
   },
 })

@@ -1,25 +1,16 @@
 import { v } from "convex/values"
-import type { Doc, Id } from "../_generated/dataModel"
+import type { Id } from "../_generated/dataModel"
 import { mutation } from "../_generated/server"
 import { MAX_IMPORT_FLOORS, MAX_IMPORT_SURVEYS } from "../lib/budgetLimits"
-import { normalizeFloorFields, usageTypeToOccupied, validateFloorRow } from "../lib/masters/areaMasters"
 import { logSlowPath } from "../lib/observability"
-import { lookupSurveyByPropertyId } from "../lib/propertyIdLookup"
-import { recordSurveyStatsInsert, recordSurveyStatsUpdate } from "../lib/surveyScopeStats"
-import { normalizeAddressFields } from "../masters/helpers"
 import { requireCapability } from "../shared/capabilities"
-import { assertCanAccessSurvey } from "../shared/fieldAccess"
-import { assertCanReadWard, clientError, requireUser, writeAudit } from "../shared/helpers"
-import { assertMunicipalityInScope } from "../shared/tenancy"
+import { clientError, requireUser, writeAudit } from "../shared/helpers"
 import {
-  assertSurveyWritable,
-  mergeDraftArgs,
-  normalizeOwnerFields,
-  normalizePropertyFields,
-  stripLocalId,
-  withResolvedPropertyId,
-} from "../surveys/helpers"
-import { registerPropertyIdMapping } from "./helpers"
+  commitExcelSurveyImport,
+  importExcelFloorRows,
+  importPlanToClientError,
+  planExcelSurveyImport,
+} from "./importExcelSurvey"
 
 export { MAX_IMPORT_FLOORS, MAX_IMPORT_SURVEYS }
 
@@ -65,8 +56,8 @@ const importSurveyRow = v.object({
         fatherOrHusbandName: v.optional(v.string()),
         mobileNo: v.optional(v.string()),
         altMobileNo: v.optional(v.string()),
-      })
-    )
+      }),
+    ),
   ),
 })
 
@@ -80,6 +71,36 @@ const importFloorRow = v.object({
   constructionType: v.string(),
   isOccupied: v.optional(v.boolean()),
   areaSqft: v.number(),
+})
+
+/** Import one survey row (+ optional floors) atomically with analytics rollups. */
+export const importExcelSurveyRow = mutation({
+  args: {
+    survey: importSurveyRow,
+    floors: v.optional(v.array(importFloorRow)),
+  },
+  returns: v.union(
+    v.object({ outcome: v.literal("created"), surveyId: v.id("surveys") }),
+    v.object({ outcome: v.literal("updated"), surveyId: v.id("surveys") }),
+  ),
+  handler: async (ctx, args) => {
+    const me = await requireUser(ctx)
+    await requireCapability(ctx, me, "reports.export")
+
+    const propertyIdToSurveyId = new Map<string, Id<"surveys">>()
+    const plan = await planExcelSurveyImport(ctx, me, args.survey)
+    if (plan.kind === "error") importPlanToClientError(plan.error)
+
+    const result = await commitExcelSurveyImport(ctx, me, plan, propertyIdToSurveyId)
+    if (args.floors?.length) {
+      const floorErrors = await importExcelFloorRows(ctx, me, args.floors, propertyIdToSurveyId)
+      if (floorErrors.length > 0) {
+        clientError("VALIDATION", floorErrors[0]!.message)
+      }
+    }
+
+    return result
+  },
 })
 
 /** Re-import survey + floor rows from Excel (supervisor/admin). Matches by Property ID or Local ID. */
@@ -123,167 +144,18 @@ export const importExcelBundle = mutation({
     const propertyIdToSurveyId = new Map<string, Id<"surveys">>()
 
     for (const row of args.surveys) {
-      try {
-        const muni = await ctx.db.get(row.municipalityId)
-        if (!muni) {
-          errors.push({ localId: row.localId, message: "Unknown municipality" })
-          continue
-        }
-        await assertMunicipalityInScope(ctx, me, row.municipalityId)
-        if (row.wardNo) assertCanReadWard(me, row.municipalityId, row.wardNo)
-
-        let existing: Doc<"surveys"> | null = null
-        const pid = row.propertyId?.trim().toUpperCase()
-        if (pid) {
-          existing = (await lookupSurveyByPropertyId(ctx, pid)) ?? null
-        }
-        if (!existing) {
-          existing =
-            (await ctx.db
-              .query("surveys")
-              .withIndex("by_surveyor_localId", (q) => q.eq("surveyorId", me._id).eq("localId", row.localId))
-              .unique()) ?? null
-        }
-
-        const merged = mergeDraftArgs(
-          existing,
-          {
-            localId: row.localId,
-            municipalityId: row.municipalityId,
-            clientUpdatedAt: Date.now(),
-            wardNo: row.wardNo,
-            sectorNo: row.sectorNo,
-            oldPropertyNo: row.oldPropertyNo,
-            propertyId: pid,
-            parcelNo: row.parcelNo,
-            unitNo: row.unitNo,
-            constructedYear: row.constructedYear,
-            isSlum: row.isSlum,
-            respondentName: row.respondentName,
-            relationship: row.relationship,
-            owners: row.owners,
-            familySize: row.familySize,
-            mobileNo: row.mobileNo,
-            altMobileNo: row.altMobileNo,
-            houseNo: row.houseNo,
-            locality: row.locality,
-            colonyName: row.colonyName,
-            pinCode: row.pinCode,
-            city: row.city ?? muni.name,
-            assessmentYear: row.assessmentYear,
-            ownershipType: row.ownershipType,
-            propertyType: row.propertyType,
-            propertyUse: row.propertyUse,
-            situation: row.situation,
-            roadType: row.roadType,
-            taxRateZone: row.taxRateZone,
-            plotSqft: row.plotSqft,
-            plinthSqft: row.plinthSqft,
-            municipalWaterConnection: row.municipalWaterConnection,
-            waterSource: row.waterSource as Doc<"surveys">["waterSource"],
-            sanitationType: row.sanitationType as Doc<"surveys">["sanitationType"],
-            municipalWasteCollection: row.municipalWasteCollection,
-            electricityNo: row.electricityNo,
-          },
-          muni
-        )
-
-        const normalized = normalizeAddressFields(
-          normalizeOwnerFields(withResolvedPropertyId(normalizePropertyFields(merged), muni.code)),
-          muni
-        )
-
-        const writable = {
-          ...stripLocalId(normalized as Parameters<typeof stripLocalId>[0]),
-          districtId: muni.districtId,
-        }
-
-        if (existing) {
-          await assertCanAccessSurvey(ctx, me, existing)
-          await assertSurveyWritable(ctx, me, existing)
-          await ctx.db.patch(existing._id, {
-            ...writable,
-            serverVersion: existing.serverVersion + 1,
-            clientUpdatedAt: Date.now(),
-          })
-          const updatedSurvey = await ctx.db.get(existing._id)
-          if (updatedSurvey) await recordSurveyStatsUpdate(ctx, existing, updatedSurvey)
-          updated++
-          registerPropertyIdMapping(propertyIdToSurveyId, existing._id, normalized.propertyId, pid)
-        } else {
-          const newId = await ctx.db.insert("surveys", {
-            ...writable,
-            surveyorId: me._id,
-            localId: row.localId,
-            status: "draft",
-            qcStatus: "pending",
-            serverVersion: 1,
-            clientUpdatedAt: Date.now(),
-          } as Doc<"surveys">)
-          const createdSurvey = await ctx.db.get(newId)
-          if (createdSurvey) await recordSurveyStatsInsert(ctx, createdSurvey)
-          created++
-          registerPropertyIdMapping(propertyIdToSurveyId, newId, normalized.propertyId, pid)
-        }
-      } catch (e) {
-        errors.push({
-          localId: row.localId,
-          propertyId: row.propertyId,
-          message: e instanceof Error ? e.message : "Import failed",
-        })
-      }
-    }
-
-    for (const fl of args.floors ?? []) {
-      const pid = fl.propertyId.trim().toUpperCase()
-      let surveyId = propertyIdToSurveyId.get(pid)
-      if (!surveyId) {
-        const s = await lookupSurveyByPropertyId(ctx, pid)
-        surveyId = s?._id
-      }
-      if (!surveyId) {
-        errors.push({ propertyId: pid, message: "Floor row: survey not found for Property ID" })
-        continue
-      }
-      const survey = await ctx.db.get(surveyId)
-      if (!survey) continue
-      await assertCanAccessSurvey(ctx, me, survey)
-      await assertSurveyWritable(ctx, me, survey)
-
-      const normalized = normalizeFloorFields({ usageFactor: fl.usageFactor, usageType: fl.usageType })
-      const floorErrors = validateFloorRow({
-        floorName: fl.floorName,
-        usageFactor: normalized.usageFactor || undefined,
-        usageType: normalized.usageType,
-        constructionType: fl.constructionType,
-        areaSqft: fl.areaSqft,
-      })
-      if (Object.keys(floorErrors).length > 0) {
-        errors.push({ propertyId: pid, message: "Invalid floor row" })
+      const plan = await planExcelSurveyImport(ctx, me, row)
+      if (plan.kind === "error") {
+        errors.push(plan.error)
         continue
       }
 
-      const existing = await ctx.db
-        .query("floors")
-        .withIndex("by_survey_clientFloorId", (q) => q.eq("surveyId", surveyId!).eq("clientFloorId", fl.clientFloorId))
-        .unique()
-
-      const floorDoc = {
-        position: fl.position,
-        floorName: fl.floorName,
-        usageFactor: normalized.usageFactor || undefined,
-        usageType: normalized.usageType,
-        constructionType: fl.constructionType,
-        isOccupied: fl.isOccupied ?? usageTypeToOccupied(normalized.usageType),
-        areaSqft: fl.areaSqft,
-      }
-
-      if (existing) {
-        await ctx.db.patch(existing._id, floorDoc)
-      } else {
-        await ctx.db.insert("floors", { surveyId: surveyId!, clientFloorId: fl.clientFloorId, ...floorDoc })
-      }
+      const result = await commitExcelSurveyImport(ctx, me, plan, propertyIdToSurveyId)
+      if (result.outcome === "created") created++
+      else updated++
     }
+
+    errors.push(...(await importExcelFloorRows(ctx, me, args.floors ?? [], propertyIdToSurveyId)))
 
     await writeAudit(ctx, {
       actorId: me._id,
