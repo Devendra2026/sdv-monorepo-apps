@@ -162,7 +162,21 @@ bash packages/backend/scripts/diagnose-convex-export-404.sh
 pnpm --filter @workspace/backend convex:backup
 ```
 
-Copy the ZIP **off the EC2/Dokploy host**. Same-disk copies are not DR. See [`infra/convex-self-hosted/README.md`](infra/convex-self-hosted/README.md) for quiet windows and restore drill.
+Copy the ZIP **off the EC2/Dokploy host**. Same-disk copies are not DR.
+
+**Platform export disk growth** (`/convex/data/storage/exports/*.blob`):
+
+These files are written by Convex's `application::exports::worker` when something
+calls `npx convex export` / `POST /api/export/request/zip` — **not** by the app
+cron in `convex/crons.ts` (that cron only purges demand-notice PDF jobs + read
+notifications). Self-hosted Convex does not auto-delete leftover export blobs.
+
+1. Take a volume backup first: `bash packages/backend/scripts/backup-convex-volume.sh`
+2. List prune candidates (default dry-run): `bash packages/backend/scripts/prune-convex-platform-exports.sh`
+3. After off-host copy, prune: `DRY_RUN=0 KEEP_NEWEST=2 MIN_AGE_HOURS=24 bash packages/backend/scripts/prune-convex-platform-exports.sh`
+4. Stop any host/Dokploy cron that repeatedly triggers `convex export` under low disk.
+
+See [`infra/convex-self-hosted/README.md`](infra/convex-self-hosted/README.md) for quiet windows and restore drill.
 
 **Convex deployment env** (Clerk auth on the self-hosted instance — use `--env-file .env.production` with CLI env commands):
 

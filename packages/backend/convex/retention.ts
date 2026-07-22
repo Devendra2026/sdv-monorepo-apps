@@ -1,5 +1,16 @@
 /**
- * Retention / disk hygiene for self-hosted Convex.
+ * Retention / disk hygiene for self-hosted Convex (application tables only).
+ *
+ * Scope:
+ *   - `demandNoticeExportJobs` (+ PDF blobs in Convex file storage)
+ *   - read `notifications`
+ *
+ * NOT in scope (do not confuse with this module):
+ *   - Platform snapshot exports under /convex/data/storage/exports/*.blob
+ *     written by `application::exports::worker` after CLI/dashboard
+ *     `POST /api/export/request/zip`. Those must be pruned on the host
+ *     (see scripts/prune-convex-platform-exports.sh) — app crons cannot
+ *     delete that directory.
  *
  * Demand-notice PDFs and completed job rows accumulate forever without this.
  * Batched deletes keep each mutation under transaction limits.
@@ -113,7 +124,7 @@ export const purgeOldReadNotifications = internalMutation({
   },
 })
 
-/** Cron entrypoint — kicks both retention sweeps. */
+/** Cron entrypoint — kicks both app-table retention sweeps (not platform exports). */
 export const runRetentionSweep = internalMutation({
   args: {},
   returns: v.null(),
