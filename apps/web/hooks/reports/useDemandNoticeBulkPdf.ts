@@ -7,8 +7,11 @@ import { reportDocumentTimestamp } from "@/lib/qc/report-dates"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import { useConvex, useMutation } from "convex/react"
+import type { FunctionReturnType } from "convex/server"
 import { useCallback, useState } from "react"
 import { toast } from "sonner"
+
+type NoticePayloadsPage = FunctionReturnType<typeof api.demandNotices.queries.getNoticePayloads>
 
 export function useDemandNoticeBulkPdf() {
   const convex = useConvex()
@@ -46,11 +49,11 @@ export function useDemandNoticeBulkPdf() {
         const payloads: DemandNoticeDocumentProps[] = []
         let offset: number | null = 0
         while (offset !== null) {
-          const page = await convex.query(api.demandNotices.queries.getNoticePayloads, {
+          const page: NoticePayloadsPage = await convex.query(api.demandNotices.queries.getNoticePayloads, {
             jobId,
             offset,
           })
-          payloads.push(...(page.payloads as DemandNoticeDocumentProps[]))
+          payloads.push(...(page.payloads as unknown as DemandNoticeDocumentProps[]))
           offset = page.nextOffset
         }
 
