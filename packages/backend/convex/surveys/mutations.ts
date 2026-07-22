@@ -28,6 +28,7 @@ import { assertMunicipalityInScope } from "../shared/tenancy"
 import {
   assertSurveyWritable,
   auditActionForSave,
+  buildSurveyPartialPatch,
   mergeDraftArgs,
   normalizeOwnerFields,
   normalizePropertyFields,
@@ -90,7 +91,9 @@ export const saveDraft = mutation({
     }
 
     const merged = mergeDraftArgs(existing, args, muni)
-    const allowedTaxZones = await loadAllowedTaxZoneSet(ctx)
+    // Skip tax-zone master collect when draft has no zone set / unchanged.
+    const taxZoneEmpty = !(merged.taxRateZone as string | undefined)?.trim() && !(existing?.taxRateZone ?? "").trim()
+    const allowedTaxZones = taxZoneEmpty ? new Set<string>() : await loadAllowedTaxZoneSet(ctx)
     const normalized = normalizeAddressFields(
       normalizeOwnerFields(normalizeTaxationFields(withResolvedPropertyId(normalizePropertyFields(merged), muni.code))),
       muni
@@ -118,25 +121,28 @@ export const saveDraft = mutation({
       const { status, qcStatus } = resolvePostSaveStatuses(existing)
       const completionPct = await completionPctForSurvey(ctx, { ...existing, ...writable } as Doc<"surveys">)
 
-      const patch = {
-        ...writable,
+      const patch = buildSurveyPartialPatch(existing, writable as Record<string, unknown>, {
         status,
         qcStatus,
-        serverVersion: existing.serverVersion + 1,
         clientUpdatedAt: args.clientUpdatedAt,
         completionPct,
+      })
+
+      if (Object.keys(patch).length === 0) {
+        logSlowPath("surveys.saveDraft", startedAt, {
+          mode: "update_noop",
+          surveyId: existing._id,
+        })
+        return existing._id
       }
 
       await ctx.db.patch(existing._id, patch)
 
-      // Build after-state without a second read (saves a round-trip on hot path).
       const updated: Doc<"surveys"> = {
         ...existing,
         ...patch,
-      }
+      } as Doc<"surveys">
 
-      // Draft saves call the canonical analytics helper; completion-only churn is
-      // a no-op inside recordSurveyAnalyticsUpdate to avoid municipality-row OCC storms.
       await recordSurveyStatsUpdate(ctx, existing, updated)
 
       const staysDraft = existing.status === "draft" && updated.status === "draft"
@@ -157,8 +163,30 @@ export const saveDraft = mutation({
       return existing._id
     }
 
-    // Insert once: seed draft rollup + audit. Further draft field/ward edits
-    // update rollups when analytics dimensions change (see recordSurveyAnalyticsUpdate).
+    // Insert once — re-check for concurrent first-insert race on localId.
+    const raced = await resolveExistingSurveyForSave(ctx, me, {
+      id: args.id,
+      localId: args.localId,
+      municipalityId: args.municipalityId,
+    })
+    if (raced) {
+      const { status, qcStatus } = resolvePostSaveStatuses(raced)
+      const completionPct = await completionPctForSurvey(ctx, { ...raced, ...writable } as Doc<"surveys">)
+      const patch = buildSurveyPartialPatch(raced, writable as Record<string, unknown>, {
+        status,
+        qcStatus,
+        clientUpdatedAt: args.clientUpdatedAt,
+        completionPct,
+      })
+      if (Object.keys(patch).length > 0) {
+        await ctx.db.patch(raced._id, patch)
+        const updated: Doc<"surveys"> = { ...raced, ...patch } as Doc<"surveys">
+        await recordSurveyStatsUpdate(ctx, raced, updated)
+      }
+      logSlowPath("surveys.saveDraft", startedAt, { mode: "insert_race_update", surveyId: raced._id })
+      return raced._id
+    }
+
     const completionPct = computeSurveyCompletionPercent({ ...writable, floors: [], photos: [] })
     const newId = await ctx.db.insert("surveys", {
       ...writable,
@@ -170,6 +198,36 @@ export const saveDraft = mutation({
       clientUpdatedAt: args.clientUpdatedAt,
       completionPct,
     })
+
+    // Post-insert dedupe: if another row won the race, delete ours and update the keeper.
+    if (ownScope) {
+      const siblings = await ctx.db
+        .query("surveys")
+        .withIndex("by_surveyor_localId", (q) => q.eq("surveyorId", me._id).eq("localId", args.localId))
+        .take(3)
+      if (siblings.length > 1) {
+        const keeper = siblings.reduce((a, b) => (a._creationTime <= b._creationTime ? a : b))
+        if (keeper._id !== newId) {
+          await ctx.db.delete(newId)
+          const { status, qcStatus } = resolvePostSaveStatuses(keeper)
+          const pct = await completionPctForSurvey(ctx, { ...keeper, ...writable } as Doc<"surveys">)
+          const patch = buildSurveyPartialPatch(keeper, writable as Record<string, unknown>, {
+            status,
+            qcStatus,
+            clientUpdatedAt: args.clientUpdatedAt,
+            completionPct: pct,
+          })
+          if (Object.keys(patch).length > 0) {
+            await ctx.db.patch(keeper._id, patch)
+            const updated: Doc<"surveys"> = { ...keeper, ...patch } as Doc<"surveys">
+            await recordSurveyStatsUpdate(ctx, keeper, updated)
+          }
+          logSlowPath("surveys.saveDraft", startedAt, { mode: "insert_dedupe", surveyId: keeper._id })
+          return keeper._id
+        }
+      }
+    }
+
     const created = await ctx.db.get(newId)
     if (created) await recordSurveyStatsInsert(ctx, created)
     await writeAudit(ctx, {

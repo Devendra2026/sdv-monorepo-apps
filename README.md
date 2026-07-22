@@ -151,6 +151,7 @@ On the Dokploy host (read-only diagnostics):
 
 ```bash
 bash infra/convex-self-hosted/inspect-convex-host.sh
+bash infra/convex-self-hosted/diagnose-container-restart.sh
 bash infra/convex-self-hosted/verify-convex-traefik-routing.sh
 bash packages/backend/scripts/diagnose-convex-export-404.sh
 ```

@@ -149,10 +149,15 @@ export async function resolveExistingSurveyForSave(
   }
 
   if (ownScope) {
-    return await ctx.db
+    // Never use .unique() here — concurrent first-insert races can create
+    // duplicate (surveyorId, localId) rows; .unique() throws → UnhandledPromiseRejection
+    // inside saveDraft's Promise.all → isolate restart.
+    const rows = await ctx.db
       .query("surveys")
       .withIndex("by_surveyor_localId", (q) => q.eq("surveyorId", me._id).eq("localId", args.localId))
-      .unique()
+      .take(3)
+    if (rows.length === 0) return null
+    return rows.reduce((a, b) => (a._creationTime <= b._creationTime ? a : b))
   }
 
   // Supervisor/admin without explicit id — match by localId within the ULB.
@@ -339,14 +344,66 @@ export function normalizeOwnerFields<
   }
 }
 
-/** Remove mutation-only keys before writing to the `surveys` table. */
+/** Remove mutation-only / non-schema keys before writing to the `surveys` table. */
 export function stripLocalId<T extends { localId: string; id?: Id<"surveys">; surveyorId?: Id<"users"> }>(
   args: T
-): Omit<T, "localId" | "id"> {
-  const { localId, id, ...rest } = args
+): Omit<T, "localId" | "id" | "street"> {
+  const { localId, id, ...rest } = args as T & { street?: unknown }
   void localId
   void id
-  return rest
+  if ("street" in rest) {
+    delete (rest as { street?: unknown }).street
+  }
+  return rest as Omit<T, "localId" | "id" | "street">
+}
+
+/**
+ * Partial patch: only fields that differ from `existing`, plus required meta.
+ * Cuts write amplification and same-document OCC on hot draft autosaves.
+ */
+export function buildSurveyPartialPatch(
+  existing: Doc<"surveys">,
+  writable: Record<string, unknown>,
+  meta: {
+    status: Doc<"surveys">["status"]
+    qcStatus: Doc<"surveys">["qcStatus"]
+    clientUpdatedAt: number
+    completionPct: number | undefined
+  }
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(writable)) {
+    if (key.startsWith("_")) continue
+    const prev = existing[key as keyof Doc<"surveys">]
+    if (surveyFieldEqual(prev, value)) continue
+    patch[key] = value
+  }
+  if (existing.status !== meta.status) patch.status = meta.status
+  if (existing.qcStatus !== meta.qcStatus) patch.qcStatus = meta.qcStatus
+  if (existing.clientUpdatedAt !== meta.clientUpdatedAt) patch.clientUpdatedAt = meta.clientUpdatedAt
+  if (existing.completionPct !== meta.completionPct) patch.completionPct = meta.completionPct
+
+  // Always bump version when anything else changed (or client clock advanced).
+  if (Object.keys(patch).length > 0 || existing.clientUpdatedAt !== meta.clientUpdatedAt) {
+    patch.serverVersion = existing.serverVersion + 1
+    patch.clientUpdatedAt = meta.clientUpdatedAt
+  }
+  return patch
+}
+
+function surveyFieldEqual(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true
+  if (a === undefined && b === undefined) return true
+  if (a === null && b === null) return true
+  if (typeof a !== typeof b) return false
+  if (typeof a === "object" && a !== null && b !== null) {
+    try {
+      return JSON.stringify(a) === JSON.stringify(b)
+    } catch {
+      return false
+    }
+  }
+  return false
 }
 
 type DraftMutationArgs = {

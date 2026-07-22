@@ -21,6 +21,7 @@ import {
   TAX_RATE_ZONES,
 } from "../lib/masters/taxationMasters"
 import { loadDashboardCountsForHome } from "../lib/surveyScopeStats"
+import { startOfDayMs } from "../shared/calendar"
 import { filterWardsForUser, requireIdentity, requireUser } from "../shared/helpers"
 import { assertMunicipalityInScope, resolveTenantScope } from "../shared/tenancy"
 import {
@@ -246,9 +247,8 @@ export const dashboardCounts = query({
       return { total: 0, today: 0, drafts: 0, pending: 0, submittedToday: 0, approved: 0, submitted: 0, rejected: 0 }
     }
 
-    const todayStart = new Date(args.nowMs)
-    todayStart.setHours(0, 0, 0, 0)
-    return loadDashboardCountsForHome(ctx, me, todayStart.getTime())
+    const todayMs = startOfDayMs(args.nowMs)
+    return loadDashboardCountsForHome(ctx, me, todayMs)
   },
 })
 

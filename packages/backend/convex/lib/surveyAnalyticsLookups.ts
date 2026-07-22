@@ -218,12 +218,24 @@ export async function getMunicipalityStatsRowForGeneration(
   if (isLegacyGeneration(generation)) {
     return getLegacyMunicipalityStatsRow(ctx, municipalityId)
   }
-  return await ctx.db
+  const rows = await ctx.db
     .query("surveyMunicipalityStats")
     .withIndex("by_generation_and_municipalityId", (q) =>
       q.eq("generation", generation).eq("municipalityId", municipalityId)
     )
-    .unique()
+    .take(2)
+  if (rows.length > 1) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        kind: "budget_event",
+        label: "duplicate_generation_municipality_stats",
+        generation,
+        municipalityId,
+      })
+    )
+  }
+  return rows[0] ?? null
 }
 
 export async function getDailyStatsRowForGeneration(
@@ -235,12 +247,25 @@ export async function getDailyStatsRowForGeneration(
   if (isLegacyGeneration(generation)) {
     return getLegacyDailyStatsRow(ctx, municipalityId, dateKey)
   }
-  return await ctx.db
+  const rows = await ctx.db
     .query("surveyDailyStats")
     .withIndex("by_generation_and_municipalityId_and_dateKey", (q) =>
       q.eq("generation", generation).eq("municipalityId", municipalityId).eq("dateKey", dateKey)
     )
-    .unique()
+    .take(2)
+  if (rows.length > 1) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        kind: "budget_event",
+        label: "duplicate_generation_daily_stats",
+        generation,
+        municipalityId,
+        dateKey,
+      })
+    )
+  }
+  return rows[0] ?? null
 }
 
 export async function getWardStatsRowForGeneration(
@@ -253,12 +278,25 @@ export async function getWardStatsRowForGeneration(
     return getLegacyWardStatsRow(ctx, municipalityId, wardNo)
   }
   const normalized = normalizeWardNo(wardNo)
-  return await ctx.db
+  const rows = await ctx.db
     .query("surveyWardStats")
     .withIndex("by_generation_and_municipalityId_and_wardNo", (q) =>
       q.eq("generation", generation).eq("municipalityId", municipalityId).eq("wardNo", normalized)
     )
-    .unique()
+    .take(2)
+  if (rows.length > 1) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        kind: "budget_event",
+        label: "duplicate_generation_ward_stats",
+        generation,
+        municipalityId,
+        wardNo: normalized,
+      })
+    )
+  }
+  return rows[0] ?? null
 }
 
 export async function getSurveyorStatsRowForGeneration(
@@ -270,10 +308,23 @@ export async function getSurveyorStatsRowForGeneration(
   if (isLegacyGeneration(generation)) {
     return getLegacySurveyorStatsRow(ctx, surveyorId, municipalityId)
   }
-  return await ctx.db
+  const rows = await ctx.db
     .query("surveySurveyorStats")
     .withIndex("by_generation_and_surveyorId_and_municipalityId", (q) =>
       q.eq("generation", generation).eq("surveyorId", surveyorId).eq("municipalityId", municipalityId)
     )
-    .unique()
+    .take(2)
+  if (rows.length > 1) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        kind: "budget_event",
+        label: "duplicate_generation_surveyor_stats",
+        generation,
+        surveyorId,
+        municipalityId,
+      })
+    )
+  }
+  return rows[0] ?? null
 }

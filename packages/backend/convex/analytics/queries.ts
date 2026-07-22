@@ -1140,10 +1140,9 @@ export const homeBundle = query({
 
     const todayMs = startOfDayMs(args.nowMs)
     const trendDays = args.trendDays ?? 30
-    const [counts, analytics] = await Promise.all([
-      loadDashboardCountsForHome(ctx, me, todayMs),
-      buildAnalyticsBundle(ctx, me, todayMs, trendDays, args.nowMs),
-    ])
+    // Sequential: parallel counts + analyticsBundle re-contends SQLite (legacy clients).
+    const counts = await loadDashboardCountsForHome(ctx, me, todayMs)
+    const analytics = await buildAnalyticsBundle(ctx, me, todayMs, trendDays, args.nowMs)
 
     return { counts, analytics }
   },

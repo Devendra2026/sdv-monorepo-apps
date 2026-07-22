@@ -8,23 +8,37 @@ import { SYSTEM_ROLE_PERMISSIONS } from "../lib/permissionCatalog"
 
 type Ctx = QueryCtx | MutationCtx
 
+/** Per-request cache — same ctx object is reused for the whole mutation/query. */
+const rolePermCacheByCtx = new WeakMap<object, Map<string, Set<string>>>()
+
 export async function permissionsForRole(ctx: Ctx, roleKey: string): Promise<Set<string>> {
+  let byRole = rolePermCacheByCtx.get(ctx as object)
+  if (!byRole) {
+    byRole = new Map()
+    rolePermCacheByCtx.set(ctx as object, byRole)
+  }
+  const cached = byRole.get(roleKey)
+  if (cached) return cached
+
   const role = await ctx.db
     .query("roles")
     .withIndex("by_key", (q) => q.eq("key", roleKey))
     .unique()
 
+  let result: Set<string>
   if (!role || role.isActive === false) {
     const fallback = SYSTEM_ROLE_PERMISSIONS[roleKey]
-    return fallback ? new Set(fallback) : new Set()
+    result = fallback ? new Set(fallback) : new Set()
+  } else {
+    const rows = await ctx.db
+      .query("rolePermissions")
+      .withIndex("by_role", (q) => q.eq("roleId", role._id))
+      .collect()
+    result = new Set(rows.map((r) => r.permissionKey))
   }
 
-  const rows = await ctx.db
-    .query("rolePermissions")
-    .withIndex("by_role", (q) => q.eq("roleId", role._id))
-    .collect()
-
-  return new Set(rows.map((r) => r.permissionKey))
+  byRole.set(roleKey, result)
+  return result
 }
 
 export async function userCapabilities(ctx: Ctx, user: Doc<"users">): Promise<string[]> {

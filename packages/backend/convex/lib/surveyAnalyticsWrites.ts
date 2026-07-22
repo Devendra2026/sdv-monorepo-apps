@@ -107,10 +107,11 @@ async function ensureMunicipalityStatsRow(
 
 async function getDistrictStatsRow(ctx: MutationCtx, generation: AnalyticsGeneration, districtId: Id<"districts">) {
   if (isLegacyGeneration(generation)) return null
-  return await ctx.db
+  const rows = await ctx.db
     .query("surveyDistrictStats")
     .withIndex("by_generation_and_districtId", (q) => q.eq("generation", generation).eq("districtId", districtId))
-    .unique()
+    .take(2)
+  return rows[0] ?? null
 }
 
 async function ensureDistrictStatsRow(ctx: MutationCtx, generation: AnalyticsGeneration, districtId: Id<"districts">) {
@@ -364,10 +365,11 @@ async function loadSurveyContribution(
   surveyId: Id<"surveys">
 ): Promise<SurveyAnalyticsSnapshot | null> {
   if (isLegacyGeneration(generation)) return null
-  const row = await ctx.db
+  const rows = await ctx.db
     .query("surveyAnalyticsContributions")
     .withIndex("by_generation_and_surveyId", (q) => q.eq("generation", generation).eq("surveyId", surveyId))
-    .unique()
+    .take(2)
+  const row = rows[0]
   if (!row) return null
   return {
     municipalityId: row.municipalityId,
@@ -390,13 +392,18 @@ async function upsertSurveyContribution(
   snapshot: SurveyAnalyticsSnapshot | null
 ) {
   if (isLegacyGeneration(generation)) return
-  const existing = await ctx.db
+  const existingRows = await ctx.db
     .query("surveyAnalyticsContributions")
     .withIndex("by_generation_and_surveyId", (q) => q.eq("generation", generation).eq("surveyId", surveyId))
-    .unique()
+    .take(2)
+  const existing = existingRows[0]
 
   if (!snapshot) {
     if (existing) await ctx.db.delete(existing._id)
+    // Clean up any duplicate contribution rows.
+    for (const dup of existingRows.slice(1)) {
+      await ctx.db.delete(dup._id)
+    }
     return
   }
 
@@ -464,15 +471,17 @@ async function applySurveyTransitionForGeneration(
   const contributionBefore = storedBefore
   if (contributionBefore && snapshotsEqual(contributionBefore, after)) return
 
+  const muniDistrictChanged =
+    !!contributionBefore &&
+    (contributionBefore.municipalityId !== after.municipalityId || contributionBefore.districtId !== after.districtId)
+  const surveyorChanged =
+    !!contributionBefore &&
+    (contributionBefore.surveyorId !== after.surveyorId || contributionBefore.municipalityId !== after.municipalityId)
+  const wardOrCityChanged =
+    !!contributionBefore && (contributionBefore.wardNo !== after.wardNo || contributionBefore.city !== after.city)
+
   // Dimension move (municipality / surveyor / ward / district): remove old, add new.
-  if (
-    contributionBefore &&
-    (contributionBefore.municipalityId !== after.municipalityId ||
-      contributionBefore.surveyorId !== after.surveyorId ||
-      contributionBefore.wardNo !== after.wardNo ||
-      contributionBefore.districtId !== after.districtId ||
-      contributionBefore.city !== after.city)
-  ) {
+  if (contributionBefore && (muniDistrictChanged || surveyorChanged || wardOrCityChanged)) {
     const removeCounters = countersForSnapshot(contributionBefore)
     const negated: SurveyStateCounters = {
       total: -removeCounters.total,
@@ -482,6 +491,31 @@ async function applySurveyTransitionForGeneration(
       qcRejected: -removeCounters.qcRejected,
       qcPending: -removeCounters.qcPending,
     }
+    const addCounters = countersForSnapshot(after)
+
+    // Ward/city-only within same muni/district/surveyor: do NOT double-patch municipality
+    // stats (same row remove+add caused OCC storms under concurrent draft saves).
+    if (!muniDistrictChanged && !surveyorChanged) {
+      await applyWardCounterDelta(ctx, generation, contributionBefore, negated)
+      await applyWardCounterDelta(ctx, generation, after, addCounters)
+      if (
+        contributionBefore.completionPct !== undefined &&
+        after.completionPct !== undefined &&
+        contributionBefore.completionPct !== after.completionPct &&
+        !shouldSkipCompletionPctRollup(contributionBefore, after)
+      ) {
+        await applyCompletionDelta(
+          ctx,
+          generation,
+          after.municipalityId,
+          after.completionPct - contributionBefore.completionPct,
+          0
+        )
+      }
+      await upsertSurveyContribution(ctx, generation, surveyId, after)
+      return
+    }
+
     await applyStateCounterDelta(
       ctx,
       generation,
@@ -507,7 +541,6 @@ async function applySurveyTransitionForGeneration(
       )
     }
 
-    const addCounters = countersForSnapshot(after)
     await applyStateCounterDelta(ctx, generation, after.municipalityId, after.districtId, addCounters)
     await applyDailyEventDeltas(ctx, generation, after.municipalityId, dailyEventsForTransition(null, after))
     await applyWardCounterDelta(ctx, generation, after, addCounters)
@@ -595,12 +628,13 @@ async function ensureQcReviewerStatsRow(
   municipalityId: Id<"municipalities">
 ) {
   if (isLegacyGeneration(generation)) return null
-  const existing = await ctx.db
+  const existingRows = await ctx.db
     .query("surveyQcReviewerStats")
     .withIndex("by_generation_and_reviewerId_and_municipalityId", (q) =>
       q.eq("generation", generation).eq("reviewerId", reviewerId).eq("municipalityId", municipalityId)
     )
-    .unique()
+    .take(2)
+  const existing = existingRows[0]
   if (existing) return existing
   const id = await ctx.db.insert("surveyQcReviewerStats", {
     generation,
@@ -630,13 +664,13 @@ export async function applyQcDecisionContribution(
   for (const generation of targetGenerations) {
     if (isLegacyGeneration(generation)) continue
 
-    const existing = await ctx.db
+    const existingRows = await ctx.db
       .query("qcAnalyticsContributions")
       .withIndex("by_generation_and_decisionId", (q) =>
         q.eq("generation", generation).eq("decisionId", args.decisionId)
       )
-      .unique()
-    if (existing) continue
+      .take(2)
+    if (existingRows.length > 0) continue
 
     const reviewerRow = await ensureQcReviewerStatsRow(ctx, generation, args.reviewerId, args.municipalityId)
     if (!reviewerRow) continue
