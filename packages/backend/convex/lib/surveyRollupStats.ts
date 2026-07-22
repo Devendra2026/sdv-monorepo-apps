@@ -13,14 +13,17 @@ import {
 } from "./surveyAnalyticsLookups"
 
 /** Max ward rollup rows loaded per municipality (avoids huge ULB collects). */
-const WARD_STATS_PER_MUNI_CAP = 400
+const WARD_STATS_PER_MUNI_CAP = 200
 /** Max surveyor rollup rows loaded per municipality. */
-const SURVEYOR_STATS_PER_MUNI_CAP = 500
+const SURVEYOR_STATS_PER_MUNI_CAP = 200
 /**
  * Max municipalities processed for unbounded rollup loads (analytics / command center).
  * Filtered single-ULB / ward paths are uncapped beyond this budget.
+ *
+ * Before: 40 ULBs × 400–500 rows → 16k–20k docs inside analyticsBundle (syscall timeout).
+ * After: hard budget aligned with dashboard QC ULB cap.
  */
-const ROLLUP_ULB_CAP = 40
+const ROLLUP_ULB_CAP = 12
 
 export type WardStatsRollup = {
   municipalityId: Id<"municipalities">
@@ -806,11 +809,7 @@ export async function flushBackfillAggregates(ctx: MutationCtx, aggregates: Back
 /** Clear all rollup tables before a full re-backfill (one table page at a time). */
 const ROLLUP_CLEAR_PAGE = 100
 
-type RollupClearTable =
-  | "surveyMunicipalityStats"
-  | "surveyDailyStats"
-  | "surveyWardStats"
-  | "surveySurveyorStats"
+type RollupClearTable = "surveyMunicipalityStats" | "surveyDailyStats" | "surveyWardStats" | "surveySurveyorStats"
 
 const ROLLUP_CLEAR_ORDER: RollupClearTable[] = [
   "surveyMunicipalityStats",
@@ -825,7 +824,7 @@ const ROLLUP_CLEAR_ORDER: RollupClearTable[] = [
  */
 export async function clearRollupStatsPage(
   ctx: MutationCtx,
-  table: RollupClearTable,
+  table: RollupClearTable
 ): Promise<{ deleted: number; done: boolean }> {
   const page = await ctx.db.query(table).paginate({ cursor: null, numItems: ROLLUP_CLEAR_PAGE })
   for (const row of page.page) {

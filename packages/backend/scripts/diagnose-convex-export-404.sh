@@ -122,3 +122,8 @@ echo "api.sdvedutech.in  -> Convex backend port 3210"
 echo "site.sdvedutech.in -> Convex site proxy port 3211"
 echo "Direct GET / should return: This Convex deployment is running..."
 echo "Traefik 404 body '404 page not found' means no matching router to Convex."
+echo
+echo "=== Related helpers ==="
+echo "Volume/disk/OOM inspect: bash infra/convex-self-hosted/inspect-convex-host.sh"
+echo "Public DNS health:       bash infra/convex-self-hosted/verify-convex-traefik-routing.sh"
+echo "Dokploy apply checklist: infra/convex-self-hosted/README.md"

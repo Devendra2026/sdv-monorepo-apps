@@ -24,15 +24,39 @@ export function isLegacyAnalyticsRow(row: GenerationTagged): boolean {
   return row.generation === undefined
 }
 
-/** Pick the sole legacy row from mixed-generation legacy-index matches. */
-export function pickUniqueLegacyRow<T extends GenerationTagged>(rows: Iterable<T>, context: string): T | null {
+type LegacyRowCandidate = GenerationTagged & { _creationTime?: number }
+
+/**
+ * Pick one legacy row from mixed-generation legacy-index matches.
+ *
+ * Before: threw on duplicate legacy rows → UnhandledPromiseRejection inside
+ * analyticsBundle Promise.all → isolate restart.
+ * After: prefer newest `_creationTime` and warn (dashboard stays available).
+ */
+export function pickUniqueLegacyRow<T extends LegacyRowCandidate>(rows: Iterable<T>, context: string): T | null {
   let match: T | null = null
+  let duplicates = 0
   for (const row of rows) {
     if (!isLegacyAnalyticsRow(row)) continue
-    if (match) {
-      throw new Error(`Multiple legacy analytics rows for ${context}`)
+    if (!match) {
+      match = row
+      continue
     }
-    match = row
+    duplicates += 1
+    if ((row._creationTime ?? 0) >= (match._creationTime ?? 0)) {
+      match = row
+    }
+  }
+  if (duplicates > 0) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        kind: "budget_event",
+        label: "duplicate_legacy_analytics_row",
+        context,
+        duplicates: duplicates + 1,
+      })
+    )
   }
   return match
 }
@@ -75,12 +99,35 @@ const MUNICIPALITY_STATS_PAGE_SIZE = 128
 const DAILY_STATS_FOR_DATE_CAP = 2000
 
 /**
- * Load all legacy municipality stats rows in a few pages.
- * Prefer this over N point lookups when the caller scopes many ULBs.
+ * Load legacy municipality stats for an explicit ULB list via indexed point lookups.
+ *
+ * Before (hot path): `loadAllLegacyMunicipalityStatsRows` paginated the ENTIRE
+ * surveyMunicipalityStats table (all generations) → queryStreamNext multi-second streams.
+ * After: O(scoped ULBs) × take(16) on by_municipality — no full-table scan.
+ * Chunks parallel reads to avoid SQLite stampede (still reads every scoped ULB).
  */
-export async function loadAllLegacyMunicipalityStatsRows(
-  ctx: DbCtx
+export async function loadLegacyMunicipalityStatsForMunicipalities(
+  ctx: DbCtx,
+  municipalityIds: Id<"municipalities">[]
 ): Promise<Doc<"surveyMunicipalityStats">[]> {
+  if (municipalityIds.length === 0) return []
+  const out: Doc<"surveyMunicipalityStats">[] = []
+  const CHUNK = 20
+  for (let i = 0; i < municipalityIds.length; i += CHUNK) {
+    const chunk = municipalityIds.slice(i, i + CHUNK)
+    const rows = await Promise.all(chunk.map((id) => getLegacyMunicipalityStatsRow(ctx, id)))
+    for (const row of rows) {
+      if (row) out.push(row)
+    }
+  }
+  return out
+}
+
+/**
+ * @deprecated Prefer `loadLegacyMunicipalityStatsForMunicipalities` on request paths.
+ * Full-table pagination streams every generation row and saturates SQLite.
+ */
+export async function loadAllLegacyMunicipalityStatsRows(ctx: DbCtx): Promise<Doc<"surveyMunicipalityStats">[]> {
   const legacyRows: Doc<"surveyMunicipalityStats">[] = []
   let cursor: string | null = null
 
@@ -100,10 +147,7 @@ export async function loadAllLegacyMunicipalityStatsRows(
  * Load all legacy daily stats for a single dateKey across municipalities.
  * One indexed range instead of N by_municipality_date point reads.
  */
-export async function loadLegacyDailyStatsForDate(
-  ctx: DbCtx,
-  dateKey: string
-): Promise<Doc<"surveyDailyStats">[]> {
+export async function loadLegacyDailyStatsForDate(ctx: DbCtx, dateKey: string): Promise<Doc<"surveyDailyStats">[]> {
   const rows = await ctx.db
     .query("surveyDailyStats")
     .withIndex("by_date", (q) => q.eq("dateKey", dateKey))
@@ -161,9 +205,7 @@ export async function getLegacySurveyorStatsRow(
 ): Promise<Doc<"surveySurveyorStats"> | null> {
   const rows = await ctx.db
     .query("surveySurveyorStats")
-    .withIndex("by_surveyor_municipality", (q) =>
-      q.eq("surveyorId", surveyorId).eq("municipalityId", municipalityId)
-    )
+    .withIndex("by_surveyor_municipality", (q) => q.eq("surveyorId", surveyorId).eq("municipalityId", municipalityId))
     .take(LEGACY_INDEX_MATCH_CAP)
   return pickUniqueLegacyRow(rows, `surveyor ${surveyorId} municipality ${municipalityId}`)
 }

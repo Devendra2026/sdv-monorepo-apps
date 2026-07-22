@@ -297,11 +297,12 @@ export const listRemarks = query({
     if (!survey) return []
     await assertCanAccessSurvey(ctx, me, survey)
 
+    // Remarks per survey are small; hard-cap avoids pathological rows.
     const rows = await ctx.db
       .query("qcRemarks")
       .withIndex("by_survey", (q) => q.eq("surveyId", args.surveyId))
       .order("desc")
-      .collect()
+      .take(200)
 
     const authorIds = Array.from(new Set(rows.map((r) => r.authorId)))
     const authors = await Promise.all(authorIds.map((id) => ctx.db.get(id)))

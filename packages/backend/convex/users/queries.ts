@@ -1,5 +1,5 @@
 import { query } from "../_generated/server"
-import { userCapabilities } from "../shared/capabilities"
+import { permissionsForRole } from "../shared/capabilities"
 
 /** Current signed-in user's domain row, or null until provisioned. */
 export const currentUser = query({
@@ -15,31 +15,42 @@ export const currentUser = query({
 
     if (!user) return null
 
+    // Single role load serves both capabilities and display name (was duplicate indexed lookup).
+    const roleRow = await ctx.db
+      .query("roles")
+      .withIndex("by_key", (q) => q.eq("key", user.role))
+      .unique()
+
     let municipality: { code: string; name: string } | null = null
     let district: { code: string; name: string } | null = null
 
     if (user.districtId) {
-      const dist = await ctx.db.get(user.districtId)
+      const dist = await ctx.db.get("districts", user.districtId)
       if (dist) district = { code: dist.code, name: dist.name }
     }
     if (user.municipalityId) {
-      const muni = await ctx.db.get(user.municipalityId)
+      const muni = await ctx.db.get("municipalities", user.municipalityId)
       if (muni) {
         municipality = { code: muni.code, name: muni.name }
         if (!district) {
-          const dist = await ctx.db.get(muni.districtId)
+          const dist = await ctx.db.get("districts", muni.districtId)
           if (dist) district = { code: dist.code, name: dist.name }
         }
       }
     }
 
-    const [capabilities, roleRow] = await Promise.all([
-      userCapabilities(ctx, user),
-      ctx.db
-        .query("roles")
-        .withIndex("by_key", (q) => q.eq("key", user.role))
-        .unique(),
-    ])
+    // Reuse roleRow when present; permissionsForRole only hits DB again if role missing/inactive.
+    const capabilities =
+      roleRow && roleRow.isActive !== false
+        ? (
+            await ctx.db
+              .query("rolePermissions")
+              .withIndex("by_role", (q) => q.eq("roleId", roleRow._id))
+              .collect()
+          )
+            .map((r) => r.permissionKey)
+            .sort()
+        : Array.from(await permissionsForRole(ctx, user.role)).sort()
 
     return {
       ...user,

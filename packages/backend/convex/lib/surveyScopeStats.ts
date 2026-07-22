@@ -5,17 +5,16 @@ import { fieldSurveyAccess, type PrecomputedFieldContext } from "../shared/field
 import { canReadWard } from "../shared/helpers"
 import { resolveDashboardTenantScope, resolveTenantScope, tenantMunicipalityIds } from "../shared/tenancy"
 import {
+  getLegacyDailyStatsRow,
+  getLegacyMunicipalityStatsRow,
+  loadLegacyDailyStatsForDate,
+  loadLegacyMunicipalityStatsForMunicipalities,
+} from "./surveyAnalyticsLookups"
+import {
   recordSurveyAnalyticsInsert,
   recordSurveyAnalyticsRemove,
   recordSurveyAnalyticsUpdate,
 } from "./surveyAnalyticsWrites"
-import {
-  getLegacyDailyStatsRow,
-  getLegacyMunicipalityStatsRow,
-  loadAllLegacyMunicipalityStatsRows,
-  loadLegacyDailyStatsForDate,
-  loadLegacyDailyStatsInDateRange,
-} from "./surveyAnalyticsLookups"
 import {
   computeDailyTrendFromSlice,
   computeDashboardCountsFromSlice,
@@ -40,6 +39,18 @@ export const DASHBOARD_LIVE_FALLBACK_ULB_CAP = 3
  * Prefer one batched read over N point lookups when scoped ULB count exceeds this.
  */
 export const STATS_BATCH_SCOPE_THRESHOLD = 10
+
+/**
+ * Max ULBs for live survey / QC-decision fan-out on dashboard paths.
+ * Aligns with analyticsBundle QC budget — prevents admin scopes from saturating SQLite.
+ */
+export const DASHBOARD_FANOUT_ULB_CAP = 12
+
+/**
+ * Max QC decisions loaded per municipality for dashboard daily trend.
+ * Before: 800 × every ULB → SystemTimeout / 32k doc scan.
+ */
+const DASHBOARD_QC_TREND_DECISIONS_CAP = 200
 
 const MS_PER_DAY = 86_400_000
 
@@ -155,11 +166,14 @@ export async function loadBoundedScopedSurveyRows(
   const scopedMunis = await resolveDashboardMunicipalityIds(ctx, me)
   if (scopedMunis.length === 0) return []
 
+  // Cap ULB fan-out — prefer rollup paths; this is fallback for filtered charts only.
+  const targetMunis = scopedMunis.slice(0, DASHBOARD_FANOUT_ULB_CAP)
+
   // Before: sequential await per municipality (O(M) wall time).
   // After: parallel indexed takes; merge until maxRows.
-  const perMuniTake = Math.min(maxRows, Math.ceil(maxRows / Math.max(scopedMunis.length, 1)) + 20)
+  const perMuniTake = Math.min(maxRows, Math.ceil(maxRows / Math.max(targetMunis.length, 1)) + 20)
   const batches = await Promise.all(
-    scopedMunis.map((municipalityId) =>
+    targetMunis.map((municipalityId) =>
       ctx.db
         .query("surveys")
         .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId))
@@ -337,6 +351,30 @@ export async function loadDashboardCountsForHome(
 
   const wardScoped = userRequiresWardScopedSurveyCounts(me)
   const allowLiveFallback = mayUseLiveMunicipalityFallback(me, scopedMuniIds.length, wardScoped)
+
+  // Large scopes: batch municipality + today daily stats (avoid N×2 point lookups).
+  if (!wardScoped && scopedMuniIds.length > STATS_BATCH_SCOPE_THRESHOLD) {
+    const dateKey = formatDateKey(todayMs)
+    const [rollups, todayByMuni] = await Promise.all([
+      loadMunicipalityStatsRollupsResilient(ctx, me, scopedMuniIds, todayMs),
+      loadTodayCreatedByMunicipality(ctx, scopedMuniIds, dateKey),
+    ])
+    const parts = rollups.map((row) => {
+      const daily = todayByMuni.get(row.municipalityId)
+      return {
+        total: row.total,
+        today: daily?.created ?? 0,
+        drafts: row.drafts,
+        pending: row.qcPending,
+        submittedToday: daily?.submitted ?? 0,
+        approved: row.qcApproved,
+        submitted: row.submitted,
+        rejected: row.qcRejected,
+      } satisfies DashboardCountPart
+    })
+    return mergeDashboardCountParts(parts)
+  }
+
   const parts = await Promise.all(
     scopedMuniIds.map((municipalityId) =>
       loadMunicipalityDashboardCounts(ctx, me, municipalityId, todayMs, wardScoped, allowLiveFallback)
@@ -359,52 +397,58 @@ export function liveScopedStatsSlices(rows: Doc<"surveys">[]): SurveyStatsSlice[
   return rows.map(toStatsSlice)
 }
 
-/** Max QC decisions loaded per municipality for dashboard daily trend. */
-const DASHBOARD_QC_TREND_DECISIONS_CAP = 800
-
 /** QC approve/reject counts per day from decision records (no full survey scan). */
 async function loadDailyQcTrendFromDecisions(
   ctx: QueryCtx,
   me: Doc<"users">,
   days: number,
-  nowMs: number
+  nowMs: number,
+  precomputed?: PrecomputedFieldContext,
+  municipalityIds?: Id<"municipalities">[]
 ): Promise<Map<string, { approved: number; rejected: number }>> {
   const safeDays = Math.min(Math.max(days, 1), 180)
-  const scopedMunis = await resolveDashboardMunicipalityIds(ctx, me)
+  const scopedMunis = municipalityIds ?? (await resolveDashboardMunicipalityIds(ctx, me, precomputed))
   const { startMs, buckets } = istTrendBuckets(safeDays, nowMs, () => ({ approved: 0, rejected: 0 }))
 
   if (scopedMunis.length === 0) return buckets
 
-  await Promise.all(
-    scopedMunis.map(async (municipalityId) => {
-      const decisions = await ctx.db
-        .query("qcDecisions")
-        .withIndex("by_municipality_decided", (q) => q.eq("municipalityId", municipalityId).gte("decidedAt", startMs))
-        .take(DASHBOARD_QC_TREND_DECISIONS_CAP)
+  // Cap ULB fan-out so admin home cannot exceed syscall / document-scan budgets.
+  // Remaining ULBs omit QC series points (created/submitted still accurate from daily stats).
+  const targetMunis = scopedMunis.slice(0, DASHBOARD_FANOUT_ULB_CAP)
 
-      for (const decision of decisions) {
-        const bucket = buckets.get(formatDateKey(decision.decidedAt))
-        if (!bucket) continue
-        if (decision.decision === "approve") bucket.approved += 1
-        else if (decision.decision === "reject") bucket.rejected += 1
-      }
-    })
-  )
+  // Sequential per-ULB reads — parallel fan-out contended with daily-stats streams on SQLite.
+  for (const municipalityId of targetMunis) {
+    const decisions = await ctx.db
+      .query("qcDecisions")
+      .withIndex("by_municipality_decided", (q) => q.eq("municipalityId", municipalityId).gte("decidedAt", startMs))
+      .take(DASHBOARD_QC_TREND_DECISIONS_CAP)
+
+    for (const decision of decisions) {
+      const bucket = buckets.get(formatDateKey(decision.decidedAt))
+      if (!bucket) continue
+      if (decision.decision === "approve") bucket.approved += 1
+      else if (decision.decision === "reject") bucket.rejected += 1
+    }
+  }
 
   return buckets
 }
 
-/** Full daily trend: created/submitted from stats tables, QC from decision records. */
+/**
+ * Full daily trend: created/submitted from stats tables, QC from decision records.
+ *
+ * Runs base trend then QC sequentially (not Promise.all) to avoid SQLite stream contention.
+ */
 export async function loadDashboardDailyTrend(
   ctx: QueryCtx,
   me: Doc<"users">,
   days: number,
-  nowMs: number
+  nowMs: number,
+  precomputed?: PrecomputedFieldContext
 ): Promise<Array<{ date: string; created: number; submitted: number; approved: number; rejected: number }>> {
-  const [baseTrend, qcBuckets] = await Promise.all([
-    loadDailyTrendFromDailyStats(ctx, me, days, nowMs),
-    loadDailyQcTrendFromDecisions(ctx, me, days, nowMs),
-  ])
+  const municipalityIds = await resolveDashboardMunicipalityIds(ctx, me, precomputed)
+  const baseTrend = await loadDailyTrendFromDailyStats(ctx, me, days, nowMs, undefined, precomputed, municipalityIds)
+  const qcBuckets = await loadDailyQcTrendFromDecisions(ctx, me, days, nowMs, precomputed, municipalityIds)
 
   return baseTrend.map((point) => {
     const qc = qcBuckets.get(point.date)
@@ -416,15 +460,23 @@ export async function loadDashboardDailyTrend(
   })
 }
 
-/** Daily created/submitted trend from denormalized daily stats (full history, no row cap). */
+/**
+ * Daily created/submitted trend from denormalized daily stats.
+ *
+ * Before: large scopes ran Promise.all(days × take(2000) by_date) — concurrent queryStreamNext
+ * saturation and SystemTimeout. Small scopes paginated mixed-generation ranges in parallel.
+ * After: exact (municipalityId, dateKey) indexed point lookups, one day at a time.
+ */
 export async function loadDailyTrendFromDailyStats(
   ctx: QueryCtx,
   me: Doc<"users">,
   days: number,
   nowMs: number,
-  qcRows?: SurveyStatsSlice[]
+  qcRows?: SurveyStatsSlice[],
+  precomputed?: PrecomputedFieldContext,
+  municipalityIds?: Id<"municipalities">[]
 ): Promise<Array<{ date: string; created: number; submitted: number; approved: number; rejected: number }>> {
-  const scopedMunis = await resolveDashboardMunicipalityIds(ctx, me)
+  const scopedMunis = municipalityIds ?? (await resolveDashboardMunicipalityIds(ctx, me, precomputed))
   const safeDays = Math.min(Math.max(days, 1), 180)
   const { buckets } = istTrendBuckets(safeDays, nowMs, () => ({
     created: 0,
@@ -438,21 +490,26 @@ export async function loadDailyTrendFromDailyStats(
   }
 
   const dateKeys = [...buckets.keys()].sort()
-  const startKey = dateKeys[0]!
-  const endKey = dateKeys[dateKeys.length - 1]!
 
-  await Promise.all(
-    scopedMunis.map(async (municipalityId) => {
-      const rows = await loadLegacyDailyStatsInDateRange(ctx, municipalityId, startKey, endKey)
-
-      for (const row of rows) {
-        const bucket = buckets.get(row.dateKey)
-        if (!bucket) continue
+  // One day at a time: chunked parallel point lookups across ULBs (take(16) each).
+  // Eliminates 30× concurrent by_date take(2000) streams that caused queryStreamNext > 15s.
+  // Chunking controls SQLite concurrency — every scoped ULB is still read.
+  const POINT_LOOKUP_CHUNK = 20
+  for (const dateKey of dateKeys) {
+    const bucket = buckets.get(dateKey)
+    if (!bucket) continue
+    for (let i = 0; i < scopedMunis.length; i += POINT_LOOKUP_CHUNK) {
+      const chunk = scopedMunis.slice(i, i + POINT_LOOKUP_CHUNK)
+      const dailyRows = await Promise.all(
+        chunk.map((municipalityId) => getLegacyDailyStatsRow(ctx, municipalityId, dateKey))
+      )
+      for (const row of dailyRows) {
+        if (!row) continue
         bucket.created += row.created
         bucket.submitted += row.submitted
       }
-    })
-  )
+    }
+  }
 
   if (qcRows && qcRows.length > 0) {
     const qcTrend = computeDailyTrendFromSlice(qcRows, safeDays, nowMs)
@@ -634,9 +691,10 @@ async function loadMunicipalityStatsRollupsResilient(
   const todayStart = startOfDayMsFromKey(formatDateKey(todayMs))
   const scopedSet = new Set(scopedMuniIds)
 
-  // Large scopes: one paginated table read instead of N × take(16) point queries.
+  // Large scopes: indexed point lookups per scoped ULB (never full-table paginate).
+  // Before: loadAllLegacyMunicipalityStatsRows streamed every generation row → queryStreamNext timeouts.
   if (!wardScoped && scopedMuniIds.length > STATS_BATCH_SCOPE_THRESHOLD) {
-    const allRows = await loadAllLegacyMunicipalityStatsRows(ctx)
+    const allRows = await loadLegacyMunicipalityStatsForMunicipalities(ctx, scopedMuniIds)
     const byMuni = new Map<Id<"municipalities">, MunicipalityStatsRollup>()
     for (const row of allRows) {
       if (!scopedSet.has(row.municipalityId)) continue

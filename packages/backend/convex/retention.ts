@@ -63,7 +63,12 @@ export const purgeExpiredExportJobs = internalMutation({
   },
 })
 
-/** Delete one batch of old read notifications (unread are kept). */
+/**
+ * Delete one batch of old read notifications (unread are kept).
+ *
+ * Before: full-table paginate with no early exit → scanned every notification every sweep.
+ * After: creation-time ascending + stop once past retention cutoff (never touches recent rows).
+ */
 export const purgeOldReadNotifications = internalMutation({
   args: {
     cursor: v.optional(v.string()),
@@ -74,26 +79,37 @@ export const purgeOldReadNotifications = internalMutation({
   }),
   handler: async (ctx, args) => {
     const cutoff = Date.now() - READ_NOTIFICATION_RETENTION_MS
-    const page = await ctx.db.query("notifications").paginate({
-      cursor: args.cursor ?? null,
-      numItems: BATCH_SIZE,
-    })
+    const page = await ctx.db
+      .query("notifications")
+      .withIndex("by_creation_time")
+      .order("asc")
+      .paginate({
+        cursor: args.cursor ?? null,
+        numItems: BATCH_SIZE,
+      })
 
     let deleted = 0
+    let hitRetentionHorizon = false
+
     for (const row of page.page) {
+      // Ascending by creation: once we reach recent rows, nothing older remains.
+      if (row._creationTime >= cutoff) {
+        hitRetentionHorizon = true
+        break
+      }
       if (row.readAt === undefined) continue
-      if (row._creationTime >= cutoff) continue
       await ctx.db.delete(row._id)
       deleted += 1
     }
 
-    if (!page.isDone) {
+    const done = page.isDone || hitRetentionHorizon
+    if (!done) {
       await ctx.scheduler.runAfter(0, internal.retention.purgeOldReadNotifications, {
         cursor: page.continueCursor,
       })
     }
 
-    return { deleted, done: page.isDone }
+    return { deleted, done }
   },
 })
 
