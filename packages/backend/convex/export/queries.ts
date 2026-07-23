@@ -255,37 +255,23 @@ export const listExportIds = query({
     const statsTotal = await resolveExportTotal(ctx, me, listArgs)
 
     if (listPaginatedUsesIndexedCursor(listArgs) && args.municipalityId) {
-      // Fill a full ID page even when ACL / secondary filters thin some rows.
-      const surveyIds: Id<"surveys">[] = []
-      let cursor = args.paginationOpts?.cursor ?? null
-      let isDone = false
-      let fillGuard = 0
-      while (surveyIds.length < numItems && !isDone && fillGuard < 30) {
-        fillGuard += 1
-        const indexed = await paginateMunicipalitySurveys(ctx, {
-          municipalityId: args.municipalityId,
-          status: listArgs.status,
-          qcStatus: listArgs.qcStatus,
-          wardNo: listArgs.wardNo,
-          paginationOpts: {
-            numItems: Math.max(numItems - surveyIds.length, 1),
-            cursor,
-          },
-        })
-        const filtered = applySurveyListFilters(indexed.page, listArgs, me, muniIds)
-        for (const row of filtered) {
-          surveyIds.push(row._id)
-          if (surveyIds.length >= numItems) break
-        }
-        cursor = indexed.continueCursor
-        isDone = indexed.isDone
-        if (indexed.page.length === 0) break
-      }
+      // Single .paginate() per query — client loops listExportIds until isDone.
+      const indexed = await paginateMunicipalitySurveys(ctx, {
+        municipalityId: args.municipalityId,
+        status: listArgs.status,
+        qcStatus: listArgs.qcStatus,
+        wardNo: listArgs.wardNo,
+        paginationOpts: {
+          numItems,
+          cursor: args.paginationOpts?.cursor ?? null,
+        },
+      })
+      const filtered = applySurveyListFilters(indexed.page, listArgs, me, muniIds)
       return {
-        surveyIds,
-        continueCursor: isDone ? null : cursor,
-        isDone,
-        total: statsTotal ?? surveyIds.length,
+        surveyIds: filtered.map((r) => r._id),
+        continueCursor: indexed.continueCursor,
+        isDone: indexed.isDone,
+        total: statsTotal ?? filtered.length,
         truncated: false,
       }
     }

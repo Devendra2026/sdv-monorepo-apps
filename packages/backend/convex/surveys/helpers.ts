@@ -771,6 +771,8 @@ function encodeWardIndexedCursor(state: WardIndexedCursor): string {
 function decodeWardIndexedCursor(cursor: string | null | undefined): WardIndexedCursor {
   if (!cursor) return { w: 0, c: null }
   if (!cursor.startsWith(INDEXED_LIST_CURSOR_PREFIX)) {
+    // Legacy offset cursors ("20") are not valid Convex paginate cursors.
+    if (/^\d+$/.test(cursor)) return { w: 0, c: null }
     return { w: 0, c: cursor }
   }
   try {
@@ -784,6 +786,14 @@ function decodeWardIndexedCursor(cursor: string | null | undefined): WardIndexed
   } catch {
     return { w: 0, c: null }
   }
+}
+
+/** Drop legacy numeric offsets / ward-encoded cursors that are invalid for plain Convex paginate. */
+export function sanitizeConvexPaginateCursor(cursor: string | null | undefined): string | null {
+  if (!cursor) return null
+  if (cursor.startsWith(INDEXED_LIST_CURSOR_PREFIX)) return null
+  if (/^\d+$/.test(cursor)) return null
+  return cursor
 }
 
 async function paginateWardVariant(
@@ -811,7 +821,8 @@ async function paginateWardVariant(
 
 /**
  * Index-backed Convex cursor pagination for a single municipality (optional ward).
- * Walks ward spelling variants when `wardNo` is set so pages cover the full ward set.
+ * At most ONE `.paginate()` call per invocation (Convex rule).
+ * Ward spelling variants advance via encoded cursors across separate requests.
  */
 export async function paginateMunicipalitySurveys(
   ctx: QueryCtx,
@@ -828,44 +839,42 @@ export async function paginateMunicipalitySurveys(
 
   if (args.wardNo) {
     const variants = wardNoSpellingVariants(args.wardNo)
-    let { w, c } = decodeWardIndexedCursor(rawCursor)
+    const { w, c } = decodeWardIndexedCursor(rawCursor)
     if (w >= variants.length) {
       return { page: [], continueCursor: null, isDone: true }
     }
 
-    const collected: Doc<"surveys">[] = []
-    const seen = new Set<string>()
-    while (w < variants.length && collected.length < numItems) {
-      const need = numItems - collected.length
-      const variant = variants[w]!
-      const result = await paginateWardVariant(ctx, args.municipalityId, variant, args.status, {
-        numItems: need,
-        cursor: c,
-      })
-      for (const row of result.page) {
-        if (seen.has(row._id)) continue
-        seen.add(row._id)
-        collected.push(row)
-        if (collected.length >= numItems) break
+    const variant = variants[w]!
+    const result = await paginateWardVariant(ctx, args.municipalityId, variant, args.status, {
+      numItems,
+      cursor: c,
+    })
+
+    if (!result.isDone) {
+      return {
+        page: result.page,
+        continueCursor: encodeWardIndexedCursor({ w, c: result.continueCursor }),
+        isDone: false,
       }
-      if (!result.isDone) {
-        return {
-          page: collected,
-          continueCursor: encodeWardIndexedCursor({ w, c: result.continueCursor }),
-          isDone: false,
-        }
+    }
+
+    // This spelling is exhausted — hand the client the next variant (no second paginate here).
+    const nextW = w + 1
+    if (nextW >= variants.length) {
+      return {
+        page: result.page,
+        continueCursor: null,
+        isDone: true,
       }
-      w += 1
-      c = null
     }
     return {
-      page: collected,
-      continueCursor: w < variants.length ? encodeWardIndexedCursor({ w, c: null }) : null,
-      isDone: w >= variants.length,
+      page: result.page,
+      continueCursor: encodeWardIndexedCursor({ w: nextW, c: null }),
+      isDone: false,
     }
   }
 
-  const cursor = rawCursor?.startsWith(INDEXED_LIST_CURSOR_PREFIX) ? null : rawCursor
+  const cursor = sanitizeConvexPaginateCursor(rawCursor)
 
   if (args.qcStatus) {
     const result = await ctx.db
