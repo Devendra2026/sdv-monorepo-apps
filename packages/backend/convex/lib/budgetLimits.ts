@@ -6,8 +6,16 @@
 /** Excel export: max survey IDs enriched per getExportBundlesByIds call. */
 export const MAX_EXPORT_PAGE_SIZE = 40
 export const DEFAULT_EXPORT_PAGE_SIZE = 30
-/** Max surveys scanned for listExportIds / listForExport scope. */
-export const EXPORT_SCOPE_LIMIT = 1500
+/**
+ * Max surveys scanned for listExportIds scope.
+ * Before: 1500 — multi-MB isolate spikes under concurrent export + dashboard.
+ * After: 800 — still useful exports; clients should narrow filters for larger scopes.
+ */
+export const EXPORT_SCOPE_LIMIT = 800
+/** Max concurrent survey enrichments (floors/photos/storage URLs) per export page. */
+export const EXPORT_ENRICH_CONCURRENCY = 8
+/** Max concurrent notice photo URL resolutions. */
+export const NOTICE_PHOTO_URL_CONCURRENCY = 8
 
 /** Demand-notice bulk PDF: max surveys stored on one job document. */
 export const MAX_DEMAND_NOTICE_JOB_SURVEYS = 200

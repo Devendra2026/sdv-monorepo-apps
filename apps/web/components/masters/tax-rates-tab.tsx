@@ -3,7 +3,7 @@
 import { GlassCard, GlassCardHeader } from "@/components/design-system/glass-card"
 import type { WardInfo } from "@/components/masters/tax-rates-types"
 import { UlbRateEditor } from "@/components/masters/ulb-rate-editor"
-import { useTenantAdmin, type TenantAdminTree } from "@/hooks/tenants/useTenants"
+import { useTenantAdmin, useWardsForMunicipality, type TenantAdminTree } from "@/hooks/tenants/useTenants"
 import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
 
 import { api } from "@workspace/backend/convex/_generated/api.js"
@@ -51,14 +51,15 @@ export function TaxRatesTab({ tenants: tenantsProp }: { tenants?: TenantAdminTre
   }, [selectedDistrict, selectedMuniId])
 
   const selectedUlb = ulbs.find((u) => u._id === activeMuniId)
+  const lazyWards = useWardsForMunicipality(activeMuniId ? (activeMuniId as Id<"municipalities">) : undefined)
   const wards: WardInfo[] = useMemo(
     () =>
-      (selectedUlb?.wards ?? []).map((w) => ({
+      (lazyWards ?? selectedUlb?.wards ?? []).map((w) => ({
         wardNo: w.wardNo,
         name: w.name,
         wardCode: w.wardCode,
       })),
-    [selectedUlb]
+    [lazyWards, selectedUlb]
   )
 
   function handleDistrictChange(id: string) {

@@ -1,9 +1,9 @@
-"use client";
+"use client"
 
-import { ExecutiveHero, SectionHeader } from "@/components/design-system/executive-hero";
-import { MetricCard } from "@/components/design-system/metric-card";
-import { FadeIn, StaggerGrid, StaggerItem } from "@/components/design-system/motion";
-import { Building2, Database, Layers, MapPin } from "lucide-react";
+import { ExecutiveHero, SectionHeader } from "@/components/design-system/executive-hero"
+import { MetricCard } from "@/components/design-system/metric-card"
+import { FadeIn, StaggerGrid, StaggerItem } from "@/components/design-system/motion"
+import { Building2, Database, Layers, MapPin } from "lucide-react"
 
 export function MastersHero() {
   return (
@@ -16,7 +16,7 @@ export function MastersHero() {
         gradient="brand"
       />
     </FadeIn>
-  );
+  )
 }
 
 export function MastersMetricsSection({
@@ -24,9 +24,9 @@ export function MastersMetricsSection({
   categories,
   tenantStats,
 }: {
-  activeTab: "masters" | "tenants" | "tax-rates";
-  categories: number;
-  tenantStats: { districts: number; ulbs: number; wards: number } | null;
+  activeTab: "masters" | "tenants" | "tax-rates"
+  categories: number
+  tenantStats: { districts: number; ulbs: number; wards: number } | null
 }) {
   const metrics =
     activeTab === "masters"
@@ -55,7 +55,7 @@ export function MastersMetricsSection({
           {
             label: "ULBs",
             value: tenantStats?.ulbs ?? "—",
-            hint: `${tenantStats?.wards ?? "—"} wards total`,
+            hint: "Wards load per ULB on demand",
             icon: Building2,
             tone: "ai" as const,
           },
@@ -77,8 +77,8 @@ export function MastersMetricsSection({
           },
           {
             label: "Wards",
-            value: tenantStats?.wards ?? "—",
-            hint: "Lowest assignment unit",
+            value: tenantStats && tenantStats.wards > 0 ? tenantStats.wards : "On demand",
+            hint: "Loaded when a ULB is expanded",
             icon: Layers,
             tone: "warning" as const,
           },
@@ -89,7 +89,7 @@ export function MastersMetricsSection({
             icon: Database,
             tone: "muted" as const,
           },
-        ];
+        ]
 
   return (
     <section aria-labelledby="masters-kpi-heading">
@@ -107,5 +107,5 @@ export function MastersMetricsSection({
         ))}
       </StaggerGrid>
     </section>
-  );
+  )
 }

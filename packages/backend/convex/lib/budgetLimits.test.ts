@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_EXPORT_PAGE_SIZE,
   DRAFT_LIST_CAP_PER_MUNICIPALITY,
+  EXPORT_SCOPE_LIMIT,
   MAX_DEMAND_NOTICE_JOB_SURVEYS,
   MAX_DEMAND_NOTICE_PAYLOAD_PAGE,
   MAX_EXPORT_PAGE_SIZE,
@@ -30,5 +31,9 @@ describe("budgetLimits", () => {
   it("keeps import mutation budgets bounded", () => {
     expect(MAX_IMPORT_SURVEYS).toBeLessThanOrEqual(40);
     expect(MAX_IMPORT_FLOORS).toBeLessThanOrEqual(200);
+  });
+
+  it("caps Excel export scope below the former 1500 full-doc materialization budget", () => {
+    expect(EXPORT_SCOPE_LIMIT).toBeLessThanOrEqual(800);
   });
 });

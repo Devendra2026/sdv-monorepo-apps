@@ -11,6 +11,8 @@
  */
 import { v } from "convex/values"
 import { query } from "../_generated/server"
+import { MAX_DEMAND_NOTICE_PAYLOAD_PAGE, NOTICE_PHOTO_URL_CONCURRENCY } from "../lib/budgetLimits"
+import { mapPool } from "../lib/mapPool"
 import { assertCanAccessSurvey } from "../shared/fieldAccess"
 import { clientError, requireUser } from "../shared/helpers"
 
@@ -53,7 +55,7 @@ export const resolveStorageUrls = query({
   },
 })
 
-/** Front + side photo URLs for demand notice export (batch, max 200 ids per call). */
+/** Front + side photo URLs for demand notice export (batch, page-sized). */
 export const noticePhotoUrls = query({
   args: { surveyIds: v.array(v.id("surveys")) },
   returns: v.record(
@@ -67,37 +69,42 @@ export const noticePhotoUrls = query({
     const me = await requireUser(ctx)
     if (me.role === "pending") return {}
 
-    const ids = args.surveyIds.slice(0, 200)
-    const entries = await Promise.all(
-      ids.map(async (surveyId) => {
-        const survey = await ctx.db.get(surveyId)
-        if (!survey) {
-          return [surveyId, { front: null, side: null }] as const
-        }
-        try {
-          await assertCanAccessSurvey(ctx, me, survey)
-        } catch {
-          return [surveyId, { front: null, side: null }] as const
-        }
+    if (args.surveyIds.length > MAX_DEMAND_NOTICE_PAYLOAD_PAGE) {
+      clientError(
+        "VALIDATION",
+        `Notice photo URLs are limited to ${MAX_DEMAND_NOTICE_PAYLOAD_PAGE} surveys per request`
+      )
+    }
 
-        const [front, side] = await Promise.all(
-          (["front", "side"] as const).map((slot) =>
-            ctx.db
-              .query("photos")
-              .withIndex("by_survey_slot", (q) => q.eq("surveyId", surveyId).eq("slot", slot))
-              .unique()
-          )
+    const ids = args.surveyIds
+    const entries = await mapPool(ids, NOTICE_PHOTO_URL_CONCURRENCY, async (surveyId) => {
+      const survey = await ctx.db.get(surveyId)
+      if (!survey) {
+        return [surveyId, { front: null, side: null }] as const
+      }
+      try {
+        await assertCanAccessSurvey(ctx, me, survey)
+      } catch {
+        return [surveyId, { front: null, side: null }] as const
+      }
+
+      const [front, side] = await Promise.all(
+        (["front", "side"] as const).map((slot) =>
+          ctx.db
+            .query("photos")
+            .withIndex("by_survey_slot", (q) => q.eq("surveyId", surveyId).eq("slot", slot))
+            .unique()
         )
+      )
 
-        return [
-          surveyId,
-          {
-            front: front ? await ctx.storage.getUrl(front.storageId) : null,
-            side: side ? await ctx.storage.getUrl(side.storageId) : null,
-          },
-        ] as const
-      })
-    )
+      return [
+        surveyId,
+        {
+          front: front ? await ctx.storage.getUrl(front.storageId) : null,
+          side: side ? await ctx.storage.getUrl(side.storageId) : null,
+        },
+      ] as const
+    })
 
     return Object.fromEntries(entries)
   },

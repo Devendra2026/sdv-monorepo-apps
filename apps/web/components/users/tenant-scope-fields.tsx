@@ -1,15 +1,17 @@
-"use client";
+"use client"
 
-import { Input } from "@workspace/ui/components/input";
-import { Label } from "@workspace/ui/components/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select";
-import { useTenantCatalog } from "@/hooks/users/useUsers";
-import type { TenantScopeValue } from "@/lib/users/tenant-scope";
-import { cn } from "@workspace/ui/lib/utils";
-import { Building2, Check, MapPin, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useWardsForMunicipality } from "@/hooks/tenants/useTenants"
+import { useTenantCatalog } from "@/hooks/users/useUsers"
+import type { TenantScopeValue } from "@/lib/users/tenant-scope"
+import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
+import { Input } from "@workspace/ui/components/input"
+import { Label } from "@workspace/ui/components/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select"
+import { cn } from "@workspace/ui/lib/utils"
+import { Building2, Check, MapPin, Search } from "lucide-react"
+import { useMemo, useState } from "react"
 
-type Ward = { _id: string; wardNo: string };
+type Ward = { _id: string; wardNo: string }
 
 const SCOPE_TYPE_OPTIONS = [
   {
@@ -28,20 +30,20 @@ const SCOPE_TYPE_OPTIONS = [
     accent: "border-teal-500/40 bg-teal-50/80 dark:bg-teal-500/10",
     iconClass: "text-teal-600 dark:text-teal-400",
   },
-] as const;
+] as const
 
 function ScopeTypePicker({
   value,
   onChange,
 }: {
-  value: "ulb" | "district";
-  onChange: (scope: "ulb" | "district") => void;
+  value: "ulb" | "district"
+  onChange: (scope: "ulb" | "district") => void
 }) {
   return (
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Tenant scope type">
       {SCOPE_TYPE_OPTIONS.map((opt) => {
-        const selected = value === opt.id;
-        const Icon = opt.icon;
+        const selected = value === opt.id
+        const Icon = opt.icon
         return (
           <button
             key={opt.id}
@@ -52,14 +54,14 @@ function ScopeTypePicker({
             className={cn(
               "group relative flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 text-left transition-all duration-200",
               selected
-                ? cn("ring-2 ring-primary/25 shadow-premium-sm", opt.accent)
-                : "border-border/70 bg-muted/20 hover:border-primary/30 hover:bg-muted/40",
+                ? cn("shadow-premium-sm ring-2 ring-primary/25", opt.accent)
+                : "border-border/70 bg-muted/20 hover:border-primary/30 hover:bg-muted/40"
             )}
           >
             <div
               className={cn(
                 "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background/80 ring-1 ring-border/60",
-                opt.iconClass,
+                opt.iconClass
               )}
             >
               <Icon className="h-4 w-4" aria-hidden />
@@ -69,15 +71,15 @@ function ScopeTypePicker({
               <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{opt.description}</p>
             </div>
             {selected && (
-              <span className="absolute right-2.5 top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+              <span className="absolute top-2.5 right-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
                 <Check className="h-3 w-3" aria-hidden />
               </span>
             )}
           </button>
-        );
+        )
       })}
     </div>
-  );
+  )
 }
 
 function WardPicker({
@@ -86,36 +88,36 @@ function WardPicker({
   onChange,
   hint,
 }: {
-  wards: Ward[];
-  selected: string[];
-  onChange: (v: string[]) => void;
-  hint?: string;
+  wards: Ward[]
+  selected: string[]
+  onChange: (v: string[]) => void
+  hint?: string
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState("")
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return wards;
-    return wards.filter((w) => w.wardNo.toLowerCase().includes(q) || `ward ${w.wardNo}`.includes(q));
-  }, [wards, query]);
+    const q = query.trim().toLowerCase()
+    if (!q) return wards
+    return wards.filter((w) => w.wardNo.toLowerCase().includes(q) || `ward ${w.wardNo}`.includes(q))
+  }, [wards, query])
 
-  if (wards.length === 0) return null;
+  if (wards.length === 0) return null
 
-  const allSelected = selected.length === 0;
-  const partial = selected.length > 0;
+  const allSelected = selected.length === 0
+  const partial = selected.length > 0
 
   function toggle(wardNo: string) {
-    onChange(selected.includes(wardNo) ? selected.filter((x) => x !== wardNo) : [...selected, wardNo]);
+    onChange(selected.includes(wardNo) ? selected.filter((x) => x !== wardNo) : [...selected, wardNo])
   }
 
   function selectAll() {
-    onChange([]);
+    onChange([])
   }
 
   function selectFiltered() {
-    const nums = filtered.map((w) => w.wardNo);
-    const merged = new Set([...selected, ...nums]);
-    onChange([...merged]);
+    const nums = filtered.map((w) => w.wardNo)
+    const merged = new Set([...selected, ...nums])
+    onChange([...merged])
   }
 
   return (
@@ -175,8 +177,8 @@ function WardPicker({
 
       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-5">
         {filtered.map((w) => {
-          const on = partial ? selected.includes(w.wardNo) : false;
-          const implicitAll = !partial;
+          const on = partial ? selected.includes(w.wardNo) : false
+          const implicitAll = !partial
           return (
             <button
               key={w._id}
@@ -186,13 +188,13 @@ function WardPicker({
                 "flex min-h-9 cursor-pointer items-center justify-center rounded-lg border px-1 text-[11px] font-medium transition-all duration-150",
                 implicitAll || on
                   ? "border-primary/50 bg-primary/10 text-primary shadow-sm"
-                  : "border-border/70 bg-background text-muted-foreground hover:border-primary/35 hover:text-foreground",
+                  : "border-border/70 bg-background text-muted-foreground hover:border-primary/35 hover:text-foreground"
               )}
               aria-pressed={implicitAll || on}
             >
               {w.wardNo.padStart(2, "0")}
             </button>
-          );
+          )
         })}
       </div>
 
@@ -207,7 +209,7 @@ function WardPicker({
             : "Only selected wards will be visible for this user.")}
       </p>
     </div>
-  );
+  )
 }
 
 export function TenantScopeFields({
@@ -216,16 +218,26 @@ export function TenantScopeFields({
   showWards = true,
   wardHint,
 }: {
-  value: TenantScopeValue;
-  onChange: (patch: Partial<TenantScopeValue>) => void;
-  showWards?: boolean;
-  wardHint?: string;
+  value: TenantScopeValue
+  onChange: (patch: Partial<TenantScopeValue>) => void
+  showWards?: boolean
+  wardHint?: string
 }) {
-  const catalog = useTenantCatalog();
-  const district = catalog?.find((d) => d._id === value.districtId);
-  const ulbs = district?.ulbs ?? [];
-  const selectedMuni = ulbs.find((m) => m._id === value.municipalityId);
-  const wardsForMuni = selectedMuni?.wards ?? [];
+  const catalog = useTenantCatalog()
+  const district = catalog?.find((d) => d._id === value.districtId)
+  const ulbs = district?.ulbs ?? []
+  const selectedMuni = ulbs.find((m) => m._id === value.municipalityId)
+  const lazyWards = useWardsForMunicipality(
+    value.municipalityId ? (value.municipalityId as Id<"municipalities">) : undefined
+  )
+  const wardsForMuni: Ward[] = useMemo(
+    () =>
+      (lazyWards ?? selectedMuni?.wards ?? []).map((w) => ({
+        _id: w._id,
+        wardNo: w.wardNo,
+      })),
+    [lazyWards, selectedMuni]
+  )
 
   return (
     <div className="space-y-4">
@@ -236,7 +248,7 @@ export function TenantScopeFields({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">District</Label>
+          <Label className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">District</Label>
           <Select
             value={value.districtId}
             onValueChange={(v) =>
@@ -262,7 +274,7 @@ export function TenantScopeFields({
 
         {value.scope === "ulb" && (
           <div className="space-y-1.5">
-            <Label className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">ULB</Label>
+            <Label className="text-[10px] font-bold tracking-wide text-muted-foreground uppercase">ULB</Label>
             <Select value={value.municipalityId} onValueChange={(v) => onChange({ municipalityId: v, wards: [] })}>
               <SelectTrigger className="h-10 w-full cursor-pointer rounded-xl bg-background/80 text-xs">
                 <SelectValue placeholder="Select ULB…" />
@@ -307,5 +319,5 @@ export function TenantScopeFields({
         />
       )}
     </div>
-  );
+  )
 }

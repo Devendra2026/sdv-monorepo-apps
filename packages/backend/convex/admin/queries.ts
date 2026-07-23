@@ -89,7 +89,8 @@ async function paginateUsersForCaller(
   } else if (args.role) {
     q = ctx.db.query("users").withIndex("by_role_status", (qb) => qb.eq("role", args.role!))
   } else {
-    q = ctx.db.query("users")
+    // Indexed by creation time — never bare query("users") full-table scan.
+    q = ctx.db.query("users").withIndex("by_creation_time")
   }
 
   if (me.role === "admin") {

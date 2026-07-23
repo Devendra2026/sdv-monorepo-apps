@@ -94,12 +94,14 @@ export function SurveyExcelActions({
         return
       }
 
-      const allBundles = []
+      const { appendSurveyExportBundles, createSurveyExcelExportAccumulator, finalizeSurveyExcelExport } =
+        await import("@/lib/survey/survey-excel")
+      const acc = createSurveyExcelExportAccumulator()
       for (let i = 0; i < surveyIds.length; i += EXPORT_BUNDLE_PAGE_SIZE) {
         const chunk = surveyIds.slice(i, i + EXPORT_BUNDLE_PAGE_SIZE)
         const page = await fetchExportBundlesWithRetry(convex, chunk, EXPORT_INCLUDE_PHOTO_URLS)
-        allBundles.push(...page.bundles)
-        toast.loading(`Loading ${allBundles.length.toLocaleString()} / ${total.toLocaleString()}…`, {
+        appendSurveyExportBundles(acc, page.bundles as Parameters<typeof appendSurveyExportBundles>[1])
+        toast.loading(`Loading ${acc.surveys.length.toLocaleString()} / ${total.toLocaleString()}…`, {
           id: progress,
         })
         if (i + EXPORT_BUNDLE_PAGE_SIZE < surveyIds.length) {
@@ -107,8 +109,7 @@ export function SurveyExcelActions({
         }
       }
 
-      const { exportSurveysFullExcel } = await import("@/lib/survey/survey-excel")
-      exportSurveysFullExcel(allBundles as Parameters<typeof exportSurveysFullExcel>[0])
+      finalizeSurveyExcelExport(acc)
       toast.success(`Exported ${total} survey(s) to Excel`, { id: progress })
     } catch (e) {
       toast.error(parseConvexError(e).message, { id: progress })

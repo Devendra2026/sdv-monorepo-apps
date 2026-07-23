@@ -6,6 +6,19 @@ import { requireCapability } from "../shared/capabilities"
 import { clientError, requireUser, writeAudit } from "../shared/helpers"
 import { rateMatrixValidator } from "./helpers"
 
+/** Soft cap — large ULBs with huge wardRates matrices inflate taxRates docs and listAll payloads. */
+const MAX_WARD_RATES_PER_ULB = 200
+
+function assertWardRatesBudget(wardRates: Record<string, unknown>) {
+  const wardCount = Object.keys(wardRates).length
+  if (wardCount > MAX_WARD_RATES_PER_ULB) {
+    clientError(
+      "VALIDATION",
+      `Tax rate configs are limited to ${MAX_WARD_RATES_PER_ULB} wards per ULB (got ${wardCount})`
+    )
+  }
+}
+
 /** Admin: save one ward's rate matrix (merges into existing ULB config). */
 export const saveWard = mutation({
   args: {
@@ -37,6 +50,7 @@ export const saveWard = mutation({
 
     const normalized = existing ? normalizeStoredTaxRates(existing) : null
     const wardRates = { ...(normalized?.wardRates ?? {}), [args.wardNo.trim()]: args.wardRateMatrix }
+    assertWardRatesBudget(wardRates)
 
     const payload = {
       municipalityId: args.municipalityId,
@@ -97,6 +111,8 @@ export const upsert = mutation({
       clientError("BAD_REQUEST", "Property tax must be 0–1 (e.g. 0.10 = 10%)")
     if (args.waterTaxPct < 0 || args.waterTaxPct > 1) clientError("BAD_REQUEST", "Water tax must be 0–1")
     if (args.drainageTaxPct < 0 || args.drainageTaxPct > 1) clientError("BAD_REQUEST", "Drainage tax must be 0–1")
+
+    assertWardRatesBudget(args.wardRates)
 
     const existing = await ctx.db
       .query("taxRates")

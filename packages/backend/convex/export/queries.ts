@@ -239,9 +239,8 @@ export const getExportBundlesByIds = query({
   },
 })
 
-/** Same filters as survey.list; paginate with offset/pageSize to stay under read limits.
- * Legacy path — prefer listExportIds + getExportBundlesByIds (avoids full-scope rescan per page).
- * Photo URLs default off; pass includePhotoUrls via getExportBundlesByIds when needed.
+/** Legacy path removed — rescanned full export scope on every page (OOM risk).
+ * Use listExportIds + getExportBundlesByIds instead.
  */
 export const listForExport = query({
   args: {
@@ -255,23 +254,7 @@ export const listForExport = query({
     total: v.number(),
     nextOffset: v.union(v.number(), v.null()),
   }),
-  handler: async (ctx, args) => {
-    const { me, access } = await requireExportCaller(ctx)
-    const offset = Math.max(args.offset ?? 0, 0)
-    const pageSize = Math.min(Math.max(args.pageSize ?? DEFAULT_EXPORT_PAGE_SIZE, 1), MAX_EXPORT_PAGE_SIZE)
-
-    const rows = await collectSortedExportSurveys(ctx, me, access, args)
-    const total = rows.length
-    const page = rows.slice(offset, offset + pageSize)
-    const codes = await loadMunicipalityCodes(
-      ctx,
-      page.map((r) => r.municipalityId)
-    )
-    const bundles = await enrichSurveysForExport(ctx, page, codes, {
-      includePhotoUrls: args.includePhotoUrls === true,
-    })
-    const nextOffset = offset + pageSize < total ? offset + pageSize : null
-
-    return { bundles, total, nextOffset }
+  handler: async () => {
+    clientError("VALIDATION", "listForExport is disabled — use listExportIds then getExportBundlesByIds in chunks")
   },
 })

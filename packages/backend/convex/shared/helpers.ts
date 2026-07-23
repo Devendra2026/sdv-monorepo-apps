@@ -168,6 +168,24 @@ interface AuditWriteInput {
   metadata?: unknown
 }
 
+/** Soft cap on audit metadata JSON — prevents multi-MB snapshots from bloating auditLogs. */
+const MAX_AUDIT_METADATA_CHARS = 12_000
+
+function clampAuditMetadata(metadata: unknown): unknown {
+  if (metadata === undefined) return undefined
+  try {
+    const encoded = JSON.stringify(metadata)
+    if (encoded.length <= MAX_AUDIT_METADATA_CHARS) return metadata
+    return {
+      _truncated: true,
+      _originalChars: encoded.length,
+      preview: encoded.slice(0, MAX_AUDIT_METADATA_CHARS),
+    }
+  } catch {
+    return { _truncated: true, _error: "metadata_not_serializable" }
+  }
+}
+
 export async function writeAudit(ctx: MutationCtx, input: AuditWriteInput): Promise<void> {
   let metadata: unknown = input.metadata
 
@@ -186,7 +204,7 @@ export async function writeAudit(ctx: MutationCtx, input: AuditWriteInput): Prom
     action: input.action,
     entity: input.entity,
     entityId: input.entityId,
-    metadata,
+    metadata: clampAuditMetadata(metadata),
   })
 }
 

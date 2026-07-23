@@ -82,7 +82,13 @@ describe("tenants.queries.listForAdmin", () => {
 
     expect(tree.map((d) => d.name)).toEqual(["Alpha", "Beta"])
     expect(tree[0]!.ulbs.map((u) => u.name)).toEqual(["Alpha ULB", "Zeta ULB"])
-    expect(tree[0]!.ulbs[0]!.wards.map((w) => w.wardNo)).toEqual(["2", "10"])
+    // Wards are lazy-loaded — tree ships empty ward arrays.
+    expect(tree[0]!.ulbs[0]!.wards).toEqual([])
+
+    const wards = await asAdmin.query(api.tenants.queries.wardsForMunicipality, {
+      municipalityId: tree[0]!.ulbs[0]!._id,
+    })
+    expect(wards.map((w) => w.wardNo)).toEqual(["2", "10"])
     for (const d of tree) {
       for (const u of d.ulbs) {
         expect(u).not.toHaveProperty("executiveSignatureStorageId")

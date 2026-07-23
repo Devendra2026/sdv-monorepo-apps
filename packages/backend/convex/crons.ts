@@ -24,6 +24,12 @@
  * Ops: prefer volume backup for full DR including _storage; prune platform export
  * blobs with scripts/prune-convex-platform-exports.sh (dry-run by default). Do not
  * stack storage-inclusive exports under low disk.
+ *
+ * Memory (self-hosted / 8GB hosts):
+ *   - Leave OS headroom — target Convex backend RSS well below 3.5GB under load
+ *   - Size Docker memory limits so the OOM killer prefers soft cgroup limits first
+ *   - Tune Postgres shared_buffers / work_mem for large sorts; watch slow queries (>2s)
+ *   - Avoid concurrent Excel export + analytics dashboard on the same host at peak
  */
 import { cronJobs } from "convex/server"
 import { internal } from "./_generated/api"

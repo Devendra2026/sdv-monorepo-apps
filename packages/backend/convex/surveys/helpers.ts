@@ -675,6 +675,12 @@ export const LIST_PAGINATED_PAGE_BUFFER = 100
  */
 export const COMMAND_CENTER_WARD_SCAN_LIMIT = 800
 
+/**
+ * Max municipalities for parallel survey fan-out in list/export collect paths.
+ * Aligns with dashboard analytics fan-out — prevents admin scopes from saturating Postgres.
+ */
+export const LIST_FANOUT_ULB_CAP = 12
+
 export type SurveyListFilterArgs = {
   status?: Doc<"surveys">["status"]
   qcStatus?: Doc<"surveys">["qcStatus"]
@@ -798,9 +804,10 @@ export async function collectSurveysForListPaginated(
             ? [me.municipalityId]
             : [...muniIds]
       if (scopedMunis.length > 0) {
-        const perMuniCap = Math.max(50, Math.ceil(maxRows / scopedMunis.length))
+        const targetMunis = scopedMunis.slice(0, LIST_FANOUT_ULB_CAP)
+        const perMuniCap = Math.max(50, Math.ceil(maxRows / targetMunis.length))
         const batches = await Promise.all(
-          scopedMunis.map((municipalityId) =>
+          targetMunis.map((municipalityId) =>
             ctx.db
               .query("surveys")
               .withIndex("by_municipality_qc_status", (q) =>
@@ -818,10 +825,8 @@ export async function collectSurveysForListPaginated(
           }
         }
       } else {
-        rows = await ctx.db
-          .query("surveys")
-          .withIndex("by_qc_status", (q) => q.eq("qcStatus", args.qcStatus!))
-          .take(maxRows)
+        // Never scan global by_qc_status — require municipality/district scope.
+        rows = []
       }
     }
   } else if (access === "own") {
@@ -877,7 +882,7 @@ export async function collectSurveysForListPaginated(
       .order("desc")
       .take(maxRows)
   } else if (access === "assigned") {
-    const scopedMunis = scope.municipalities.map((m) => m._id)
+    const scopedMunis = scope.municipalities.map((m) => m._id).slice(0, LIST_FANOUT_ULB_CAP)
     if (scopedMunis.length > 1) {
       const perMuniCap = Math.max(50, Math.ceil(maxRows / scopedMunis.length))
       const batches = await Promise.all(
@@ -897,7 +902,7 @@ export async function collectSurveysForListPaginated(
       rows = await querySurveysByDistrict(ctx, scope.districts[0]!._id, args.status, maxRows)
     }
   } else {
-    const scopedMunis =
+    const scopedMunis = (
       scope.municipalities.length > 0
         ? scope.municipalities.map((m) => m._id)
         : access === "admin"
@@ -905,6 +910,7 @@ export async function collectSurveysForListPaginated(
           : me.municipalityId
             ? [me.municipalityId]
             : []
+    ).slice(0, LIST_FANOUT_ULB_CAP)
     if (scopedMunis.length > 0) {
       const perMuniCap = Math.max(50, Math.ceil(maxRows / scopedMunis.length))
       const batches = await Promise.all(

@@ -61,7 +61,7 @@ export const list = query({
   returns: v.array(surveyListRowValidator),
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    const limit = Math.min(args.limit ?? 200, 2000)
+    const limit = Math.min(args.limit ?? 100, 200)
 
     const scope = await resolveTenantScope(ctx, me)
     const districtIds = tenantDistrictIds(scope)

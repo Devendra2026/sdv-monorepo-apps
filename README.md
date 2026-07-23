@@ -190,7 +190,7 @@ notifications). Self-hosted Convex does not auto-delete leftover export blobs.
 4. Stop any host/Dokploy cron that repeatedly triggers `convex export` under low disk.
 5. Schedule host backup crons for **~03:00 UTC** (quiet band ~02:00–06:00 UTC), never 20:30–22:30 UTC.
 
-See [`infra/convex-self-hosted/README.md`](infra/convex-self-hosted/README.md) for quiet windows and restore drill.
+**Memory (8GB EC2 / Docker):** Keep Convex backend RSS under ~3.5GB so the Linux OOM killer does not target it. Leave headroom in the container cgroup limit, size Postgres `shared_buffers` / `work_mem` for large sorts, and avoid stacking Excel export with heavy analytics dashboards. Prefer volume backup for DR; prune leftover platform export blobs (see above).
 
 **Convex deployment env** (Clerk auth on the self-hosted instance — use `--env-file .env.production` with CLI env commands):
 

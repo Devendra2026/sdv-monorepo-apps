@@ -10,6 +10,7 @@
  */
 import { v } from "convex/values"
 import { query } from "../_generated/server"
+import { mapPool } from "../lib/mapPool"
 import { normalizeStoredTaxRates } from "../lib/qc/normalizeTaxRates"
 import { requireCapability } from "../shared/capabilities"
 import { requireUser } from "../shared/helpers"
@@ -34,7 +35,9 @@ export const getForMunicipality = query({
   },
 })
 
-/** Admin overview — all municipalities with their rate status. */
+const RATE_LOOKUP_CONCURRENCY = 10
+
+/** Admin overview — municipalities with rate status (indexed district fan-out, no full-table collect). */
 export const listAll = query({
   args: {},
   returns: v.array(
@@ -56,15 +59,36 @@ export const listAll = query({
     const me = await requireUser(ctx)
     await requireCapability(ctx, me, "masters.manage")
 
-    const [municipalities, rates] = await Promise.all([
-      ctx.db.query("municipalities").collect(),
-      ctx.db.query("taxRates").collect(),
+    const [activeDistricts, inactiveDistricts] = await Promise.all([
+      ctx.db
+        .query("districts")
+        .withIndex("by_active", (q) => q.eq("isActive", true))
+        .collect(),
+      ctx.db
+        .query("districts")
+        .withIndex("by_active", (q) => q.eq("isActive", false))
+        .collect(),
     ])
+    const districts = [...activeDistricts, ...inactiveDistricts]
 
-    const ratesByMuni = new Map(rates.map((r) => [r.municipalityId, r]))
+    const municipalities = []
+    for (const d of districts) {
+      const ulbs = await ctx.db
+        .query("municipalities")
+        .withIndex("by_district", (q) => q.eq("districtId", d._id))
+        .collect()
+      municipalities.push(...ulbs)
+    }
 
-    return municipalities.map((m) => {
-      const row = ratesByMuni.get(m._id)
+    const rateDocs = await mapPool(municipalities, RATE_LOOKUP_CONCURRENCY, (m) =>
+      ctx.db
+        .query("taxRates")
+        .withIndex("by_municipality", (q) => q.eq("municipalityId", m._id))
+        .unique()
+    )
+
+    return municipalities.map((m, index) => {
+      const row = rateDocs[index]
       return {
         municipality: m,
         rates: row ? normalizeStoredTaxRates(row) : null,

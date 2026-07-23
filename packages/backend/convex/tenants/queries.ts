@@ -7,16 +7,16 @@
  *   - municipalityId on user: single ULB (+ its district for display)
  *   - surveyor ward checks remain in helpers.assertCanReadWard
  *
- * listForAdmin loads sequentially (no nested Promise.all fan-out) so a slow
- * or failing read stays on the main UDF promise chain — avoids self-hosted
- * UnhandledPromiseRejection → "Restarting Isolate" under export load.
+ * listForAdmin loads districts + ULBs only. Wards load on demand via
+ * wardsForMunicipality to avoid materializing the full ward tree in one query.
  */
+import { v } from "convex/values"
 import { capabilityQuery } from "../lib/customFunctions"
-import { buildAdminTenantTree, type AdminUlbInput, type AdminWardInput } from "./adminTree"
+import { buildAdminTenantTree, compareWardNo, type AdminUlbInput } from "./adminTree"
 
 const tenantsManageQuery = capabilityQuery("tenants.manage")
 
-/** Admin inbox — full tenant tree for setup screens. */
+/** Admin inbox — district/ULB tree (wards loaded lazily per ULB). */
 export const listForAdmin = tenantsManageQuery({
   args: {},
   handler: async (ctx) => {
@@ -45,23 +45,6 @@ export const listForAdmin = tenantsManageQuery({
       }
     }
 
-    const wards: AdminWardInput[] = []
-    for (const m of municipalities) {
-      const wardRows = await ctx.db
-        .query("wards")
-        .withIndex("by_municipality", (q) => q.eq("municipalityId", m._id))
-        .collect()
-      for (const w of wardRows) {
-        wards.push({
-          _id: w._id,
-          municipalityId: w.municipalityId,
-          wardNo: w.wardNo,
-          wardCode: w.wardCode,
-          name: w.name,
-        })
-      }
-    }
-
     return buildAdminTenantTree(
       districts.map((d) => ({
         _id: d._id,
@@ -71,8 +54,33 @@ export const listForAdmin = tenantsManageQuery({
         isActive: d.isActive,
       })),
       municipalities,
-      wards
+      [] // wards loaded via wardsForMunicipality
     )
+  },
+})
+
+/** Lazy ward list for one ULB (admin tenant setup / assignment forms). */
+export const wardsForMunicipality = tenantsManageQuery({
+  args: { municipalityId: v.id("municipalities") },
+  handler: async (ctx, args) => {
+    const muni = await ctx.db.get(args.municipalityId)
+    if (!muni) return []
+
+    const rows = await ctx.db
+      .query("wards")
+      .withIndex("by_municipality", (q) => q.eq("municipalityId", args.municipalityId))
+      .collect()
+
+    return rows
+      .slice()
+      .sort((a, b) => compareWardNo(a.wardNo, b.wardNo))
+      .map((w) => ({
+        _id: w._id,
+        municipalityId: w.municipalityId,
+        wardNo: w.wardNo,
+        wardCode: w.wardCode,
+        name: w.name,
+      }))
   },
 })
 

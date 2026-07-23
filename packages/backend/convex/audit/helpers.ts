@@ -73,5 +73,6 @@ export function auditQuery(
   if (args.actorId) {
     return ctx.db.query("auditLogs").withIndex("by_actor", (q) => q.eq("actorId", args.actorId!))
   }
-  return ctx.db.query("auditLogs")
+  // System index — newest first; never bare table scan without order.
+  return ctx.db.query("auditLogs").withIndex("by_creation_time")
 }

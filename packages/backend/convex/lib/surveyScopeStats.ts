@@ -26,7 +26,7 @@ import {
 } from "./surveyStatsAggregate"
 
 /** Max survey documents loaded for dashboard analytics fallbacks (avoids Convex read limits). */
-export const DASHBOARD_BOUNDED_ROW_CAP = 2500
+export const DASHBOARD_BOUNDED_ROW_CAP = 800
 
 /**
  * Cap for live survey scans on home KPIs — much lower than DASHBOARD_BOUNDED_ROW_CAP
@@ -901,14 +901,15 @@ export async function loadScopeCompletionPct(
 
   let sum = 0
   let count = 0
-  const rows = await Promise.all(
-    scopedMuniIds.map((municipalityId) => getLegacyMunicipalityStatsRow(ctx, municipalityId))
-  )
-
-  for (const row of rows) {
-    if (!row) return null
-    sum += row.completionPctSum ?? 0
-    count += row.completionPctCount ?? 0
+  const CHUNK = 20
+  for (let i = 0; i < scopedMuniIds.length; i += CHUNK) {
+    const chunk = scopedMuniIds.slice(i, i + CHUNK)
+    const rows = await Promise.all(chunk.map((municipalityId) => getLegacyMunicipalityStatsRow(ctx, municipalityId)))
+    for (const row of rows) {
+      if (!row) return null
+      sum += row.completionPctSum ?? 0
+      count += row.completionPctCount ?? 0
+    }
   }
 
   if (count === 0) return 0

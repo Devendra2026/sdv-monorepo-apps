@@ -9,6 +9,7 @@ import {
   useUpsertDistrict,
   useUpsertMunicipality,
   useUpsertWard,
+  useWardsForMunicipality,
   type TenantAdminTree,
 } from "@/hooks/tenants/useTenants"
 import { parseConvexError } from "@/lib/errors"
@@ -153,6 +154,8 @@ function tenantsUiReducer(state: TenantsUiState, action: TenantsUiAction): Tenan
 function TenantsSummaryBar({ tenants, onAddDistrict }: { tenants: TenantDistrict[]; onAddDistrict: () => void }) {
   const ulbCount = tenants.reduce((acc, d) => acc + d.ulbs.length, 0)
   const wardCount = tenants.reduce((acc, d) => acc + d.ulbs.reduce((a, u) => a + u.wards.length, 0), 0)
+  // Wards are lazy-loaded per ULB — headline count only when present.
+  const wardLabel = wardCount > 0 ? `${wardCount} ward${wardCount !== 1 ? "s" : ""}` : "Wards on demand"
 
   return (
     <div className="flex flex-col gap-4 border-b border-border/60 bg-linear-to-r from-violet-50/80 to-card px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:from-violet-950/30 dark:to-card">
@@ -173,7 +176,7 @@ function TenantsSummaryBar({ tenants, onAddDistrict }: { tenants: TenantDistrict
               {ulbCount} ULB{ulbCount !== 1 ? "s" : ""}
             </Badge>
             <Badge variant="outline" className="text-[10px] font-semibold">
-              {wardCount} ward{wardCount !== 1 ? "s" : ""}
+              {wardLabel}
             </Badge>
           </div>
         </div>
@@ -249,6 +252,9 @@ function UlbRow({
   onAddWard: () => void
   onEditWard: (draft: WardDraft) => void
 }) {
+  const lazyWards = useWardsForMunicipality(isOpen ? (ulb._id as Id<"municipalities">) : undefined)
+  const wards = (lazyWards ?? ulb.wards) as TenantWard[]
+
   return (
     <Card className="border-border/60 shadow-sm transition-shadow hover:shadow-md">
       <Collapsible open={isOpen} onOpenChange={onOpenChange}>
@@ -275,7 +281,7 @@ function UlbRow({
               {ulb.bodyType === "municipal_council" ? "MC" : "TP"}
             </Badge>
             <Badge variant="outline" className="text-[10px]">
-              {ulb.wards.length} ward{ulb.wards.length !== 1 ? "s" : ""}
+              {lazyWards === undefined && isOpen ? "…" : `${wards.length} ward${wards.length !== 1 ? "s" : ""}`}
             </Badge>
             {!ulb.isActive && (
               <Badge variant="secondary" className="text-[10px]">
@@ -312,8 +318,8 @@ function UlbRow({
               </Button>
             </div>
             <WardChips
-              key={`${ulb._id}:${ulb.wards.length}`}
-              wards={ulb.wards}
+              key={`${ulb._id}:${wards.length}`}
+              wards={wards}
               municipalityId={ulb._id as Id<"municipalities">}
               onEditWard={onEditWard}
             />
@@ -486,7 +492,7 @@ function DistrictList({
               type: "setWardDraft",
               draft: {
                 municipalityId: ulb._id as Id<"municipalities">,
-                wardNo: String(ulb.wards.length + 1),
+                wardNo: "1",
                 wardCode: "",
                 name: "",
               },

@@ -235,11 +235,18 @@ export async function seedAreaMasters(ctx: MutationCtx) {
   await migrateFloorUsageFields(ctx)
 }
 
-/** Backfill `usageFactor` on floor rows created before the field existed. */
+/** Backfill `usageFactor` on floor rows created before the field existed.
+ * Paginated — never `.collect()` the full floors table (OOM on large deployments).
+ */
 export async function migrateFloorUsageFields(ctx: MutationCtx) {
-  const rows = await ctx.db.query("floors").collect()
-  await Promise.all(
-    rows.map(async (row) => {
+  const PAGE_SIZE = 100
+  /** Cap work per seed mutation so admin bootstrap stays under transaction budgets. */
+  const MAX_PAGES = 20
+  let cursor: string | null = null
+
+  for (let pageNum = 0; pageNum < MAX_PAGES; pageNum += 1) {
+    const page = await ctx.db.query("floors").paginate({ numItems: PAGE_SIZE, cursor })
+    for (const row of page.page) {
       const normalized = normalizeFloorFields({
         usageFactor: row.usageFactor,
         usageType: row.usageType,
@@ -250,13 +257,15 @@ export async function migrateFloorUsageFields(ctx: MutationCtx) {
         row.usageType === normalized.usageType &&
         row.isOccupied === nextOccupied
       ) {
-        return
+        continue
       }
       await ctx.db.patch(row._id, {
         usageFactor: normalized.usageFactor || undefined,
         usageType: normalized.usageType,
         isOccupied: nextOccupied,
       })
-    })
-  )
+    }
+    if (page.isDone) return
+    cursor = page.continueCursor
+  }
 }

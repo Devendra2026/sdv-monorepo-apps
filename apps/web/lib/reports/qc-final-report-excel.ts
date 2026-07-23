@@ -7,14 +7,14 @@ import type { TaxRateConfig } from "@/lib/qc/demand-notice"
 import { getQcReportDemand } from "@/lib/qc/qc-report-demand"
 import { resolveDisplayPropertyId } from "@/lib/survey/resolve-display-property-id"
 import type { SurveyExportBundle } from "@/lib/survey/survey-excel"
-import { fmtDate } from "@workspace/ui/lib/utils"
 import type { MasterOption } from "@workspace/convex/lib/masters/areaMasters"
 import type { FloorRow, SurveyDetail } from "@workspace/schemas"
+import { fmtDate } from "@workspace/ui/lib/utils"
 import * as XLSX from "xlsx"
 
 export const QC_FINAL_REPORT_SHEET = "QC Final Report"
 
-export const QC_FINAL_EXPORT_SCOPE_LIMIT = 5000
+export const QC_FINAL_EXPORT_SCOPE_LIMIT = 800
 
 type DemandMasters = {
   floors?: MasterOption[]

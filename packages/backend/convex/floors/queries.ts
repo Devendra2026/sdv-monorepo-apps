@@ -7,12 +7,20 @@
  */
 import { v } from "convex/values"
 import { query } from "../_generated/server"
+import { MAX_EXPORT_FLOORS_PER_SURVEY } from "../lib/budgetLimits"
+import { mapPool } from "../lib/mapPool"
 import { presentFloorRow } from "../lib/masters/areaMasters"
 import { assertCanAccessSurvey } from "../shared/fieldAccess"
 import { clientError, requireUser } from "../shared/helpers"
 
-/** Matches max QC table page size (`QC_TABLE_PAGE_SIZE_OPTIONS`). */
-const MAX_SURVEYS_PER_FLOOR_LIST = 5000
+/**
+ * Demand-register / QC tables pass one page of survey IDs.
+ * Before: 5000 — unbounded parallel floor collects could OOM self-hosted Convex.
+ * After: 100 — covers largest table page sizes with headroom.
+ */
+const MAX_SURVEYS_PER_FLOOR_LIST = 100
+/** Cap parallel floor queries to avoid Postgres/query-stream stampede. */
+const FLOOR_LIST_CONCURRENCY = 10
 
 const floorRowValidator = v.object({
   _id: v.id("floors"),
@@ -60,7 +68,7 @@ export const listForSurveys = query({
     const me = await requireUser(ctx)
     const uniqueSurveyIds = [...new Set(args.surveyIds)]
 
-    const surveys = await Promise.all(uniqueSurveyIds.map((surveyId) => ctx.db.get(surveyId)))
+    const surveys = await mapPool(uniqueSurveyIds, FLOOR_LIST_CONCURRENCY, (surveyId) => ctx.db.get(surveyId))
     const authorizedIds: Array<(typeof uniqueSurveyIds)[number]> = []
 
     for (let index = 0; index < uniqueSurveyIds.length; index += 1) {
@@ -75,19 +83,15 @@ export const listForSurveys = query({
       }
     }
 
-    const grouped = await Promise.all(
-      authorizedIds.map(async (surveyId) => {
-        const rows = await ctx.db
-          .query("floors")
-          .withIndex("by_survey", (q) => q.eq("surveyId", surveyId))
-          .collect()
-        return {
-          surveyId,
-          floors: rows.sort((a, b) => a.position - b.position).map(presentFloorRow),
-        }
-      })
-    )
-
-    return grouped
+    return mapPool(authorizedIds, FLOOR_LIST_CONCURRENCY, async (surveyId) => {
+      const rows = await ctx.db
+        .query("floors")
+        .withIndex("by_survey", (q) => q.eq("surveyId", surveyId))
+        .take(MAX_EXPORT_FLOORS_PER_SURVEY)
+      return {
+        surveyId,
+        floors: rows.sort((a, b) => a.position - b.position).map(presentFloorRow),
+      }
+    })
   },
 })
