@@ -58,17 +58,17 @@ export const saveDraft = mutation({
   handler: async (ctx, args) => {
     const startedAt = Date.now()
     const me = await requireUser(ctx)
-    const [, ownScope, canInsert, muni, existing] = await Promise.all([
-      requireSurveyDraftEdit(ctx, me),
-      isOwnScopeSurveyor(ctx, me),
-      canInsertSurveyDraft(ctx, me),
-      assertMunicipalityInScope(ctx, me, args.municipalityId),
-      resolveExistingSurveyForSave(ctx, me, {
-        id: args.id,
-        localId: args.localId,
-        municipalityId: args.municipalityId,
-      }),
-    ])
+    // Sequential gates — Promise.all sibling rejections become UnhandledPromiseRejection
+    // and restart the isolate when auth/scope checks fail in parallel.
+    await requireSurveyDraftEdit(ctx, me)
+    const muni = await assertMunicipalityInScope(ctx, me, args.municipalityId)
+    const ownScope = await isOwnScopeSurveyor(ctx, me)
+    const canInsert = await canInsertSurveyDraft(ctx, me)
+    const existing = await resolveExistingSurveyForSave(ctx, me, {
+      id: args.id,
+      localId: args.localId,
+      municipalityId: args.municipalityId,
+    })
     if (existing) await assertSurveyWritable(ctx, me, existing)
     if (!existing && !canInsert) {
       clientError("BAD_REQUEST", "No survey found to update — open the record from QC review and try saving again")
@@ -77,11 +77,12 @@ export const saveDraft = mutation({
     const wardNo = args.wardNo?.trim() ?? existing?.wardNo ?? ""
     if (wardNo) {
       assertCanReadWard(me, args.municipalityId, wardNo)
-      const ward = await ctx.db
+      // Never .unique() — duplicate ward rows throw → isolate restart.
+      const wards = await ctx.db
         .query("wards")
         .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", args.municipalityId).eq("wardNo", wardNo))
-        .unique()
-      if (!ward) clientError("BAD_REQUEST", "Unknown ward", { wardNo: ["unknown ward"] })
+        .take(2)
+      if (wards.length === 0) clientError("BAD_REQUEST", "Unknown ward", { wardNo: ["unknown ward"] })
     }
 
     const district = await ctx.db.get(muni.districtId)
@@ -253,12 +254,11 @@ export const upsert = mutation({
   args: surveyInput,
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    const [, ownScope, canInsert, muni] = await Promise.all([
-      requireSurveyDraftEdit(ctx, me),
-      isOwnScopeSurveyor(ctx, me),
-      canInsertSurveyDraft(ctx, me),
-      assertMunicipalityInScope(ctx, me, args.municipalityId),
-    ])
+    // Sequential gates — same isolate-restart risk as saveDraft under parallel rejection.
+    await requireSurveyDraftEdit(ctx, me)
+    const muni = await assertMunicipalityInScope(ctx, me, args.municipalityId)
+    const ownScope = await isOwnScopeSurveyor(ctx, me)
+    const canInsert = await canInsertSurveyDraft(ctx, me)
     assertCanReadWard(me, args.municipalityId, args.wardNo)
 
     const district = await ctx.db.get(muni.districtId)
