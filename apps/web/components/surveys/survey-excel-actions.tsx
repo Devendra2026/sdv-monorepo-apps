@@ -16,12 +16,11 @@ const EXPORT_BUNDLE_PAGE_SIZE = 20
 const EXPORT_PAGE_DELAY_MS = 500
 
 /**
- * Photo storage URLs are expensive (up to surveys×photos syscalls per page).
- * Excel still gets photo metadata; URL column may be empty unless opted in.
- * Set NEXT_PUBLIC_EXPORT_PHOTO_URLS=1 to resolve Convex storage URLs.
+ * Photo storage URLs are included in Excel by default (Photos sheet "Photo URL").
+ * Set NEXT_PUBLIC_EXPORT_PHOTO_URLS=0 to skip URL resolution (faster, metadata only).
  */
 const EXPORT_INCLUDE_PHOTO_URLS =
-  process.env.NEXT_PUBLIC_EXPORT_PHOTO_URLS === "1" || process.env.NEXT_PUBLIC_EXPORT_PHOTO_URLS === "true"
+  process.env.NEXT_PUBLIC_EXPORT_PHOTO_URLS !== "0" && process.env.NEXT_PUBLIC_EXPORT_PHOTO_URLS !== "false"
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))

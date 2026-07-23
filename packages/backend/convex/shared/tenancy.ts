@@ -45,6 +45,21 @@ async function loadActiveCatalog(ctx: QueryCtx): Promise<{
   return { districts, municipalities }
 }
 
+/**
+ * Admin dashboard catalog includes inactive districts/ULBs so survey counts match
+ * Convex document totals (surveys may still reference deactivated municipalities).
+ */
+async function loadAdminDashboardCatalog(ctx: QueryCtx): Promise<{
+  districts: Doc<"districts">[]
+  municipalities: Doc<"municipalities">[]
+}> {
+  const [districts, municipalities] = await Promise.all([
+    ctx.db.query("districts").collect(),
+    ctx.db.query("municipalities").collect(),
+  ])
+  return { districts, municipalities }
+}
+
 /** Multi-district / multi-ULB scope from userAllotments (indexed lookups, no full catalog scan). */
 async function resolveScopeFromAllotmentsTargeted(
   ctx: QueryCtx,
@@ -223,11 +238,15 @@ export async function resolveTenantScope(
 /**
  * Strict tenant scope for dashboard KPIs and analytics.
  * Never grants the full seeded catalog when profile/allotment data is missing.
+ * Admin includes inactive ULBs so totals match all survey documents.
  */
 export async function resolveDashboardTenantScope(
   ctx: QueryCtx,
   me: Doc<"users">
 ): Promise<{ districts: Doc<"districts">[]; municipalities: Doc<"municipalities">[] }> {
+  if (me.role === "admin") {
+    return loadAdminDashboardCatalog(ctx)
+  }
   return resolveTenantScopeInternal(ctx, me, { allowCatalogFallback: false })
 }
 

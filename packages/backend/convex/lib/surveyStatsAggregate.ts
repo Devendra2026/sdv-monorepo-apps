@@ -61,6 +61,17 @@ function emptyDashboardCounts(): MutableDashboardCounts {
   return { ...emptySurveyCounts(), pending: 0, submittedToday: 0 }
 }
 
+/**
+ * Pending QC when reject is unused.
+ * User formula: submitted − approved, where "submitted" means the non-draft pool
+ * (status submitted + approved). That equals the current `status === "submitted"` queue.
+ * Prefer the larger of status-derived and stored qcPending so stale rollups do not undercount.
+ */
+export function pendingQcCount(submitted: number, approved: number, qcPending = 0): number {
+  const fromNonDraftPool = Math.max(0, submitted + approved - approved)
+  return Math.max(fromNonDraftPool, Math.max(0, qcPending))
+}
+
 function addRowToSurveyCounts(bucket: MutableSurveyCounts, row: SurveyStatsSlice, window: DayWindow | null) {
   bucket.total += 1
   if (window && row._creationTime >= window.todayMs && row._creationTime < window.dayEnd) bucket.today += 1
@@ -90,6 +101,7 @@ export function computeDashboardCountsFromSlice(rows: SurveyStatsSlice[], todayM
   const window = dayWindowFromStart(todayMs)
   const bucket = emptyDashboardCounts()
   for (const row of rows) addRowToDashboardCounts(bucket, row, window)
+  bucket.pending = pendingQcCount(bucket.submitted, bucket.approved, bucket.pending)
   return bucket
 }
 

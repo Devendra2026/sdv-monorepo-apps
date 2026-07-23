@@ -20,6 +20,7 @@ import {
 import {
   computeDailyTrendFromSlice,
   computeDashboardCountsFromSlice,
+  pendingQcCount,
   type DashboardCounts,
   type SurveyCounts,
   type SurveyStatsSlice,
@@ -266,7 +267,7 @@ function liveSnapshotToDashboardPart(
     total: live.total,
     today: live.todayCreated,
     drafts: live.drafts,
-    pending: live.qcPending,
+    pending: pendingQcCount(live.submitted, live.qcApproved, live.qcPending),
     submittedToday: live.submittedToday,
     approved: live.qcApproved,
     submitted: live.submitted,
@@ -299,8 +300,8 @@ async function loadMunicipalityDashboardCounts(
       qcPending: statsRow.qcPending,
     }
 
-    if (!municipalityStatsRowLooksConsistent(rollup)) {
-      if (!allowLiveFallback) return emptyDashboardCountPart()
+    // Only live-scan when clearly broken and fallback is allowed; never replace with zeros.
+    if (!municipalityStatsRowLooksConsistent(rollup) && allowLiveFallback) {
       const live = await computeLiveMunicipalitySnapshot(ctx, me, municipalityId, todayMs)
       return liveSnapshotToDashboardPart(live)
     }
@@ -308,7 +309,7 @@ async function loadMunicipalityDashboardCounts(
       total: statsRow.total,
       today: 0,
       drafts: statsRow.drafts,
-      pending: statsRow.qcPending,
+      pending: pendingQcCount(statsRow.submitted, statsRow.qcApproved, statsRow.qcPending),
       submittedToday: 0,
       approved: statsRow.qcApproved,
       submitted: statsRow.submitted,
@@ -359,7 +360,7 @@ async function loadWardScopedMunicipalityDashboardCounts(
     part.submitted += row.submitted
     part.approved += row.qcApproved
     part.rejected += row.qcRejected
-    part.pending += row.qcPending
+    part.pending += pendingQcCount(row.submitted, row.qcApproved, row.qcPending)
   }
 
   if (!anyRollup && allowLiveFallback) {
@@ -397,7 +398,7 @@ async function loadSurveyorDashboardCounts(ctx: QueryCtx, me: Doc<"users">, toda
     approved += row.qcApproved
     rejected += row.qcRejected
   }
-  const pending = Math.max(0, submitted - approved - rejected)
+  const pending = pendingQcCount(submitted, approved)
 
   const dayEnd = dayEndMs(todayMs)
   const recent = await loadSurveysBySurveyor(ctx, me._id, DASHBOARD_SURVEYOR_TODAY_CAP)
@@ -468,7 +469,7 @@ export async function loadDashboardCountsForHome(
         total: row.total,
         today: daily?.created ?? 0,
         drafts: row.drafts,
-        pending: row.qcPending,
+        pending: pendingQcCount(row.submitted, row.qcApproved, row.qcPending),
         submittedToday: daily?.submitted ?? 0,
         approved: row.qcApproved,
         submitted: row.submitted,
@@ -676,12 +677,16 @@ export type MunicipalityStatsRollup = {
   qcPending: number
 }
 
-/** True when denormalized municipality stats satisfy dashboard invariants. */
+/** True when denormalized municipality stats satisfy dashboard invariants.
+ * Softened: reject→draft makes drafts+qcPending+qcApproved+qcRejected overcount total,
+ * so we no longer require that sum. Only reject clearly impossible rows.
+ */
 export function municipalityStatsRowLooksConsistent(row: MunicipalityStatsRollup): boolean {
-  const statusSum = row.drafts + row.qcPending + row.qcApproved + row.qcRejected
-  if (row.total < statusSum) return false
+  if (row.total < 0 || row.drafts < 0 || row.submitted < 0) return false
+  if (row.qcApproved < 0 || row.qcRejected < 0 || row.qcPending < 0) return false
   if (row.drafts > row.total) return false
   if (row.submitted > row.total) return false
+  if (row.qcApproved > row.total) return false
   return true
 }
 
@@ -817,9 +822,8 @@ async function loadMunicipalityStatsRollupsResilient(
         qcRejected: row.qcRejected,
         qcPending: row.qcPending,
       }
-      if (municipalityStatsRowLooksConsistent(rollup)) {
-        byMuni.set(row.municipalityId, rollup)
-      }
+      // Always keep the rollup when present — never zero out inconsistent legacy rows.
+      byMuni.set(row.municipalityId, rollup)
     }
 
     return scopedMuniIds.map((municipalityId) => byMuni.get(municipalityId) ?? emptyMunicipalityRollup(municipalityId))
@@ -839,13 +843,14 @@ async function loadMunicipalityStatsRollupsResilient(
             qcRejected: row.qcRejected,
             qcPending: row.qcPending,
           }
-          if (municipalityStatsRowLooksConsistent(rollup)) {
+          // Prefer live recount only when inconsistent and fallback is allowed.
+          if (municipalityStatsRowLooksConsistent(rollup) || !allowLiveFallback) {
             return rollup
           }
+        } else if (!allowLiveFallback) {
+          return emptyMunicipalityRollup(municipalityId)
         }
-      }
-
-      if (!allowLiveFallback) {
+      } else if (!allowLiveFallback) {
         return emptyMunicipalityRollup(municipalityId)
       }
 
@@ -961,7 +966,7 @@ export async function loadScopeStatsSummary(
     totals.submitted += row.submitted
     totals.qcApproved += row.qcApproved
     totals.qcRejected += row.qcRejected
-    totals.qcPending += row.qcPending
+    totals.qcPending += pendingQcCount(row.submitted, row.qcApproved, row.qcPending)
   }
 
   for (const municipalityId of scopedMuniIds) {

@@ -13,7 +13,13 @@ export function DashboardKpiGrid({ counts }: { counts: DashboardCounts }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5" aria-label="Survey pipeline KPIs">
         <DashboardKpiCard label="Total Surveys" value={counts.total} icon={ClipboardList} tone="neutral" />
         <DashboardKpiCard label="Draft" value={counts.drafts} icon={FileEdit} tone="muted" hint="Not yet submitted" />
-        <DashboardKpiCard label="Pending QC" value={counts.pending} icon={Clock3} tone="amber" hint="Awaiting review" />
+        <DashboardKpiCard
+          label="Pending QC"
+          value={counts.pending}
+          icon={Clock3}
+          tone="amber"
+          hint="Submitted minus Approved QC"
+        />
         <DashboardKpiCard
           label="Created Today"
           value={counts.today}
