@@ -20,10 +20,11 @@ export async function permissionsForRole(ctx: Ctx, roleKey: string): Promise<Set
   const cached = byRole.get(roleKey)
   if (cached) return cached
 
-  const role = await ctx.db
+  const roles = await ctx.db
     .query("roles")
     .withIndex("by_key", (q) => q.eq("key", roleKey))
-    .unique()
+    .take(2)
+  const role = roles[0]
 
   let result: Set<string>
   if (!role || role.isActive === false) {

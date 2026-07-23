@@ -31,10 +31,10 @@ const EMPTY_STATS: QcQueueStats = {
 
 type CommandCenterStats = FunctionReturnType<typeof api.qc.queries.commandCenterStats>
 
-export function useQcCommandCenter(options: { seedStats?: CommandCenterStats } = {}) {
+export function useQcCommandCenter(options: { seedStats?: CommandCenterStats; seedNowMs?: number } = {}) {
   const { scope, setScope, scopeReady } = useQcWorkScope()
   const { masters } = useMasters()
-  const nowMs = useClientNowMs()
+  const nowMs = useClientNowMs(options.seedNowMs)
   const canReview = useHasCapability("qc.review")
 
   const queryScope = useMemo(() => {

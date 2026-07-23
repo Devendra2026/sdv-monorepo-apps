@@ -11,7 +11,8 @@ import {
   validateFloorRow,
 } from "../lib/masters/areaMasters"
 import { loadAllowedTaxZoneSet, normalizeTaxationFields } from "../lib/masters/taxationMasters"
-import { logSlowPath } from "../lib/observability"
+import { createRequestId, logMutationTiming } from "../lib/observability"
+import { splitKeeperAndDuplicates } from "../lib/safeUnique"
 import {
   completionPctForSurvey,
   computeSurveyCompletionPercent,
@@ -57,6 +58,7 @@ export const saveDraft = mutation({
   returns: v.id("surveys"),
   handler: async (ctx, args) => {
     const startedAt = Date.now()
+    const requestId = createRequestId()
     const me = await requireUser(ctx)
     // Sequential gates — Promise.all sibling rejections become UnhandledPromiseRejection
     // and restart the isolate when auth/scope checks fail in parallel.
@@ -130,9 +132,11 @@ export const saveDraft = mutation({
       })
 
       if (Object.keys(patch).length === 0) {
-        logSlowPath("surveys.saveDraft", startedAt, {
-          mode: "update_noop",
+        logMutationTiming("surveys.saveDraft", startedAt, {
+          requestId,
+          userId: me._id,
           surveyId: existing._id,
+          mode: "update_noop",
         })
         return existing._id
       }
@@ -156,9 +160,11 @@ export const saveDraft = mutation({
         })
       }
 
-      logSlowPath("surveys.saveDraft", startedAt, {
-        mode: "update",
+      logMutationTiming("surveys.saveDraft", startedAt, {
+        requestId,
+        userId: me._id,
         surveyId: existing._id,
+        mode: "update",
         staysDraft,
       })
       return existing._id
@@ -184,7 +190,12 @@ export const saveDraft = mutation({
         const updated: Doc<"surveys"> = { ...raced, ...patch } as Doc<"surveys">
         await recordSurveyStatsUpdate(ctx, raced, updated)
       }
-      logSlowPath("surveys.saveDraft", startedAt, { mode: "insert_race_update", surveyId: raced._id })
+      logMutationTiming("surveys.saveDraft", startedAt, {
+        requestId,
+        userId: me._id,
+        surveyId: raced._id,
+        mode: "insert_race_update",
+      })
       return raced._id
     }
 
@@ -223,7 +234,12 @@ export const saveDraft = mutation({
             const updated: Doc<"surveys"> = { ...keeper, ...patch } as Doc<"surveys">
             await recordSurveyStatsUpdate(ctx, keeper, updated)
           }
-          logSlowPath("surveys.saveDraft", startedAt, { mode: "insert_dedupe", surveyId: keeper._id })
+          logMutationTiming("surveys.saveDraft", startedAt, {
+            requestId,
+            userId: me._id,
+            surveyId: keeper._id,
+            mode: "insert_dedupe",
+          })
           return keeper._id
         }
       }
@@ -238,7 +254,12 @@ export const saveDraft = mutation({
       entityId: newId,
       metadata: { localId: args.localId, draft: true },
     })
-    logSlowPath("surveys.saveDraft", startedAt, { mode: "insert", surveyId: newId })
+    logMutationTiming("surveys.saveDraft", startedAt, {
+      requestId,
+      userId: me._id,
+      surveyId: newId,
+      mode: "insert",
+    })
     return newId
   },
 })
@@ -253,6 +274,8 @@ export const saveDraft = mutation({
 export const upsert = mutation({
   args: surveyInput,
   handler: async (ctx, args) => {
+    const startedAt = Date.now()
+    const requestId = createRequestId()
     const me = await requireUser(ctx)
     // Sequential gates — same isolate-restart risk as saveDraft under parallel rejection.
     await requireSurveyDraftEdit(ctx, me)
@@ -273,12 +296,12 @@ export const upsert = mutation({
     )
     validateBusinessRules(normalized, addressCtx, "submit", { allowedTaxZones })
 
-    // Confirm ward exists within the municipality
-    const ward = await ctx.db
+    // Confirm ward exists within the municipality — never .unique() (duplicate ward rows).
+    const wards = await ctx.db
       .query("wards")
       .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", args.municipalityId).eq("wardNo", args.wardNo))
-      .unique()
-    if (!ward) clientError("BAD_REQUEST", "Unknown ward", { wardNo: ["unknown ward"] })
+      .take(2)
+    if (wards.length === 0) clientError("BAD_REQUEST", "Unknown ward", { wardNo: ["unknown ward"] })
 
     const existing = await resolveExistingSurveyForSave(ctx, me, {
       id: args.id,
@@ -330,6 +353,12 @@ export const upsert = mutation({
         entity: "survey",
         entityId: existing._id,
       })
+      logMutationTiming("surveys.upsert", startedAt, {
+        requestId,
+        userId: me._id,
+        surveyId: existing._id,
+        mode: "update",
+      })
       return existing._id
     }
 
@@ -353,6 +382,12 @@ export const upsert = mutation({
       entityId: newId,
       metadata: { localId: args.localId },
     })
+    logMutationTiming("surveys.upsert", startedAt, {
+      requestId,
+      userId: me._id,
+      surveyId: newId,
+      mode: "insert",
+    })
     return newId
   },
 })
@@ -362,8 +397,9 @@ export const setGps = mutation({
   args: { id: v.id("surveys"), gps: gpsCapture },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx)
-    const [survey, ownScope] = await Promise.all([ctx.db.get(args.id), isOwnScopeSurveyor(ctx, me)])
+    const survey = await ctx.db.get(args.id)
     if (!survey) clientError("NOT_FOUND", "Survey not found")
+    const ownScope = await isOwnScopeSurveyor(ctx, me)
     if (ownScope && survey.surveyorId !== me._id) {
       clientError("FORBIDDEN", "Not your survey")
     }
@@ -406,51 +442,52 @@ async function syncSubmitArea(
   let serverVersion = survey.serverVersion
 
   if (input.floors) {
-    await Promise.all(
-      input.floors.map(async (fl) => {
-        const normalized = normalizeFloorFields({
-          usageFactor: fl.usageFactor,
-          usageType: fl.usageType,
-        })
-        const floorErrors = validateFloorRow({
-          floorName: fl.floorName,
-          usageFactor: normalized.usageFactor || undefined,
-          usageType: normalized.usageType,
-          constructionType: fl.constructionType,
-          areaSqft: fl.areaSqft,
-        })
-        if (Object.keys(floorErrors).length > 0) {
-          clientError("VALIDATION", "Invalid floor row", floorErrors)
-        }
-
-        const row = {
-          position: fl.position,
-          floorName: fl.floorName,
-          usageFactor: normalized.usageFactor || undefined,
-          usageType: normalized.usageType,
-          constructionType: fl.constructionType,
-          isOccupied: usageTypeToOccupied(normalized.usageType),
-          areaSqft: fl.areaSqft,
-        }
-
-        const existing = await ctx.db
-          .query("floors")
-          .withIndex("by_survey_clientFloorId", (q) =>
-            q.eq("surveyId", survey._id).eq("clientFloorId", fl.clientFloorId)
-          )
-          .unique()
-
-        if (existing) {
-          await ctx.db.patch(existing._id, row)
-        } else {
-          await ctx.db.insert("floors", {
-            surveyId: survey._id,
-            clientFloorId: fl.clientFloorId,
-            ...row,
-          })
-        }
+    // Sequential — never clientError / .unique() inside Promise.all (sibling UPR → isolate restart).
+    for (const fl of input.floors) {
+      const normalized = normalizeFloorFields({
+        usageFactor: fl.usageFactor,
+        usageType: fl.usageType,
       })
-    )
+      const floorErrors = validateFloorRow({
+        floorName: fl.floorName,
+        usageFactor: normalized.usageFactor || undefined,
+        usageType: normalized.usageType,
+        constructionType: fl.constructionType,
+        areaSqft: fl.areaSqft,
+      })
+      if (Object.keys(floorErrors).length > 0) {
+        clientError("VALIDATION", "Invalid floor row", floorErrors)
+      }
+
+      const row = {
+        position: fl.position,
+        floorName: fl.floorName,
+        usageFactor: normalized.usageFactor || undefined,
+        usageType: normalized.usageType,
+        constructionType: fl.constructionType,
+        isOccupied: usageTypeToOccupied(normalized.usageType),
+        areaSqft: fl.areaSqft,
+      }
+
+      const floorRows = await ctx.db
+        .query("floors")
+        .withIndex("by_survey_clientFloorId", (q) => q.eq("surveyId", survey._id).eq("clientFloorId", fl.clientFloorId))
+        .take(4)
+      const { keeper: existing, duplicates } = splitKeeperAndDuplicates(floorRows, "oldest")
+      for (const dup of duplicates) {
+        await ctx.db.delete(dup._id)
+      }
+
+      if (existing) {
+        await ctx.db.patch(existing._id, row)
+      } else {
+        await ctx.db.insert("floors", {
+          surveyId: survey._id,
+          clientFloorId: fl.clientFloorId,
+          ...row,
+        })
+      }
+    }
 
     if (input.keepClientFloorIds) {
       const keep = new Set(input.keepClientFloorIds)
@@ -458,11 +495,9 @@ async function syncSubmitArea(
         .query("floors")
         .withIndex("by_survey", (q) => q.eq("surveyId", survey._id))
         .collect()
-      const deleteOps = []
       for (const row of rows) {
-        if (!keep.has(row.clientFloorId)) deleteOps.push(ctx.db.delete(row._id))
+        if (!keep.has(row.clientFloorId)) await ctx.db.delete(row._id)
       }
-      await Promise.all(deleteOps)
     }
 
     serverVersion += 1
@@ -531,10 +566,16 @@ export const submit = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const [me, surveyOrNull] = await Promise.all([requireUser(ctx), ctx.db.get(args.id)])
+    const startedAt = Date.now()
+    const requestId = createRequestId()
+    const me = await requireUser(ctx)
+    // Sequential gates — Promise.all sibling rejections become UnhandledPromiseRejection
+    // and restart the isolate when auth/scope checks fail in parallel.
+    await requireCapability(ctx, me, "surveys.submit")
+    const surveyOrNull = await ctx.db.get(args.id)
     let survey = surveyOrNull
     if (!survey) clientError("NOT_FOUND", "Survey not found")
-    const [, ownScope] = await Promise.all([requireCapability(ctx, me, "surveys.submit"), isOwnScopeSurveyor(ctx, me)])
+    const ownScope = await isOwnScopeSurveyor(ctx, me)
     if (survey.surveyorId !== me._id && ownScope) {
       clientError("FORBIDDEN", "Not your survey")
     }
@@ -617,6 +658,12 @@ export const submit = mutation({
       entityId: args.id,
     })
 
+    logMutationTiming("surveys.submit", startedAt, {
+      requestId,
+      userId: me._id,
+      surveyId: args.id,
+      outcome: "ok",
+    })
     return null
   },
 })
@@ -624,7 +671,8 @@ export const submit = mutation({
 export const remove = mutation({
   args: { id: v.id("surveys") },
   handler: async (ctx, args) => {
-    const [me, survey] = await Promise.all([requireUser(ctx), ctx.db.get(args.id)])
+    const me = await requireUser(ctx)
+    const survey = await ctx.db.get(args.id)
     if (!survey) return
     if (survey.surveyorId !== me._id && me.role !== "admin") {
       clientError("FORBIDDEN", "Not your survey")

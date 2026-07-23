@@ -7,12 +7,23 @@ import {
   preloadDashboardQcSupervisors,
 } from "@/lib/convex-server"
 
+/** Lighter SSR trend window — matches DashboardContent. */
+const SSR_TREND_DAYS = 14
+
 export async function DashboardHomeSection({ nowMs }: { nowMs: number }) {
-  const [countsResult, analyticsResult, qcResult] = await Promise.allSettled([
-    preloadDashboardCounts(nowMs),
-    preloadDashboardAnalytics(nowMs),
-    preloadDashboardQcSupervisors(nowMs),
-  ])
+  // Serialize analytics → QC (same contention avoidance as DashboardContent).
+  const countsResult = await preloadDashboardCounts(nowMs).then(
+    (value) => ({ status: "fulfilled" as const, value }),
+    (reason: unknown) => ({ status: "rejected" as const, reason })
+  )
+  const analyticsResult = await preloadDashboardAnalytics(nowMs, SSR_TREND_DAYS).then(
+    (value) => ({ status: "fulfilled" as const, value }),
+    (reason: unknown) => ({ status: "rejected" as const, reason })
+  )
+  const qcResult = await preloadDashboardQcSupervisors(nowMs, SSR_TREND_DAYS).then(
+    (value) => ({ status: "fulfilled" as const, value }),
+    (reason: unknown) => ({ status: "rejected" as const, reason })
+  )
 
   if (countsResult.status === "rejected" && !isPreloadSkippableError(countsResult.reason)) {
     console.error("[dashboard] home counts preload failed", countsResult.reason)

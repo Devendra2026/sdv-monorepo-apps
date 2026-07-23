@@ -13,11 +13,10 @@ import { useQuery } from "convex/react"
 /** Client-side counts + analytics when server preload fails or user is not provisioned yet. */
 export function DashboardHomeFallback({ nowMs: nowMsProp }: { nowMs?: number }) {
   const ready = useConvexAuthReady()
-  const clientNowMs = useClientNowMs()
-  const nowMs = nowMsProp ?? clientNowMs
+  const nowMs = useClientNowMs(nowMsProp)
   const counts = useQuery(api.analytics.queries.counts, ready ? { nowMs } : "skip")
-  const analytics = useQuery(api.analytics.queries.analyticsBundle, ready ? { nowMs, trendDays: 30 } : "skip")
-  const qcSupervisors = useQuery(api.analytics.queries.qcSupervisorBundle, ready ? { nowMs, trendDays: 30 } : "skip")
+  const analytics = useQuery(api.analytics.queries.analyticsBundle, ready ? { nowMs, trendDays: 14 } : "skip")
+  const qcSupervisors = useQuery(api.analytics.queries.qcSupervisorBundle, ready ? { nowMs, trendDays: 14 } : "skip")
 
   return (
     <div className="space-y-6 lg:space-y-8">

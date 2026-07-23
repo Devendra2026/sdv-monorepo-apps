@@ -9,7 +9,7 @@
 import { v } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import { query, type QueryCtx } from "../_generated/server"
-import { logPhaseTiming } from "../lib/observability"
+import { createRequestId, logPhaseTiming } from "../lib/observability"
 import {
   loadSurveyorStatsForScope,
   loadWardStatsForScope,
@@ -648,11 +648,13 @@ async function buildAnalyticsBundle(
   nowMs: number
 ) {
   const bundleStartedAt = Date.now()
+  const requestId = createRequestId()
   let phaseAt = bundleStartedAt
+  const timingBase = { requestId, userId: me._id }
 
   const canViewAnalytics = await hasCapability(ctx, me, "analytics.view")
   if (!canViewAnalytics) return null
-  phaseAt = logPhaseTiming("analyticsBundle.hasCapability", phaseAt)
+  phaseAt = logPhaseTiming("analyticsBundle.hasCapability", phaseAt, timingBase)
 
   const days = Math.min(Math.max(trendDays, 1), 180)
   const analyticsFromMs = nowMs - (days + DASHBOARD_ANALYTICS_WINDOW_BUFFER_DAYS) * MS_PER_DAY
@@ -660,6 +662,7 @@ async function buildAnalyticsBundle(
   // Scope once — downstream helpers must reuse precomputed (no catalog re-scan).
   const [scope, access] = await Promise.all([resolveDashboardTenantScope(ctx, me), fieldSurveyAccess(ctx, me)])
   phaseAt = logPhaseTiming("analyticsBundle.scope", phaseAt, {
+    ...timingBase,
     municipalities: scope.municipalities.length,
     districts: scope.districts.length,
     access,
@@ -672,6 +675,7 @@ async function buildAnalyticsBundle(
   // Must NOT run in parallel with daily-trend streams (SQLite queryStreamNext contention).
   const statsBreakdown = await loadAnalyticsBreakdownFromStats(ctx, me, todayMs, scope, {}, precomputed)
   phaseAt = logPhaseTiming("analyticsBundle.statsBreakdown", phaseAt, {
+    ...timingBase,
     byUlb: statsBreakdown?.byUlb.length ?? 0,
   })
 
@@ -681,13 +685,17 @@ async function buildAnalyticsBundle(
     loadSurveyorStatsForScope(ctx, me, {}, precomputed),
   ])
   phaseAt = logPhaseTiming("analyticsBundle.wardSurveyorRollups", phaseAt, {
+    ...timingBase,
     wardRows: wardRows.length,
     surveyorRollups: surveyorRollups.length,
   })
 
   // Phase C — daily trend alone (point lookups + sequential QC), after rollups finish.
   const dailyTrend = await loadDashboardDailyTrend(ctx, me, days, nowMs, precomputed)
-  phaseAt = logPhaseTiming("analyticsBundle.dailyTrend", phaseAt, { days: dailyTrend.length })
+  phaseAt = logPhaseTiming("analyticsBundle.dailyTrend", phaseAt, {
+    ...timingBase,
+    days: dailyTrend.length,
+  })
 
   const wardCoverage = wardCoverageFromRollups(wardRows, muniMap)
 
@@ -701,9 +709,11 @@ async function buildAnalyticsBundle(
     scope
   )
   logPhaseTiming("analyticsBundle.breakdownHydrate", phaseAt, {
+    ...timingBase,
     surveyors: breakdown.bySurveyor.length,
   })
   logPhaseTiming("analyticsBundle.total", bundleStartedAt, {
+    ...timingBase,
     municipalities: scope.municipalities.length,
   })
 

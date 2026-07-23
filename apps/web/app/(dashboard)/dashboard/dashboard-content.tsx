@@ -10,13 +10,36 @@ import {
   preloadDashboardQcSupervisors,
 } from "@/lib/convex-server"
 
+/** Lighter SSR trend window — client can still request 30 days via live query if needed. */
+const SSR_TREND_DAYS = 14
+
 export async function DashboardContent({ nowMs }: { nowMs: number }) {
-  const [countsResult, analyticsResult, qcResult, activityResult] = await Promise.allSettled([
-    preloadDashboardCounts(nowMs),
-    preloadDashboardAnalytics(nowMs),
-    preloadDashboardQcSupervisors(nowMs),
-    preloadDashboardActivity(),
+  // Counts + activity are lighter; run in parallel with the heavy analytics chain.
+  // Serialize analytics → QC to avoid SQLite queryStreamNext contention / SystemTimeout
+  // from four heavy preloads hitting the self-hosted isolate at once.
+  const [countsResult, activityResult, analyticsThenQc] = await Promise.all([
+    preloadDashboardCounts(nowMs).then(
+      (value) => ({ status: "fulfilled" as const, value }),
+      (reason: unknown) => ({ status: "rejected" as const, reason })
+    ),
+    preloadDashboardActivity().then(
+      (value) => ({ status: "fulfilled" as const, value }),
+      (reason: unknown) => ({ status: "rejected" as const, reason })
+    ),
+    (async () => {
+      const analyticsResult = await preloadDashboardAnalytics(nowMs, SSR_TREND_DAYS).then(
+        (value) => ({ status: "fulfilled" as const, value }),
+        (reason: unknown) => ({ status: "rejected" as const, reason })
+      )
+      const qcResult = await preloadDashboardQcSupervisors(nowMs, SSR_TREND_DAYS).then(
+        (value) => ({ status: "fulfilled" as const, value }),
+        (reason: unknown) => ({ status: "rejected" as const, reason })
+      )
+      return { analyticsResult, qcResult }
+    })(),
   ])
+
+  const { analyticsResult, qcResult } = analyticsThenQc
 
   if (countsResult.status === "rejected" && !isPreloadSkippableError(countsResult.reason)) {
     console.error("[dashboard] counts preload failed", countsResult.reason)

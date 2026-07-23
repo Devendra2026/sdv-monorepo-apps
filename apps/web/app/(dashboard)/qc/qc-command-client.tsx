@@ -18,9 +18,9 @@ import { useEffect } from "react"
 
 type CommandCenterStats = FunctionReturnType<typeof api.qc.queries.commandCenterStats>
 
-function QcCommandCenterContent({ seedStats }: { nowMs: number; seedStats?: CommandCenterStats }) {
+function QcCommandCenterContent({ nowMs, seedStats }: { nowMs: number; seedStats?: CommandCenterStats }) {
   const { isLoading, stats, wardStats, rejectedCount, scope, dateFilters, handleScopeChange, handleDateFiltersChange } =
-    useQcCommandCenter({ seedStats })
+    useQcCommandCenter({ seedStats, seedNowMs: nowMs })
 
   useEffect(() => {
     qcPerfMark("qc.command_center.mount")

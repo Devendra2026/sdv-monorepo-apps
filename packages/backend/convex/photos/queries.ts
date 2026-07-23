@@ -88,13 +88,18 @@ export const noticePhotoUrls = query({
         return [surveyId, { front: null, side: null }] as const
       }
 
+      // Never .unique() — concurrent linkPhoto races can leave duplicate slot rows.
       const [front, side] = await Promise.all(
-        (["front", "side"] as const).map((slot) =>
-          ctx.db
+        (["front", "side"] as const).map(async (slot) => {
+          const rows = await ctx.db
             .query("photos")
             .withIndex("by_survey_slot", (q) => q.eq("surveyId", surveyId).eq("slot", slot))
-            .unique()
-        )
+            .take(2)
+          return rows.reduce<(typeof rows)[number] | null>(
+            (best, row) => (!best || row._creationTime >= best._creationTime ? row : best),
+            null
+          )
+        })
       )
 
       return [
@@ -130,10 +135,14 @@ export const frontThumbnails = query({
           return [surveyId, null] as const
         }
 
-        const front = await ctx.db
+        const frontRows = await ctx.db
           .query("photos")
           .withIndex("by_survey_slot", (q) => q.eq("surveyId", surveyId).eq("slot", "front"))
-          .unique()
+          .take(2)
+        const front = frontRows.reduce<(typeof frontRows)[number] | null>(
+          (best, row) => (!best || row._creationTime >= best._creationTime ? row : best),
+          null
+        )
         return [surveyId, front ? await ctx.storage.getUrl(front.storageId) : null] as const
       })
     )

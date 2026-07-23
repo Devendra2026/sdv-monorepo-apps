@@ -30,7 +30,7 @@ function DashboardAnalyticsWithQueriedQc({
 }) {
   const ready = useConvexAuthReady()
   const nowMs = useClientNowMs()
-  const qcSupervisors = useQuery(api.analytics.queries.qcSupervisorBundle, ready ? { nowMs, trendDays: 30 } : "skip")
+  const qcSupervisors = useQuery(api.analytics.queries.qcSupervisorBundle, ready ? { nowMs, trendDays: 14 } : "skip")
   return <DashboardAnalyticsClient analytics={analytics} qcSupervisors={qcSupervisors ?? null} />
 }
 

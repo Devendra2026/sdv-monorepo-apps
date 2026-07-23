@@ -15,11 +15,12 @@ import type { FunctionReturnType } from "convex/server"
 
 type CommandCenterStats = FunctionReturnType<typeof api.surveys.queries.commandCenterStats>
 
-function SurveyCommandCenterContent({ nowMs: _nowMs, seedStats }: { nowMs: number; seedStats?: CommandCenterStats }) {
+function SurveyCommandCenterContent({ nowMs, seedStats }: { nowMs: number; seedStats?: CommandCenterStats }) {
   const { isLoading, stats, wardStats, scope, dateFilters, handleScopeChange, handleDateFiltersChange } =
     useSurveyQueue({
       mode: "command",
       seedStats,
+      seedNowMs: nowMs,
     })
 
   return (

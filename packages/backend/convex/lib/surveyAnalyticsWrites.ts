@@ -2,6 +2,15 @@ import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx } from "../_generated/server"
 import { normalizeWardNo } from "./qcWardStats"
 import {
+  getDailyStatsRowForGeneration,
+  getMunicipalityStatsRowForGeneration,
+  getSurveyorStatsRowForGeneration,
+  getWardStatsRowForGeneration,
+  isLegacyGeneration,
+  LEGACY_GENERATION,
+  type AnalyticsGeneration,
+} from "./surveyAnalyticsLookups"
+import {
   analyticsDimensionsEqual,
   applyCounterDelta,
   countersForSnapshot,
@@ -15,15 +24,6 @@ import {
   type SurveyAnalyticsSnapshot,
   type SurveyStateCounters,
 } from "./surveyAnalyticsModel"
-import {
-  getDailyStatsRowForGeneration,
-  getMunicipalityStatsRowForGeneration,
-  getSurveyorStatsRowForGeneration,
-  getWardStatsRowForGeneration,
-  isLegacyGeneration,
-  LEGACY_GENERATION,
-  type AnalyticsGeneration,
-} from "./surveyAnalyticsLookups"
 
 export { LEGACY_GENERATION, type AnalyticsGeneration }
 export const ANALYTICS_META_KEY = "survey-analytics" as const
@@ -40,10 +40,12 @@ function snapshotsEqual(a: SurveyAnalyticsSnapshot, b: SurveyAnalyticsSnapshot):
 
 /** Load singleton analytics metadata, defaulting to legacy generation. */
 export async function getAnalyticsMeta(ctx: MutationCtx) {
-  const row = await ctx.db
+  // Never .unique() — duplicate meta rows throw → isolate restart during stats writes.
+  const rows = await ctx.db
     .query("surveyAnalyticsMeta")
     .withIndex("by_key", (q) => q.eq("key", ANALYTICS_META_KEY))
-    .unique()
+    .take(2)
+  const row = rows[0]
   if (row) return row
   return {
     _id: undefined,
@@ -354,7 +356,21 @@ async function applySurveyorCounterDelta(
     qcRejected: row.qcRejected + delta.qcRejected,
   }
   if (next.total < 0 || next.drafts < 0 || next.submitted < 0 || next.qcApproved < 0 || next.qcRejected < 0) {
-    throw new Error("Analytics counter underflow")
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        kind: "budget_event",
+        label: "analytics_counter_underflow",
+        generation,
+        surveyorId: snapshot.surveyorId,
+        next,
+      })
+    )
+    next.total = Math.max(0, next.total)
+    next.drafts = Math.max(0, next.drafts)
+    next.submitted = Math.max(0, next.submitted)
+    next.qcApproved = Math.max(0, next.qcApproved)
+    next.qcRejected = Math.max(0, next.qcRejected)
   }
   await ctx.db.patch(row._id, next)
 }

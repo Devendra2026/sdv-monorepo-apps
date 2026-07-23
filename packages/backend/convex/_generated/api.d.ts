@@ -53,6 +53,7 @@ import type * as lib_qc_normalizeTaxRates from "../lib/qc/normalizeTaxRates.js";
 import type * as lib_qc_taxRateDefaults from "../lib/qc/taxRateDefaults.js";
 import type * as lib_qc_taxRateMatrix from "../lib/qc/taxRateMatrix.js";
 import type * as lib_reports_demandNoticeFilename from "../lib/reports/demandNoticeFilename.js";
+import type * as lib_safeUnique from "../lib/safeUnique.js";
 import type * as lib_surveyAnalyticsLookups from "../lib/surveyAnalyticsLookups.js";
 import type * as lib_surveyAnalyticsModel from "../lib/surveyAnalyticsModel.js";
 import type * as lib_surveyAnalyticsWrites from "../lib/surveyAnalyticsWrites.js";
@@ -154,6 +155,7 @@ declare const fullApi: ApiFromModules<{
   "lib/qc/taxRateDefaults": typeof lib_qc_taxRateDefaults;
   "lib/qc/taxRateMatrix": typeof lib_qc_taxRateMatrix;
   "lib/reports/demandNoticeFilename": typeof lib_reports_demandNoticeFilename;
+  "lib/safeUnique": typeof lib_safeUnique;
   "lib/surveyAnalyticsLookups": typeof lib_surveyAnalyticsLookups;
   "lib/surveyAnalyticsModel": typeof lib_surveyAnalyticsModel;
   "lib/surveyAnalyticsWrites": typeof lib_surveyAnalyticsWrites;

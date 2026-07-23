@@ -1,10 +1,7 @@
 import { v } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { QueryCtx } from "../_generated/server"
-import {
-  MAX_DEMAND_NOTICE_JOB_SURVEYS,
-  MAX_DEMAND_NOTICE_PAYLOAD_PAGE,
-} from "../lib/budgetLimits"
+import { MAX_DEMAND_NOTICE_JOB_SURVEYS, MAX_DEMAND_NOTICE_PAYLOAD_PAGE } from "../lib/budgetLimits"
 import {
   CONSTRUCTION_TYPES,
   FLOOR_NAMES,
@@ -12,11 +9,7 @@ import {
   FLOOR_USAGE_TYPES,
   presentFloorRow,
 } from "../lib/masters/areaMasters"
-import {
-  mergeMasterOptions,
-  SANITATION_TYPES,
-  WATER_SOURCES,
-} from "../lib/masters/serviceMasters"
+import { mergeMasterOptions, SANITATION_TYPES, WATER_SOURCES } from "../lib/masters/serviceMasters"
 import {
   OWNERSHIP_TYPES,
   PROPERTY_USE_SUBCATEGORIES,
@@ -74,10 +67,7 @@ const MASTER_BUNDLE_CATEGORIES = [
 
 type MastersBundle = DemandNoticeMastersBundle
 
-export function assertJobAccess(
-  me: Awaited<ReturnType<typeof requireUser>>,
-  job: { requestedBy: Id<"users"> } | null
-) {
+export function assertJobAccess(me: Awaited<ReturnType<typeof requireUser>>, job: { requestedBy: Id<"users"> } | null) {
   if (!job) clientError("NOT_FOUND", "Export job not found")
   if (job.requestedBy !== me._id && me.role !== "admin") {
     clientError("FORBIDDEN", "You do not have access to this export job")
@@ -87,7 +77,7 @@ export function assertJobAccess(
 async function loadMastersBundle(
   ctx: QueryCtx,
   municipalityId: Id<"municipalities">,
-  reportDateMs: number,
+  reportDateMs: number
 ): Promise<MastersBundle> {
   const categorySet = new Set<string>(MASTER_BUNDLE_CATEGORIES)
   const rows = (await loadActiveMastersByCategories(ctx, MASTER_BUNDLE_CATEGORIES)).filter((m) =>
@@ -162,13 +152,18 @@ async function loadTaxRates(ctx: QueryCtx, municipalityId: Id<"municipalities">)
 }
 
 async function loadPhotoUrls(ctx: QueryCtx, surveyId: Id<"surveys">) {
+  // Never .unique() — duplicate slot rows from concurrent uploads throw and crash isolates.
   const [front, side] = await Promise.all(
-    (["front", "side"] as const).map((slot) =>
-      ctx.db
+    (["front", "side"] as const).map(async (slot) => {
+      const rows = await ctx.db
         .query("photos")
         .withIndex("by_survey_slot", (q) => q.eq("surveyId", surveyId).eq("slot", slot))
-        .unique()
-    )
+        .take(2)
+      return rows.reduce<(typeof rows)[number] | null>(
+        (best, row) => (!best || row._creationTime >= best._creationTime ? row : best),
+        null
+      )
+    })
   )
   return {
     front: front ? await ctx.storage.getUrl(front.storageId) : null,
@@ -200,7 +195,7 @@ export async function buildNoticePayloadsForSurveys(
     })
     clientError(
       "VALIDATION",
-      `Demand notice payload page is limited to ${MAX_DEMAND_NOTICE_PAYLOAD_PAGE} surveys — request a smaller page`,
+      `Demand notice payload page is limited to ${MAX_DEMAND_NOTICE_PAYLOAD_PAGE} surveys — request a smaller page`
     )
   }
 
