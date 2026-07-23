@@ -5,6 +5,7 @@ import { query } from "../_generated/server"
 import { presentFloorRow } from "../lib/masters/areaMasters"
 import { normalizeParcelKey, resolvePropertyId } from "../lib/propertyId"
 import { normalizeWardNo } from "../lib/qcWardStats"
+import { getLegacyWardStatsRow } from "../lib/surveyAnalyticsLookups"
 import { loadWardStatsForScope } from "../lib/surveyRollupStats"
 import {
   loadScopeCompletionPct,
@@ -12,6 +13,7 @@ import {
   resolveListTotalFromStats,
   scopeStatsFastPathEligible,
 } from "../lib/surveyScopeStats"
+import { pendingQcCount } from "../lib/surveyStatsAggregate"
 import { computeSurveyWardAggregates } from "../lib/surveyWardStats"
 import { qcStatus, surveyStatus } from "../schema"
 import { assertCanAccessSurvey, fieldSurveyAccess, querySurveysInFieldScope } from "../shared/fieldAccess"
@@ -24,15 +26,15 @@ import {
 } from "../shared/tenancy"
 import {
   COMMAND_CENTER_WARD_SCAN_LIMIT,
-  LIST_PAGINATED_PAGE_BUFFER,
   applySurveyListFilters,
   collectSurveysForListPaginated,
   enrichSurveyPropertyIds,
   enrichSurveyorNames,
   filterRowsBySearchTerm,
   listPaginatedRequiresFullScan,
-  listPaginatedUsesIndexedTake,
+  listPaginatedUsesIndexedCursor,
   loadMunicipalityCodes,
+  paginateMunicipalitySurveys,
   parseListOffset,
   resolveListPaginatedScanLimit,
   resolveListSort,
@@ -144,7 +146,61 @@ function filterParcelSharedSurveys(rows: Doc<"surveys">[]): Doc<"surveys">[] {
   })
 }
 
-/** Cursor-paginated survey list sorted by ward then parcel ascending. */
+async function resolveListTotalCount(
+  ctx: Parameters<typeof resolveListTotalFromStats>[0],
+  me: Doc<"users">,
+  nowMs: number,
+  args: {
+    districtId?: Id<"districts">
+    municipalityId?: Id<"municipalities">
+    wardNo?: string
+    status?: Doc<"surveys">["status"]
+    qcStatus?: Doc<"surveys">["qcStatus"]
+    parcelSharedOnly?: boolean
+  }
+): Promise<number | null> {
+  if (args.parcelSharedOnly) return null
+
+  if (scopeStatsFastPathEligible(args)) {
+    return await resolveListTotalFromStats(ctx, me, nowMs, {
+      districtId: args.districtId,
+      municipalityId: args.municipalityId,
+      status: args.status,
+      qcStatus: args.qcStatus,
+    })
+  }
+
+  // Ward-scoped totals from ward rollups (indexed cursor path).
+  if (args.wardNo && args.municipalityId && !args.status && !args.qcStatus) {
+    const row = await getLegacyWardStatsRow(ctx, args.municipalityId, args.wardNo)
+    return row?.total ?? null
+  }
+  if (args.wardNo && args.municipalityId && args.status === "draft") {
+    const row = await getLegacyWardStatsRow(ctx, args.municipalityId, args.wardNo)
+    return row?.drafts ?? null
+  }
+  if (args.wardNo && args.municipalityId && args.status === "submitted") {
+    const row = await getLegacyWardStatsRow(ctx, args.municipalityId, args.wardNo)
+    return row?.submitted ?? null
+  }
+  if (args.wardNo && args.municipalityId && args.qcStatus === "approved") {
+    const row = await getLegacyWardStatsRow(ctx, args.municipalityId, args.wardNo)
+    return row?.qcApproved ?? null
+  }
+  if (args.wardNo && args.municipalityId && args.qcStatus === "rejected") {
+    const row = await getLegacyWardStatsRow(ctx, args.municipalityId, args.wardNo)
+    return row?.qcRejected ?? null
+  }
+  if (args.wardNo && args.municipalityId && args.qcStatus === "pending") {
+    const row = await getLegacyWardStatsRow(ctx, args.municipalityId, args.wardNo)
+    if (!row) return null
+    return pendingQcCount(row.submitted, row.qcApproved, row.qcPending)
+  }
+
+  return null
+}
+
+/** Cursor-paginated survey list — indexed Convex cursors for single-ULB/ward scopes. */
 export const listPaginated = query({
   args: {
     paginationOpts: paginationOptsValidator,
@@ -165,18 +221,38 @@ export const listPaginated = query({
       clientError("FORBIDDEN", "This district is outside your assigned scope")
     }
 
-    const offset = parseListOffset(args.paginationOpts.cursor)
     const numItems = args.paginationOpts.numItems
+    const statsTotal = await resolveListTotalCount(ctx, me, args.nowMs, args)
+
+    // Single-ULB / ward: real Convex index pagination (no 800-row offset window).
+    if (listPaginatedUsesIndexedCursor(args) && args.municipalityId) {
+      const indexed = await paginateMunicipalitySurveys(ctx, {
+        municipalityId: args.municipalityId,
+        status: args.status,
+        qcStatus: args.qcStatus,
+        wardNo: args.wardNo,
+        paginationOpts: {
+          numItems,
+          cursor: args.paginationOpts.cursor ?? null,
+        },
+      })
+      const filtered = applySurveyListFilters(indexed.page, args, me, muniIds)
+      const codes = await loadMunicipalityCodes(
+        ctx,
+        filtered.map((r) => r.municipalityId)
+      )
+      const page = await enrichSurveyorNames(ctx, enrichSurveyPropertyIds(filtered, codes))
+      return {
+        page,
+        continueCursor: indexed.continueCursor,
+        isDone: indexed.isDone,
+        totalCount: statsTotal ?? page.length,
+        scopeTruncated: false,
+      }
+    }
+
+    const offset = parseListOffset(args.paginationOpts.cursor)
     const requiresFullScan = listPaginatedRequiresFullScan(args)
-    const statsTotal =
-      !args.parcelSharedOnly && scopeStatsFastPathEligible(args)
-        ? await resolveListTotalFromStats(ctx, me, args.nowMs, {
-            districtId: args.districtId,
-            municipalityId: args.municipalityId,
-            status: args.status,
-            qcStatus: args.qcStatus,
-          })
-        : null
     const scanLimit = resolveListPaginatedScanLimit({
       offset,
       numItems,
@@ -184,27 +260,7 @@ export const listPaginated = query({
       requiresFullScan,
     })
 
-    let filtered: Doc<"surveys">[]
-
-    if (listPaginatedUsesIndexedTake(args) && args.municipalityId) {
-      const takeCount = Math.min(scanLimit, offset + numItems + LIST_PAGINATED_PAGE_BUFFER)
-      const rows = args.status
-        ? await ctx.db
-            .query("surveys")
-            .withIndex("by_municipality_status", (q) =>
-              q.eq("municipalityId", args.municipalityId!).eq("status", args.status!)
-            )
-            .order("desc")
-            .take(takeCount)
-        : await ctx.db
-            .query("surveys")
-            .withIndex("by_municipality_status", (q) => q.eq("municipalityId", args.municipalityId!))
-            .order("desc")
-            .take(takeCount)
-      filtered = applySurveyListFilters(rows, args, me, muniIds)
-    } else {
-      filtered = await collectSurveysForListPaginated(ctx, me, args, scope, muniIds, access, scanLimit)
-    }
+    let filtered = await collectSurveysForListPaginated(ctx, me, args, scope, muniIds, access, scanLimit)
 
     if (args.parcelSharedOnly) {
       filtered = filterParcelSharedSurveys(filtered)
@@ -214,13 +270,14 @@ export const listPaginated = query({
       filtered = await filterRowsBySearchTerm(ctx, filtered, args.searchTerm)
     }
 
-    const scopeTruncated =
-      statsTotal === null ? filtered.length >= scanLimit : statsTotal > scanLimit && filtered.length >= scanLimit
+    const scopeTruncated = filtered.length >= scanLimit
     if (filtered.length > scanLimit) {
       filtered = filtered.slice(0, scanLimit)
     }
 
-    const totalCount = statsTotal ?? filtered.length
+    // When truncated, do not advertise a rollup total larger than the scanned window
+    // (avoids empty pages past the 800-row cap).
+    const totalCount = scopeTruncated ? filtered.length : (statsTotal ?? filtered.length)
     const pageRows = filtered.slice(offset, offset + numItems)
     const nextOffset = offset + numItems
 
@@ -228,9 +285,7 @@ export const listPaginated = query({
       ctx,
       pageRows.map((r) => r.municipalityId)
     )
-    const enriched = enrichSurveyPropertyIds(pageRows, codes)
-    const named = await enrichSurveyorNames(ctx, enriched)
-    const page = named
+    const page = await enrichSurveyorNames(ctx, enrichSurveyPropertyIds(pageRows, codes))
 
     return {
       page,

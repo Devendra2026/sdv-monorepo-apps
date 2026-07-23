@@ -7,11 +7,14 @@
 export const MAX_EXPORT_PAGE_SIZE = 40
 export const DEFAULT_EXPORT_PAGE_SIZE = 30
 /**
- * Max surveys scanned for listExportIds scope.
- * Before: 1500 — multi-MB isolate spikes under concurrent export + dashboard.
- * After: 800 — still useful exports; clients should narrow filters for larger scopes.
+ * Max surveys scanned for listExportIds when scope is broader than a single ULB
+ * (district / multi-ULB fallback). Single-ULB exports use indexed cursor pages instead.
  */
 export const EXPORT_SCOPE_LIMIT = 800
+/** Max survey IDs returned per listExportIds cursor page (IDs only — lightweight). */
+export const EXPORT_ID_PAGE_SIZE = 100
+/** Hard ceiling for a single listExportIds page request. */
+export const MAX_EXPORT_ID_PAGE_SIZE = 200
 /** Max concurrent survey enrichments (floors/photos/storage URLs) per export page. */
 export const EXPORT_ENRICH_CONCURRENCY = 8
 /** Max concurrent notice photo URL resolutions. */

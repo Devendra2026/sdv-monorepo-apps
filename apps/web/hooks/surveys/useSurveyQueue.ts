@@ -19,8 +19,6 @@ import { useQuery as useConvexQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import { useCallback, useMemo, useState } from "react"
 
-const pageSize = 20
-
 type CommandCenterStats = FunctionReturnType<typeof api.surveys.queries.commandCenterStats>
 type RegistryPage = FunctionReturnType<typeof api.surveys.queries.listPaginated>
 
@@ -138,7 +136,7 @@ export function useSurveyQueue(options: UseSurveyQueueOptions = {}) {
 
   const serverStats = useConvexQuery(
     api.surveys.queries.commandCenterStats,
-    authReady && scopeReady && mode === "command" && Number.isFinite(nowMs)
+    authReady && scopeReady && Number.isFinite(nowMs)
       ? {
           wardNo: scopeFilters.wardNo,
           districtId: scopeFilters.districtId as Id<"districts"> | undefined,
@@ -221,6 +219,7 @@ export function useSurveyQueue(options: UseSurveyQueueOptions = {}) {
     wardStats,
     filteredByTab,
     filteredCount,
+    scopeTruncated: mode === "registry" ? Boolean(paginated.scopeTruncated) : false,
     pagedRows: filteredByTab,
     canGoPrev: paginated.canGoPrev,
     canGoNext: paginated.canGoNext,

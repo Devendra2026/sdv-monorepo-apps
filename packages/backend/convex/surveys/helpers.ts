@@ -713,6 +713,17 @@ export function listPaginatedUsesIndexedTake(args: SurveyListFilterArgs): boolea
   )
 }
 
+/**
+ * True when list/export can walk the full ULB (or ward) via Convex `.paginate()`
+ * instead of an offset window over a capped collect.
+ */
+export function listPaginatedUsesIndexedCursor(args: SurveyListFilterArgs): boolean {
+  return Boolean(args.municipalityId && !listPaginatedRequiresFullScan(args) && !args.surveyorId)
+}
+
+/** Prefix for ward-variant cursor payloads (JSON after prefix). */
+export const INDEXED_LIST_CURSOR_PREFIX = "ic1:"
+
 export function resolveListPaginatedScanLimit(options: {
   offset: number
   numItems: number
@@ -731,8 +742,171 @@ export function resolveListPaginatedScanLimit(options: {
 
 export function parseListOffset(cursor: string | null | undefined): number {
   if (!cursor) return 0
+  // Indexed / Convex cursors are opaque — never treat them as numeric offsets.
+  if (cursor.startsWith(INDEXED_LIST_CURSOR_PREFIX)) return 0
   const n = Number(cursor)
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0
+}
+
+/** Common wardNo spellings so "5" / "05" / "005" each get their own index pages. */
+export function wardNoSpellingVariants(wardNo: string): string[] {
+  const trimmed = wardNo.trim()
+  const wardSet = new Set<string>()
+  if (trimmed) wardSet.add(trimmed)
+  const wardNum = Number(trimmed)
+  if (!Number.isNaN(wardNum)) {
+    wardSet.add(String(wardNum))
+    wardSet.add(String(wardNum).padStart(2, "0"))
+    wardSet.add(String(wardNum).padStart(3, "0"))
+  }
+  return [...wardSet].filter((w) => w.length > 0)
+}
+
+type WardIndexedCursor = { w: number; c: string | null }
+
+function encodeWardIndexedCursor(state: WardIndexedCursor): string {
+  return `${INDEXED_LIST_CURSOR_PREFIX}${JSON.stringify({ w: state.w, c: state.c })}`
+}
+
+function decodeWardIndexedCursor(cursor: string | null | undefined): WardIndexedCursor {
+  if (!cursor) return { w: 0, c: null }
+  if (!cursor.startsWith(INDEXED_LIST_CURSOR_PREFIX)) {
+    return { w: 0, c: cursor }
+  }
+  try {
+    const parsed = JSON.parse(cursor.slice(INDEXED_LIST_CURSOR_PREFIX.length)) as {
+      w?: unknown
+      c?: unknown
+    }
+    const w = typeof parsed.w === "number" && Number.isFinite(parsed.w) ? Math.max(0, Math.floor(parsed.w)) : 0
+    const c = typeof parsed.c === "string" ? parsed.c : null
+    return { w, c }
+  } catch {
+    return { w: 0, c: null }
+  }
+}
+
+async function paginateWardVariant(
+  ctx: QueryCtx,
+  municipalityId: Id<"municipalities">,
+  ward: string,
+  status: Doc<"surveys">["status"] | undefined,
+  paginationOpts: { numItems: number; cursor: string | null }
+) {
+  if (status) {
+    return await ctx.db
+      .query("surveys")
+      .withIndex("by_municipality_ward_status", (q) =>
+        q.eq("municipalityId", municipalityId).eq("wardNo", ward).eq("status", status)
+      )
+      .order("desc")
+      .paginate(paginationOpts)
+  }
+  return await ctx.db
+    .query("surveys")
+    .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", municipalityId).eq("wardNo", ward))
+    .order("desc")
+    .paginate(paginationOpts)
+}
+
+/**
+ * Index-backed Convex cursor pagination for a single municipality (optional ward).
+ * Walks ward spelling variants when `wardNo` is set so pages cover the full ward set.
+ */
+export async function paginateMunicipalitySurveys(
+  ctx: QueryCtx,
+  args: {
+    municipalityId: Id<"municipalities">
+    status?: Doc<"surveys">["status"]
+    qcStatus?: Doc<"surveys">["qcStatus"]
+    wardNo?: string
+    paginationOpts: { numItems: number; cursor: string | null }
+  }
+): Promise<{ page: Doc<"surveys">[]; continueCursor: string | null; isDone: boolean }> {
+  const numItems = args.paginationOpts.numItems
+  const rawCursor = args.paginationOpts.cursor
+
+  if (args.wardNo) {
+    const variants = wardNoSpellingVariants(args.wardNo)
+    let { w, c } = decodeWardIndexedCursor(rawCursor)
+    if (w >= variants.length) {
+      return { page: [], continueCursor: null, isDone: true }
+    }
+
+    const collected: Doc<"surveys">[] = []
+    const seen = new Set<string>()
+    while (w < variants.length && collected.length < numItems) {
+      const need = numItems - collected.length
+      const variant = variants[w]!
+      const result = await paginateWardVariant(ctx, args.municipalityId, variant, args.status, {
+        numItems: need,
+        cursor: c,
+      })
+      for (const row of result.page) {
+        if (seen.has(row._id)) continue
+        seen.add(row._id)
+        collected.push(row)
+        if (collected.length >= numItems) break
+      }
+      if (!result.isDone) {
+        return {
+          page: collected,
+          continueCursor: encodeWardIndexedCursor({ w, c: result.continueCursor }),
+          isDone: false,
+        }
+      }
+      w += 1
+      c = null
+    }
+    return {
+      page: collected,
+      continueCursor: w < variants.length ? encodeWardIndexedCursor({ w, c: null }) : null,
+      isDone: w >= variants.length,
+    }
+  }
+
+  const cursor = rawCursor?.startsWith(INDEXED_LIST_CURSOR_PREFIX) ? null : rawCursor
+
+  if (args.qcStatus) {
+    const result = await ctx.db
+      .query("surveys")
+      .withIndex("by_municipality_qc_status", (q) =>
+        q.eq("municipalityId", args.municipalityId).eq("qcStatus", args.qcStatus!)
+      )
+      .order("desc")
+      .paginate({ numItems, cursor })
+    return {
+      page: result.page,
+      continueCursor: result.isDone ? null : result.continueCursor,
+      isDone: result.isDone,
+    }
+  }
+
+  if (args.status) {
+    const result = await ctx.db
+      .query("surveys")
+      .withIndex("by_municipality_status", (q) =>
+        q.eq("municipalityId", args.municipalityId).eq("status", args.status!)
+      )
+      .order("desc")
+      .paginate({ numItems, cursor })
+    return {
+      page: result.page,
+      continueCursor: result.isDone ? null : result.continueCursor,
+      isDone: result.isDone,
+    }
+  }
+
+  const result = await ctx.db
+    .query("surveys")
+    .withIndex("by_municipality_status", (q) => q.eq("municipalityId", args.municipalityId))
+    .order("desc")
+    .paginate({ numItems, cursor })
+  return {
+    page: result.page,
+    continueCursor: result.isDone ? null : result.continueCursor,
+    isDone: result.isDone,
+  }
 }
 
 async function querySurveysByMunicipality(

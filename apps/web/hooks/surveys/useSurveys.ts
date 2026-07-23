@@ -117,12 +117,14 @@ export function useSurveyListPaginated(
 
   const surveys = result?.page
   const totalCount = result?.totalCount
+  const scopeTruncated = result?.scopeTruncated ?? false
   const canGoNext = result ? !result.isDone : false
 
   return useMemo(
     () => ({
       surveys,
       totalCount,
+      scopeTruncated,
       isLoading: result === undefined,
       pageNumber,
       pageIndex,
@@ -134,7 +136,7 @@ export function useSurveyListPaginated(
       },
       goPrev,
     }),
-    [surveys, totalCount, result, pageNumber, pageIndex, size, canGoPrev, canGoNext, goNext, goPrev]
+    [surveys, totalCount, scopeTruncated, result, pageNumber, pageIndex, size, canGoPrev, canGoNext, goNext, goPrev]
   )
 }
 

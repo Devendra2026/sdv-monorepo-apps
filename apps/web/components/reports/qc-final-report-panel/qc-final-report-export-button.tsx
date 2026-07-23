@@ -22,6 +22,7 @@ import { toast } from "sonner"
 
 /** Pause between pages so exports do not starve live dashboard queries. */
 const EXPORT_PAGE_DELAY_MS = 200
+const EXPORT_ID_PAGE_SIZE = 100
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -38,6 +39,55 @@ async function fetchExportBundlesWithRetry(convex: ReturnType<typeof useConvex>,
       throw firstError
     }
   }
+}
+
+async function collectAllExportIds(
+  convex: ReturnType<typeof useConvex>,
+  queryArgs: {
+    qcStatus: "approved"
+    wardNo?: string
+    districtId?: Id<"districts">
+    municipalityId?: Id<"municipalities">
+  },
+  onProgress: (loaded: number, total: number) => void
+): Promise<{ surveyIds: Id<"surveys">[]; total: number; truncated: boolean }> {
+  if (queryArgs.wardNo && !queryArgs.municipalityId) {
+    throw new Error("Select a ULB before exporting a ward so all property IDs can be included.")
+  }
+
+  const surveyIds: Id<"surveys">[] = []
+  let cursor: string | null = null
+  let total = 0
+  let truncated = false
+  let guard = 0
+  const maxPages = 2000
+
+  for (;;) {
+    guard += 1
+    if (guard > maxPages) {
+      throw new Error("Export ID paging exceeded safety limit — narrow filters and retry")
+    }
+    const page: {
+      surveyIds: Id<"surveys">[]
+      total: number
+      truncated: boolean
+      isDone: boolean
+      continueCursor: string | null
+    } = await convex.query(api.export.queries.listExportIds, {
+      ...queryArgs,
+      paginationOpts: { numItems: EXPORT_ID_PAGE_SIZE, cursor },
+    })
+    surveyIds.push(...page.surveyIds)
+    total = Math.max(page.total, surveyIds.length)
+    truncated = truncated || page.truncated
+    onProgress(surveyIds.length, total)
+    if (page.isDone) break
+    if (page.continueCursor === null) break
+    cursor = page.continueCursor
+    await sleep(EXPORT_PAGE_DELAY_MS)
+  }
+
+  return { surveyIds, total: surveyIds.length, truncated }
 }
 
 type QcFinalReportExportButtonProps = {
@@ -76,7 +126,11 @@ export function QcFinalReportExportButton({ filters, disabled }: QcFinalReportEx
         municipalityId: filters.municipalityId as Id<"municipalities"> | undefined,
       }
 
-      const { surveyIds, total } = await convex.query(api.export.queries.listExportIds, queryArgs)
+      const { surveyIds, total, truncated } = await collectAllExportIds(convex, queryArgs, (loaded, expected) => {
+        toast.loading(`Collecting IDs ${loaded.toLocaleString()} / ${expected.toLocaleString()}…`, {
+          id: progress,
+        })
+      })
       if (!surveyIds.length) {
         toast.message("No QC-approved surveys to export for the current filters.", { id: progress })
         return
@@ -96,13 +150,6 @@ export function QcFinalReportExportButton({ filters, disabled }: QcFinalReportEx
         }
       }
 
-      if (total > QC_FINAL_EXPORT_SCOPE_LIMIT) {
-        toast.warning(
-          `Export includes up to ${QC_FINAL_EXPORT_SCOPE_LIMIT.toLocaleString()} surveys (server scope limit). Narrow filters for a complete export.`,
-          { id: progress, duration: 8000 }
-        )
-      }
-
       const municipalityIds = allBundles.map((b) => b.municipalityId)
       const rateConfigByMunicipality = await loadRateConfigs(municipalityIds)
 
@@ -119,6 +166,9 @@ export function QcFinalReportExportButton({ filters, disabled }: QcFinalReportEx
 
       exportQcFinalReportExcel(rows, filename)
       toast.success(`Exported ${rows.length.toLocaleString()} QC-approved survey(s) to Excel`, { id: progress })
+      if (truncated || rows.length >= QC_FINAL_EXPORT_SCOPE_LIMIT) {
+        toast.warning(`Export may be incomplete for this wide scope. Select a ULB or ward for a full download.`)
+      }
     } catch (e) {
       toast.error(parseConvexError(e).message, { id: progress })
     } finally {

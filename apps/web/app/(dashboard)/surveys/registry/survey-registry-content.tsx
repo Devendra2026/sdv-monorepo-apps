@@ -42,6 +42,7 @@ export function SurveyRegistryContent({
     isLoading,
     stats,
     filteredCount,
+    scopeTruncated,
     pagedRows,
     surveyorSearch,
     canViewAll,
@@ -122,10 +123,18 @@ export function SurveyRegistryContent({
         showSurveyor={canViewAll}
       />
 
+      {scopeTruncated ? (
+        <p className="text-sm text-amber-800 dark:text-amber-200">
+          Results are limited for this broad search or date filter. Narrow district/ULB/ward filters to see the full
+          list.
+        </p>
+      ) : null}
+
       <TablePagination
         pageNumber={pageNumber}
         pageSize={pageSize}
         itemCount={pagedRows?.length ?? 0}
+        totalCount={filteredCount}
         canGoPrev={canGoPrev}
         canGoNext={canGoNext}
         onPrev={goPrev}

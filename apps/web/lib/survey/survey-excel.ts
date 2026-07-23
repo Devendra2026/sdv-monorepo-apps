@@ -1,6 +1,7 @@
 /**
- * Full survey Excel export/import — all mobile input fields, floors, co-owners, photos.
- * Column headers are stable for round-trip import via surveyExport.importExcelBundle.
+ * Full survey Excel export/import — all mobile input fields with co-owners, floors, and photos.
+ * Export is a single Surveys sheet (related data flattened into columns).
+ * Import still accepts legacy multi-sheet workbooks (Surveys + CoOwners + Floors).
  */
 import { PHOTO_SLOT_LABEL, QC_STATUS_LABEL, SURVEY_STATUS_LABEL } from "@/lib/domain"
 import { surveyAreaMetrics } from "@/lib/survey/area"
@@ -8,6 +9,7 @@ import { fmtDate } from "@workspace/ui/lib/utils"
 import * as XLSX from "xlsx"
 
 export const SURVEY_SHEET = "Surveys"
+/** Legacy import sheet names (export no longer writes these). */
 export const CO_OWNERS_SHEET = "CoOwners"
 export const FLOORS_SHEET = "Floors"
 export const PHOTOS_SHEET = "Photos"
@@ -170,99 +172,77 @@ function surveyMainRow(s: SurveyExportBundle) {
   }
 }
 
-function coOwnerRows(s: SurveyExportBundle) {
-  const pid = s.propertyId ?? ""
+function flattenCoOwnersColumn(s: SurveyExportBundle): string {
   const owners = s.owners ?? []
-  if (owners.length === 0) return []
-  return owners.map((o, i) => ({
-    "Property ID": pid,
-    "Survey ID": s._id,
-    "Owner Index": i + 1,
-    Name: o.name ?? "",
-    "Father / Husband Name": o.fatherOrHusbandName ?? "",
-    Mobile: o.mobileNo ?? "",
-    "Alt Mobile": o.altMobileNo ?? "",
-  }))
+  if (owners.length === 0) return ""
+  return owners
+    .map((o) => [o.name ?? "", o.fatherOrHusbandName ?? "", o.mobileNo ?? "", o.altMobileNo ?? ""].join(" | "))
+    .join(" ; ")
 }
 
-function floorRows(s: SurveyExportBundle) {
-  const pid = s.propertyId ?? ""
-  return (s.floors ?? []).map((f) => ({
-    "Property ID": pid,
-    "Survey ID": s._id,
-    "Client Floor ID": f.clientFloorId,
-    Position: f.position,
-    Floor: f.floorName,
-    "Usage Factor": f.usageFactor ?? "",
-    "Usage Type": f.usageType,
-    "Construction Type": f.constructionType,
-    Occupancy: f.isOccupied ? "Occupied" : "Vacant",
-    "Area (Sqft)": f.areaSqft,
-  }))
+function flattenFloorsColumn(s: SurveyExportBundle): string {
+  const floors = s.floors ?? []
+  if (floors.length === 0) return ""
+  return floors
+    .map((f) => {
+      const occupancy = f.isOccupied ? "Occupied" : "Vacant"
+      return `${f.position}:${f.floorName} | ${f.usageType} | ${f.constructionType} | ${occupancy} | ${f.areaSqft}`
+    })
+    .join(" ; ")
 }
 
-function photoRows(s: SurveyExportBundle) {
-  const pid = s.propertyId ?? ""
-  return (s.photos ?? []).map((p) => ({
-    "Property ID": pid,
-    "Survey ID": s._id,
-    Slot: PHOTO_SLOT_LABEL[p.slot as keyof typeof PHOTO_SLOT_LABEL] ?? p.slot,
-    "Slot Key": p.slot,
-    "Captured At": fmtDate(p.capturedAt),
-    "Size (KB)": p.sizeKb,
-    Width: p.width ?? "",
-    Height: p.height ?? "",
-    "Photo URL": p.url ?? "",
-  }))
+function flattenPhotosColumn(s: SurveyExportBundle): string {
+  const photos = s.photos ?? []
+  if (photos.length === 0) return ""
+  return photos
+    .map((p) => {
+      const slot = PHOTO_SLOT_LABEL[p.slot as keyof typeof PHOTO_SLOT_LABEL] ?? p.slot
+      return `${slot} | ${p.url ?? ""}`
+    })
+    .join(" ; ")
 }
 
-const GUIDE_ROWS = [
-  { Topic: "Export", Detail: "All mobile survey fields, co-owners, floors, and photo metadata." },
-  {
-    Topic: "Import",
-    Detail: "Edit the Surveys sheet; use CoOwners and Floors for related rows. Re-import via Surveys page.",
-  },
-  { Topic: "Property ID", Detail: "Format: ULB(6)-Ward(3)-Parcel(5)-Unit(3)-UseLetter e.g. 801262-001-00004-001-R" },
-  { Topic: "Match key", Detail: "Imports match existing surveys by Property ID, then Local ID." },
-  { Topic: "Municipality ID", Detail: "Required Convex ID on each survey row — do not change unless moving ULB." },
-]
+/** One export row: survey fields + co-owners / floors / photos as joined columns. */
+function surveyCombinedRow(s: SurveyExportBundle) {
+  return {
+    ...surveyMainRow(s),
+    "Co-Owners": flattenCoOwnersColumn(s),
+    Floors: flattenFloorsColumn(s),
+    Photos: flattenPhotosColumn(s),
+  }
+}
 
 type JsonRow = Record<string, unknown>
 
-/** Accumulator for chunked exports — keeps flat sheet rows, not full Convex bundles. */
+/** Accumulator for chunked exports — one combined row per survey. */
 export type SurveyExcelExportAccumulator = {
   surveys: JsonRow[]
-  coOwners: JsonRow[]
-  floors: JsonRow[]
-  photos: JsonRow[]
 }
 
 export function createSurveyExcelExportAccumulator(): SurveyExcelExportAccumulator {
-  return { surveys: [], coOwners: [], floors: [], photos: [] }
+  return { surveys: [] }
 }
 
 /** Flatten one page of bundles into sheet rows, then discard the bundles. */
 export function appendSurveyExportBundles(acc: SurveyExcelExportAccumulator, bundles: SurveyExportBundle[]): void {
   for (const bundle of bundles) {
-    acc.surveys.push(surveyMainRow(bundle))
-    acc.coOwners.push(...coOwnerRows(bundle))
-    acc.floors.push(...floorRows(bundle))
-    acc.photos.push(...photoRows(bundle))
+    acc.surveys.push(surveyCombinedRow(bundle))
   }
 }
 
-/** Write accumulated flat rows to an .xlsx download. */
+/** Write a single Surveys sheet (sorted by Property ID). */
 export function finalizeSurveyExcelExport(acc: SurveyExcelExportAccumulator): void {
+  acc.surveys.sort((a, b) => {
+    const left = String(a["Property ID"] ?? "")
+    const right = String(b["Property ID"] ?? "")
+    return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" })
+  })
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(acc.surveys), SURVEY_SHEET)
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(acc.coOwners), CO_OWNERS_SHEET)
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(acc.floors), FLOORS_SHEET)
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(acc.photos), PHOTOS_SHEET)
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(GUIDE_ROWS), GUIDE_SHEET)
   XLSX.writeFile(wb, `surveys_full_${stamp()}.xlsx`)
 }
 
-/** Multi-sheet workbook with complete survey data. */
+/** Single-sheet workbook with complete survey data. */
 export function exportSurveysFullExcel(bundles: SurveyExportBundle[]) {
   const acc = createSurveyExcelExportAccumulator()
   appendSurveyExportBundles(acc, bundles)

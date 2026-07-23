@@ -1,10 +1,20 @@
+import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { QueryCtx } from "../_generated/server"
 import { query } from "../_generated/server"
-import { DEFAULT_EXPORT_PAGE_SIZE, EXPORT_SCOPE_LIMIT, MAX_EXPORT_PAGE_SIZE } from "../lib/budgetLimits"
+import {
+  DEFAULT_EXPORT_PAGE_SIZE,
+  EXPORT_ID_PAGE_SIZE,
+  EXPORT_SCOPE_LIMIT,
+  MAX_EXPORT_ID_PAGE_SIZE,
+  MAX_EXPORT_PAGE_SIZE,
+} from "../lib/budgetLimits"
 import { logBudgetEvent, logSlowPath } from "../lib/observability"
 import { comparePropertyIds } from "../lib/propertyId"
+import { getLegacyWardStatsRow } from "../lib/surveyAnalyticsLookups"
+import { resolveListTotalFromStats, scopeStatsFastPathEligible } from "../lib/surveyScopeStats"
+import { pendingQcCount } from "../lib/surveyStatsAggregate"
 import { gpsCapture, photoSlot, qcStatus, sanitationType, surveyOwnerEntry, surveyStatus, waterSource } from "../schema"
 import { hasCapability } from "../shared/capabilities"
 import { assertCanAccessSurvey, fieldSurveyAccess } from "../shared/fieldAccess"
@@ -15,10 +25,21 @@ import {
   tenantDistrictIds,
   tenantMunicipalityIds,
 } from "../shared/tenancy"
-import { collectSurveysForListPaginated } from "../surveys/helpers"
+import {
+  applySurveyListFilters,
+  collectSurveysForListPaginated,
+  listPaginatedUsesIndexedCursor,
+  paginateMunicipalitySurveys,
+} from "../surveys/helpers"
 import { enrichSurveysForExport, loadMunicipalityCodes } from "./helpers"
 
-export { DEFAULT_EXPORT_PAGE_SIZE, EXPORT_SCOPE_LIMIT, MAX_EXPORT_PAGE_SIZE }
+export {
+  DEFAULT_EXPORT_PAGE_SIZE,
+  EXPORT_ID_PAGE_SIZE,
+  EXPORT_SCOPE_LIMIT,
+  MAX_EXPORT_ID_PAGE_SIZE,
+  MAX_EXPORT_PAGE_SIZE,
+}
 
 const listFilterArgs = {
   status: v.optional(surveyStatus),
@@ -129,7 +150,34 @@ async function requireExportCaller(ctx: QueryCtx) {
   return { me, access }
 }
 
-/** One full-scope collect + propertyId sort for Excel export (IDs or offset pages). */
+async function resolveExportTotal(ctx: QueryCtx, me: Doc<"users">, args: ExportListFilters): Promise<number | null> {
+  // nowMs only affects daily "today" fields; export total uses lifetime rollups.
+  const nowMs = 0
+  if (scopeStatsFastPathEligible(args)) {
+    return await resolveListTotalFromStats(ctx, me, nowMs, {
+      districtId: args.districtId,
+      municipalityId: args.municipalityId,
+      status: args.status,
+      qcStatus: args.qcStatus,
+    })
+  }
+  if (args.wardNo && args.municipalityId && !args.status && !args.qcStatus && !args.surveyorId) {
+    const row = await getLegacyWardStatsRow(ctx, args.municipalityId, args.wardNo)
+    return row?.total ?? null
+  }
+  if (args.wardNo && args.municipalityId && args.qcStatus === "approved" && !args.surveyorId) {
+    const row = await getLegacyWardStatsRow(ctx, args.municipalityId, args.wardNo)
+    return row?.qcApproved ?? null
+  }
+  if (args.wardNo && args.municipalityId && args.qcStatus === "pending" && !args.surveyorId) {
+    const row = await getLegacyWardStatsRow(ctx, args.municipalityId, args.wardNo)
+    if (!row) return null
+    return pendingQcCount(row.submitted, row.qcApproved, row.qcPending)
+  }
+  return null
+}
+
+/** One full-scope collect + propertyId sort for multi-ULB / district Excel fallback. */
 async function collectSortedExportSurveys(
   ctx: QueryCtx,
   me: Doc<"users">,
@@ -137,15 +185,7 @@ async function collectSortedExportSurveys(
   args: ExportListFilters
 ): Promise<Doc<"surveys">[]> {
   const scope = await resolveTenantScope(ctx, me)
-  const districtIds = tenantDistrictIds(scope)
   const muniIds = tenantMunicipalityIds(scope)
-
-  if (args.municipalityId) {
-    await assertMunicipalityInScope(ctx, me, args.municipalityId)
-  }
-  if (args.districtId && access !== "admin" && !districtIds.has(args.districtId)) {
-    clientError("FORBIDDEN", "This district is outside your assigned scope")
-  }
 
   const listArgs = {
     qcStatus: args.qcStatus,
@@ -162,21 +202,103 @@ async function collectSortedExportSurveys(
 }
 
 /**
- * Phase 1 of fast Excel export: scan scope once and return sorted survey IDs.
- * Clients then call getExportBundlesByIds in chunks (no re-scan).
+ * Phase 1 of Excel export: cursor page of survey IDs for the current scope.
+ * Single-ULB / ward scopes use indexed Convex pagination (no 800 hard cap).
+ * Broader scopes fall back to a capped collect (truncated=true when capped).
  */
 export const listExportIds = query({
-  args: { ...listFilterArgs },
+  args: {
+    ...listFilterArgs,
+    paginationOpts: v.optional(paginationOptsValidator),
+  },
   returns: v.object({
     surveyIds: v.array(v.id("surveys")),
+    continueCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
     total: v.number(),
+    truncated: v.boolean(),
   }),
   handler: async (ctx, args) => {
     const { me, access } = await requireExportCaller(ctx)
-    const rows = await collectSortedExportSurveys(ctx, me, access, args)
+    const scope = await resolveTenantScope(ctx, me)
+    const districtIds = tenantDistrictIds(scope)
+    const muniIds = tenantMunicipalityIds(scope)
+
+    if (args.municipalityId) {
+      await assertMunicipalityInScope(ctx, me, args.municipalityId)
+    }
+    if (args.districtId && access !== "admin" && !districtIds.has(args.districtId)) {
+      clientError("FORBIDDEN", "This district is outside your assigned scope")
+    }
+
+    const listArgs = {
+      qcStatus: args.qcStatus,
+      wardNo: args.wardNo,
+      districtId: args.districtId,
+      municipalityId: args.municipalityId,
+      surveyorId: args.surveyorId,
+      ...(access !== "assigned" && args.status ? { status: args.status } : {}),
+    }
+
+    // Ward export must be ULB-scoped so we can walk the full ward index (e.g. 1500 rows).
+    if (args.wardNo && !args.municipalityId) {
+      clientError(
+        "VALIDATION",
+        "Select a ULB (municipality) before exporting by ward — full ward downloads are not available for district-only scope."
+      )
+    }
+
+    const numItems = Math.min(
+      Math.max(args.paginationOpts?.numItems ?? EXPORT_ID_PAGE_SIZE, 1),
+      MAX_EXPORT_ID_PAGE_SIZE
+    )
+    const statsTotal = await resolveExportTotal(ctx, me, listArgs)
+
+    if (listPaginatedUsesIndexedCursor(listArgs) && args.municipalityId) {
+      // Fill a full ID page even when ACL / secondary filters thin some rows.
+      const surveyIds: Id<"surveys">[] = []
+      let cursor = args.paginationOpts?.cursor ?? null
+      let isDone = false
+      let fillGuard = 0
+      while (surveyIds.length < numItems && !isDone && fillGuard < 30) {
+        fillGuard += 1
+        const indexed = await paginateMunicipalitySurveys(ctx, {
+          municipalityId: args.municipalityId,
+          status: listArgs.status,
+          qcStatus: listArgs.qcStatus,
+          wardNo: listArgs.wardNo,
+          paginationOpts: {
+            numItems: Math.max(numItems - surveyIds.length, 1),
+            cursor,
+          },
+        })
+        const filtered = applySurveyListFilters(indexed.page, listArgs, me, muniIds)
+        for (const row of filtered) {
+          surveyIds.push(row._id)
+          if (surveyIds.length >= numItems) break
+        }
+        cursor = indexed.continueCursor
+        isDone = indexed.isDone
+        if (indexed.page.length === 0) break
+      }
+      return {
+        surveyIds,
+        continueCursor: isDone ? null : cursor,
+        isDone,
+        total: statsTotal ?? surveyIds.length,
+        truncated: false,
+      }
+    }
+
+    // Multi-ULB / district / surveyor: single capped collect, one page.
+    const rows = await collectSortedExportSurveys(ctx, me, access, listArgs)
+    const truncated = rows.length >= EXPORT_SCOPE_LIMIT
     return {
       surveyIds: rows.map((r) => r._id),
+      continueCursor: null,
+      isDone: true,
       total: rows.length,
+      truncated,
     }
   },
 })

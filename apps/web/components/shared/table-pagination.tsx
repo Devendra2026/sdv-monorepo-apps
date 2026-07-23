@@ -1,33 +1,37 @@
-"use client";
+"use client"
 
-import { Button } from "@workspace/ui/components/button";
+import { Button } from "@workspace/ui/components/button"
 import {
   Pagination,
   PaginationContent,
   PaginationItem,
   PaginationNext,
   PaginationPrevious,
-} from "@workspace/ui/components/pagination";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select";
-import { cn } from "@workspace/ui/lib/utils";
+} from "@workspace/ui/components/pagination"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select"
+import { cn } from "@workspace/ui/lib/utils"
 
 type TablePaginationProps = {
-  pageNumber: number;
-  pageSize: number;
-  itemCount: number;
-  canGoPrev: boolean;
-  canGoNext: boolean;
-  onPrev: () => void;
-  onNext: () => void;
-  pageSizeOptions?: number[];
-  onPageSizeChange?: (size: number) => void;
-  className?: string;
-};
+  pageNumber: number
+  pageSize: number
+  /** Rows on the current page (used when totalCount is omitted). */
+  itemCount: number
+  /** Total matching rows across all pages — drives "of N" and range end. */
+  totalCount?: number
+  canGoPrev: boolean
+  canGoNext: boolean
+  onPrev: () => void
+  onNext: () => void
+  pageSizeOptions?: number[]
+  onPageSizeChange?: (size: number) => void
+  className?: string
+}
 
 export function TablePagination({
   pageNumber,
   pageSize,
   itemCount,
+  totalCount,
   canGoPrev,
   canGoNext,
   onPrev,
@@ -36,14 +40,20 @@ export function TablePagination({
   onPageSizeChange,
   className,
 }: TablePaginationProps) {
-  const rangeStart = itemCount === 0 ? 0 : (pageNumber - 1) * pageSize + 1;
-  const rangeEnd = (pageNumber - 1) * pageSize + itemCount;
+  const effectiveTotal = totalCount ?? itemCount
+  const rangeStart = itemCount === 0 ? 0 : (pageNumber - 1) * pageSize + 1
+  const rangeEnd =
+    itemCount === 0
+      ? 0
+      : totalCount !== undefined
+        ? Math.min((pageNumber - 1) * pageSize + itemCount, totalCount)
+        : (pageNumber - 1) * pageSize + itemCount
 
   return (
     <div
       className={cn(
         "flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between",
-        className,
+        className
       )}
     >
       <p className="text-sm text-muted-foreground">
@@ -56,8 +66,18 @@ export function TablePagination({
               <>
                 –<span className="font-medium text-foreground">{rangeEnd}</span>
               </>
-            ) : null}{" "}
-            on page <span className="font-medium text-foreground">{pageNumber}</span>
+            ) : null}
+            {totalCount !== undefined ? (
+              <>
+                {" "}
+                of <span className="font-medium text-foreground">{effectiveTotal.toLocaleString()}</span>
+              </>
+            ) : (
+              <>
+                {" "}
+                on page <span className="font-medium text-foreground">{pageNumber}</span>
+              </>
+            )}
           </>
         )}
       </p>
@@ -87,15 +107,15 @@ export function TablePagination({
               <PaginationPrevious
                 href="#"
                 onClick={(e) => {
-                  e.preventDefault();
-                  if (canGoPrev) onPrev();
+                  e.preventDefault()
+                  if (canGoPrev) onPrev()
                 }}
                 className={cn(!canGoPrev && "pointer-events-none opacity-50")}
                 aria-disabled={!canGoPrev}
               />
             </PaginationItem>
             <PaginationItem>
-              <Button variant="outline" size="sm" className="min-w-9 pointer-events-none" tabIndex={-1}>
+              <Button variant="outline" size="sm" className="pointer-events-none min-w-9" tabIndex={-1}>
                 {pageNumber}
               </Button>
             </PaginationItem>
@@ -103,8 +123,8 @@ export function TablePagination({
               <PaginationNext
                 href="#"
                 onClick={(e) => {
-                  e.preventDefault();
-                  if (canGoNext) onNext();
+                  e.preventDefault()
+                  if (canGoNext) onNext()
                 }}
                 className={cn(!canGoNext && "pointer-events-none opacity-50")}
                 aria-disabled={!canGoNext}
@@ -114,5 +134,5 @@ export function TablePagination({
         </Pagination>
       </div>
     </div>
-  );
+  )
 }

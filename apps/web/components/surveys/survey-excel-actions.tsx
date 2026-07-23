@@ -12,6 +12,8 @@ import { toast } from "sonner"
 
 /** Must stay ≤ backend MAX_EXPORT_PAGE_SIZE (40). Smaller pages cut storage.getUrl fan-out. */
 const EXPORT_BUNDLE_PAGE_SIZE = 20
+/** ID pages from listExportIds — keep ≤ backend MAX_EXPORT_ID_PAGE_SIZE (200). */
+const EXPORT_ID_PAGE_SIZE = 100
 /** Pause between pages so exports do not starve live dashboard queries / SQLite. */
 const EXPORT_PAGE_DELAY_MS = 500
 
@@ -48,6 +50,62 @@ async function fetchExportBundlesWithRetry(
       throw firstError
     }
   }
+}
+
+async function collectAllExportIds(
+  convex: ReturnType<typeof useConvex>,
+  queryArgs: {
+    status?: SurveyStatus
+    qcStatus?: QcStatus
+    wardNo?: string
+    districtId?: Id<"districts">
+    municipalityId?: Id<"municipalities">
+    surveyorId?: Id<"users">
+  },
+  onProgress: (loaded: number, total: number) => void
+): Promise<{ surveyIds: Id<"surveys">[]; total: number; truncated: boolean }> {
+  if (queryArgs.wardNo && !queryArgs.municipalityId) {
+    throw new Error("Select a ULB before exporting a ward so all property IDs can be included.")
+  }
+
+  const surveyIds: Id<"surveys">[] = []
+  let cursor: string | null = null
+  let total = 0
+  let truncated = false
+  let guard = 0
+  /** 1500 ward rows @ 100/page ≈ 15 pages; allow large ULBs / photo-heavy retries. */
+  const maxPages = 2000
+
+  for (;;) {
+    guard += 1
+    if (guard > maxPages) {
+      throw new Error("Export ID paging exceeded safety limit — narrow filters and retry")
+    }
+    const page: {
+      surveyIds: Id<"surveys">[]
+      total: number
+      truncated: boolean
+      isDone: boolean
+      continueCursor: string | null
+    } = await convex.query(api.export.queries.listExportIds, {
+      ...queryArgs,
+      paginationOpts: { numItems: EXPORT_ID_PAGE_SIZE, cursor },
+    })
+    surveyIds.push(...page.surveyIds)
+    // Prefer live collected count so a stale rollup total never stops the download short.
+    total = Math.max(page.total, surveyIds.length)
+    truncated = truncated || page.truncated
+    onProgress(surveyIds.length, total)
+    if (page.isDone) break
+    if (page.continueCursor === null) {
+      // Backend said not done but gave no cursor — treat as complete to avoid a hang.
+      break
+    }
+    cursor = page.continueCursor
+    await sleep(EXPORT_PAGE_DELAY_MS)
+  }
+
+  return { surveyIds, total: surveyIds.length, truncated }
 }
 
 export type SurveyExportFilters = {
@@ -87,7 +145,11 @@ export function SurveyExcelActions({
         surveyorId: filters.surveyorId as Id<"users"> | undefined,
       }
 
-      const { surveyIds, total } = await convex.query(api.export.queries.listExportIds, queryArgs)
+      const { surveyIds, total, truncated } = await collectAllExportIds(convex, queryArgs, (loaded, expected) => {
+        toast.loading(`Collecting IDs ${loaded.toLocaleString()} / ${expected.toLocaleString()}…`, {
+          id: progress,
+        })
+      })
       if (!surveyIds.length) {
         toast.message("No surveys to export for the current filters.", { id: progress })
         return
@@ -109,7 +171,12 @@ export function SurveyExcelActions({
       }
 
       finalizeSurveyExcelExport(acc)
-      toast.success(`Exported ${total} survey(s) to Excel`, { id: progress })
+      toast.success(`Exported ${acc.surveys.length} survey(s) to Excel`, { id: progress })
+      if (truncated) {
+        toast.warning(
+          `Export was capped at ${surveyIds.length.toLocaleString()} surveys for this wide scope. Select a ULB or ward for a full download.`
+        )
+      }
     } catch (e) {
       toast.error(parseConvexError(e).message, { id: progress })
     } finally {
