@@ -831,8 +831,41 @@ export async function collectSurveysForListPaginated(
       .order("desc")
       .take(maxRows)
   } else if (args.wardNo && args.municipalityId) {
-    // Load by municipality; wardNumbersMatch in applySurveyListFilters handles 5 vs 05 vs 005.
-    rows = await querySurveysByMunicipality(ctx, args.municipalityId, args.status, maxRows)
+    // Prefer ward-scoped indexes; load common wardNo spellings (5 / 05 / 005).
+    const wardSet = new Set([args.wardNo.trim()])
+    const wardNum = Number(args.wardNo)
+    if (!Number.isNaN(wardNum)) {
+      wardSet.add(String(wardNum))
+      wardSet.add(String(wardNum).padStart(2, "0"))
+      wardSet.add(String(wardNum).padStart(3, "0"))
+    }
+    const wardList = [...wardSet].filter((w) => w.length > 0)
+    const perWardCap = Math.max(50, Math.ceil(maxRows / Math.max(wardList.length, 1)))
+    const batches = await Promise.all(
+      wardList.map((ward) =>
+        args.status
+          ? ctx.db
+              .query("surveys")
+              .withIndex("by_municipality_ward_status", (q) =>
+                q.eq("municipalityId", args.municipalityId!).eq("wardNo", ward).eq("status", args.status!)
+              )
+              .take(perWardCap)
+          : ctx.db
+              .query("surveys")
+              .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", args.municipalityId!).eq("wardNo", ward))
+              .take(perWardCap)
+      )
+    )
+    const seen = new Set<string>()
+    for (const batch of batches) {
+      for (const row of batch) {
+        if (seen.has(row._id)) continue
+        seen.add(row._id)
+        rows.push(row)
+        if (rows.length >= maxRows) break
+      }
+      if (rows.length >= maxRows) break
+    }
   } else if (args.municipalityId) {
     rows = await querySurveysByMunicipality(ctx, args.municipalityId, args.status, maxRows)
   } else if (args.districtId) {

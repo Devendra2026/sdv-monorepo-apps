@@ -156,13 +156,26 @@ bash infra/convex-self-hosted/verify-convex-traefik-routing.sh
 bash packages/backend/scripts/diagnose-convex-export-404.sh
 ```
 
-**Backups** (documents-only by default; does not modify production data):
+**Backups** (volume-primary DR; logical ZIP is documents-only by default):
+
+| Purpose                          | Command                                                 | When                                                                                                |
+| -------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **Primary DR** (DB + `_storage`) | `bash packages/backend/scripts/backup-convex-volume.sh` | Prefer **~03:00 UTC**                                                                               |
+| Portable documents ZIP           | `pnpm --filter @workspace/backend convex:backup`        | Prefer **~03:00 UTC**; **blocked 20:30–22:30 UTC** (retention quiet window) unless `BACKUP_FORCE=1` |
 
 ```bash
+# Preferred full DR (includes file storage on disk)
+bash packages/backend/scripts/backup-convex-volume.sh
+
+# Logical documents-only ZIP (do not overlap app retention at 21:00 UTC)
 pnpm --filter @workspace/backend convex:backup
 ```
 
-Copy the ZIP **off the EC2/Dokploy host**. Same-disk copies are not DR.
+Copy artifacts **off the EC2/Dokploy host**. Same-disk copies are not DR.
+
+**Do not overlap** platform export with app retention, rollup backfills, or storage-inclusive ZIPs under low disk. App retention (`convex/crons.ts`) runs daily at **21:00 UTC** and deletes demand-notice PDF jobs + read notifications only — concurrent deletes contend with export `queryPage` on SQLite (15s syscall timeouts). Prefer one heavy job at a time.
+
+Avoid `BACKUP_INCLUDE_STORAGE=1` on large hosts; use volume backup for `_storage` instead.
 
 **Platform export disk growth** (`/convex/data/storage/exports/*.blob`):
 
@@ -175,6 +188,7 @@ notifications). Self-hosted Convex does not auto-delete leftover export blobs.
 2. List prune candidates (default dry-run): `bash packages/backend/scripts/prune-convex-platform-exports.sh`
 3. After off-host copy, prune: `DRY_RUN=0 KEEP_NEWEST=2 MIN_AGE_HOURS=24 bash packages/backend/scripts/prune-convex-platform-exports.sh`
 4. Stop any host/Dokploy cron that repeatedly triggers `convex export` under low disk.
+5. Schedule host backup crons for **~03:00 UTC** (quiet band ~02:00–06:00 UTC), never 20:30–22:30 UTC.
 
 See [`infra/convex-self-hosted/README.md`](infra/convex-self-hosted/README.md) for quiet windows and restore drill.
 

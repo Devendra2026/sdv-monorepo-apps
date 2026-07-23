@@ -15,9 +15,15 @@
  * Frequency: once per day (was every 6h). App retention does not need sub-daily
  * sweeps; fewer scheduled mutations reduce SQLite load on self-hosted hosts.
  *
- * Ops: prefer off-peak CLI/volume backups; prune platform export blobs with
- * scripts/prune-convex-platform-exports.sh (dry-run by default). Do not stack
- * storage-inclusive exports under low disk.
+ * Schedule / quiet windows (UTC):
+ *   - Retention: 21:00 UTC (02:30 IST next calendar day)
+ *   - Do NOT run logical ZIP export during 20:30–22:30 UTC (backup-convex.mjs
+ *     aborts in that window unless BACKUP_FORCE=1)
+ *   - Preferred logical / volume backup slot: ~03:00 UTC (02:00–06:00 quiet band)
+ *
+ * Ops: prefer volume backup for full DR including _storage; prune platform export
+ * blobs with scripts/prune-convex-platform-exports.sh (dry-run by default). Do not
+ * stack storage-inclusive exports under low disk.
  */
 import { cronJobs } from "convex/server"
 import { internal } from "./_generated/api"

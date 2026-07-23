@@ -1,8 +1,12 @@
 /**
- * Self-hosted Convex production backup via logical CLI export.
+ * Self-hosted Convex production backup via logical CLI export (documents ZIP).
+ *
+ * Primary DR for large DBs: use scripts/backup-convex-volume.sh (copies /convex/data,
+ * including _storage). This script is for portable document restore — default is
+ * documents-only. Prefer scheduling at ~03:00 UTC (well clear of retention at 21:00 UTC).
  *
  * Export flow (convex@1.42.1):
- *   1. POST {CONVEX_SELF_HOSTED_URL}/api/export/request/zip?includeStorage=true
+ *   1. POST {CONVEX_SELF_HOSTED_URL}/api/export/request/zip[?includeStorage=true]
  *   2. WebSocket wss://{host}/api/{version}/sync monitors _system/cli/exports:getLatest
  *   3. GET {CONVEX_SELF_HOSTED_URL}/api/export/zip/{timestamp} downloads the ZIP
  *
@@ -13,8 +17,10 @@
  *   - Copy successful ZIPs off the Dokploy host; same-disk copies are not DR.
  *   - Do not restart the Convex backend mid-export; on failure wait for healthy
  *     GET /version then re-run this script.
- *   - Prefer off-peak; avoid overlapping heavy retention / rollup backfills.
- *   - Default documents-only; use BACKUP_INCLUDE_STORAGE=1 only off-peak.
+ *   - Aborts during retention quiet window (20:30–22:30 UTC) unless
+ *     BACKUP_FORCE=1 — overlapping retention deletes cause queryPage timeouts.
+ *   - Default documents-only; BACKUP_INCLUDE_STORAGE=1 is discouraged (use volume
+ *     backup for _storage). Never stack storage-inclusive exports under low disk.
  *
  * --env-file is supported via shared deployment selection options but is not listed
  * in `convex export --help`. If a future CLI removes it, load .env.production into
@@ -43,6 +49,51 @@ const MIN_FREE_BYTES = Math.max(
 );
 const BACKUP_PATTERN = /^convex-.*\.zip$/;
 const ZIP_LOCAL_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+
+/**
+ * App retention cron fires at 21:00 UTC (`convex/crons.ts`). Overlapping a platform
+ * ZIP export with those deletes causes SQLite contention and 15s queryPage timeouts.
+ * Block logical exports in [20:30, 22:30) UTC unless BACKUP_FORCE=1.
+ */
+const RETENTION_QUIET_START_MINUTES_UTC = 20 * 60 + 30;
+const RETENTION_QUIET_END_MINUTES_UTC = 22 * 60 + 30;
+
+function utcMinutesOfDay(date = new Date()) {
+  return date.getUTCHours() * 60 + date.getUTCMinutes();
+}
+
+function isInsideRetentionQuietWindow(date = new Date()) {
+  const minutes = utcMinutesOfDay(date);
+  return (
+    minutes >= RETENTION_QUIET_START_MINUTES_UTC &&
+    minutes < RETENTION_QUIET_END_MINUTES_UTC
+  );
+}
+
+function assertOutsideRetentionQuietWindow() {
+  const force =
+    process.env.BACKUP_FORCE === "1" || process.env.BACKUP_FORCE === "true";
+  if (!isInsideRetentionQuietWindow()) {
+    return;
+  }
+  if (force) {
+    console.warn(
+      "WARN: BACKUP_FORCE=1 — running logical export inside retention quiet window (20:30–22:30 UTC). Expect SQLite contention / queryPage timeouts.",
+    );
+    return;
+  }
+  console.error(
+    "Backup aborted: inside retention quiet window (20:30–22:30 UTC).",
+  );
+  console.error(
+    "App retention (demand-notice jobs + notifications) runs at 21:00 UTC and contends with platform export queryPage reads.",
+  );
+  console.error(
+    "Preferred schedule: ~03:00 UTC. For full DR including _storage, use scripts/backup-convex-volume.sh.",
+  );
+  console.error("Override only if necessary: BACKUP_FORCE=1");
+  process.exit(1);
+}
 
 function formatTimestamp(date) {
   const pad = (value) => String(value).padStart(2, "0");
@@ -121,8 +172,8 @@ function runConvexExport(absoluteBackupPath) {
   delete childEnv.CONVEX_DEPLOYMENT;
 
   // Default: DB-only export. Including file storage (_storage) is very heavy on
-  // self-hosted SQLite hosts and has caused process restarts mid-backup when
-  // disk/memory pressure spikes. Opt in with BACKUP_INCLUDE_STORAGE=1.
+  // self-hosted SQLite hosts and has caused process restarts / queryPage timeouts.
+  // Prefer scripts/backup-convex-volume.sh for _storage DR. Opt in only off-peak.
   const includeStorage =
     process.env.BACKUP_INCLUDE_STORAGE === "1" ||
     process.env.BACKUP_INCLUDE_STORAGE === "true";
@@ -138,11 +189,15 @@ function runConvexExport(absoluteBackupPath) {
     absoluteBackupPath,
   ];
 
-  console.log(
-    includeStorage
-      ? "Backup mode: documents + file storage (_storage)."
-      : "Backup mode: documents only (set BACKUP_INCLUDE_STORAGE=1 to include files).",
-  );
+  if (includeStorage) {
+    console.warn(
+      "WARN: BACKUP_INCLUDE_STORAGE=1 — documents + _storage ZIP. Prefer volume backup for file storage DR; this mode is heavy on SQLite.",
+    );
+  } else {
+    console.log(
+      "Backup mode: documents only. For _storage / full DR use scripts/backup-convex-volume.sh (not BACKUP_INCLUDE_STORAGE).",
+    );
+  }
 
   const isWindows = process.platform === "win32";
 
@@ -272,6 +327,8 @@ async function pruneOldBackups() {
 }
 
 async function main() {
+  assertOutsideRetentionQuietWindow();
+
   await mkdir(backupDir, { recursive: true });
   await assertEnoughDiskSpace(backupDir);
 
@@ -280,7 +337,10 @@ async function main() {
   const absoluteBackupPath = path.join(backupDir, filename);
 
   console.log(`Starting Convex export to ${filename}...`);
-  console.log(`Retention: keep newest ${MAX_BACKUPS} matching ZIP(s).`);
+  console.log(
+    "Schedule tip: prefer ~03:00 UTC; avoid 20:30–22:30 UTC (app retention).",
+  );
+  console.log(`Local ZIP retention: keep newest ${MAX_BACKUPS} matching ZIP(s).`);
 
   try {
     await runConvexExport(absoluteBackupPath);

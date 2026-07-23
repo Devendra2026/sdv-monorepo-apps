@@ -10,10 +10,18 @@ import { FileSpreadsheet, Loader2, Upload } from "lucide-react"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
 
-/** Must stay ≤ backend MAX_EXPORT_PAGE_SIZE (40). */
-const EXPORT_BUNDLE_PAGE_SIZE = 40
-/** Pause between pages so exports do not starve live dashboard queries. */
-const EXPORT_PAGE_DELAY_MS = 200
+/** Must stay ≤ backend MAX_EXPORT_PAGE_SIZE (40). Smaller pages cut storage.getUrl fan-out. */
+const EXPORT_BUNDLE_PAGE_SIZE = 20
+/** Pause between pages so exports do not starve live dashboard queries / SQLite. */
+const EXPORT_PAGE_DELAY_MS = 500
+
+/**
+ * Photo storage URLs are expensive (up to surveys×photos syscalls per page).
+ * Excel still gets photo metadata; URL column may be empty unless opted in.
+ * Set NEXT_PUBLIC_EXPORT_PHOTO_URLS=1 to resolve Convex storage URLs.
+ */
+const EXPORT_INCLUDE_PHOTO_URLS =
+  process.env.NEXT_PUBLIC_EXPORT_PHOTO_URLS === "1" || process.env.NEXT_PUBLIC_EXPORT_PHOTO_URLS === "true"
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -89,7 +97,7 @@ export function SurveyExcelActions({
       const allBundles = []
       for (let i = 0; i < surveyIds.length; i += EXPORT_BUNDLE_PAGE_SIZE) {
         const chunk = surveyIds.slice(i, i + EXPORT_BUNDLE_PAGE_SIZE)
-        const page = await fetchExportBundlesWithRetry(convex, chunk, true)
+        const page = await fetchExportBundlesWithRetry(convex, chunk, EXPORT_INCLUDE_PHOTO_URLS)
         allBundles.push(...page.bundles)
         toast.loading(`Loading ${allBundles.length.toLocaleString()} / ${total.toLocaleString()}…`, {
           id: progress,

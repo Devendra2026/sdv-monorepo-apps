@@ -25,4 +25,5 @@ export const MAX_IMPORT_FLOORS = 200
 
 /** Child rows loaded per survey during export enrichment. */
 export const MAX_EXPORT_FLOORS_PER_SURVEY = 64
-export const MAX_EXPORT_PHOTOS_PER_SURVEY = 16
+/** Keep modest — each photo may trigger storage.getUrl when includePhotoUrls is true. */
+export const MAX_EXPORT_PHOTOS_PER_SURVEY = 12

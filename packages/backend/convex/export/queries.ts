@@ -2,11 +2,7 @@ import { v } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { QueryCtx } from "../_generated/server"
 import { query } from "../_generated/server"
-import {
-  DEFAULT_EXPORT_PAGE_SIZE,
-  EXPORT_SCOPE_LIMIT,
-  MAX_EXPORT_PAGE_SIZE,
-} from "../lib/budgetLimits"
+import { DEFAULT_EXPORT_PAGE_SIZE, EXPORT_SCOPE_LIMIT, MAX_EXPORT_PAGE_SIZE } from "../lib/budgetLimits"
 import { logBudgetEvent, logSlowPath } from "../lib/observability"
 import { comparePropertyIds } from "../lib/propertyId"
 import { gpsCapture, photoSlot, qcStatus, sanitationType, surveyOwnerEntry, surveyStatus, waterSource } from "../schema"
@@ -208,7 +204,7 @@ export const getExportBundlesByIds = query({
       })
       clientError(
         "VALIDATION",
-        `Export page is limited to ${MAX_EXPORT_PAGE_SIZE} surveys per request — split into smaller chunks`,
+        `Export page is limited to ${MAX_EXPORT_PAGE_SIZE} surveys per request — split into smaller chunks`
       )
     }
     const ids = args.surveyIds
@@ -243,12 +239,16 @@ export const getExportBundlesByIds = query({
   },
 })
 
-/** Same filters as survey.list; paginate with offset/pageSize to stay under read limits. */
+/** Same filters as survey.list; paginate with offset/pageSize to stay under read limits.
+ * Legacy path — prefer listExportIds + getExportBundlesByIds (avoids full-scope rescan per page).
+ * Photo URLs default off; pass includePhotoUrls via getExportBundlesByIds when needed.
+ */
 export const listForExport = query({
   args: {
     ...listFilterArgs,
     offset: v.optional(v.number()),
     pageSize: v.optional(v.number()),
+    includePhotoUrls: v.optional(v.boolean()),
   },
   returns: v.object({
     bundles: v.array(exportBundleValidator),
@@ -267,7 +267,9 @@ export const listForExport = query({
       ctx,
       page.map((r) => r.municipalityId)
     )
-    const bundles = await enrichSurveysForExport(ctx, page, codes, { includePhotoUrls: true })
+    const bundles = await enrichSurveysForExport(ctx, page, codes, {
+      includePhotoUrls: args.includePhotoUrls === true,
+    })
     const nextOffset = offset + pageSize < total ? offset + pageSize : null
 
     return { bundles, total, nextOffset }

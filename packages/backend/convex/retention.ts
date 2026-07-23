@@ -14,6 +14,14 @@
  *
  * Demand-notice PDFs and completed job rows accumulate forever without this.
  * Batched deletes keep each mutation under transaction limits.
+ *
+ * Load posture (self-hosted SQLite):
+ *   - Small batches + paced runAfter so deletes do not storm queryPage during
+ *     platform ZIP exports.
+ *   - Serial sweeps (export jobs, then notifications) — never dual runAfter(0).
+ *   - Early-exit once past the retention horizon (ASC by createdAt / creation time).
+ *   - Quiet window for logical backups: avoid overlapping 20:30–22:30 UTC
+ *     (see scripts/backup-convex.mjs). Preferred backup slot ~03:00 UTC.
  */
 import { v } from "convex/values"
 import { internal } from "./_generated/api"
@@ -22,7 +30,23 @@ import { internalMutation } from "./_generated/server"
 const EXPORT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 const FAILED_EXPORT_RETENTION_MS = 3 * 24 * 60 * 60 * 1000
 const READ_NOTIFICATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
-const BATCH_SIZE = 40
+/** Smaller batches reduce SQLite write lock duration under export load. */
+const BATCH_SIZE = 20
+/** Pace between retention pages so platform export queryPage is less likely to hit 15s. */
+const BATCH_DELAY_MS = 2_000
+
+function shouldKeepExportJob(job: { status: string; createdAt: number }, now: number): boolean {
+  const age = now - job.createdAt
+  if (job.status === "completed" && age < EXPORT_RETENTION_MS) return true
+  if (job.status === "failed" && age < FAILED_EXPORT_RETENTION_MS) return true
+  if (
+    (job.status === "queued" || job.status === "rendering" || job.status === "uploading") &&
+    age < EXPORT_RETENTION_MS
+  ) {
+    return true
+  }
+  return false
+}
 
 /** Delete one batch of expired demand-notice export jobs (+ storage blobs). */
 export const purgeExpiredExportJobs = internalMutation({
@@ -42,16 +66,12 @@ export const purgeExpiredExportJobs = internalMutation({
       .paginate({ cursor: args.cursor ?? null, numItems: BATCH_SIZE })
 
     let deleted = 0
+    let keptWithinHorizon = 0
     for (const job of page.page) {
-      const age = now - job.createdAt
-      const keepCompleted = job.status === "completed" && age < EXPORT_RETENTION_MS
-      const keepFailed = job.status === "failed" && age < FAILED_EXPORT_RETENTION_MS
-      const keepInFlight =
-        job.status === "queued" || job.status === "rendering" || job.status === "uploading"
-          ? age < EXPORT_RETENTION_MS
-          : false
-
-      if (keepCompleted || keepFailed || keepInFlight) continue
+      if (shouldKeepExportJob(job, now)) {
+        keptWithinHorizon += 1
+        continue
+      }
 
       if (job.storageId) {
         try {
@@ -64,21 +84,28 @@ export const purgeExpiredExportJobs = internalMutation({
       deleted += 1
     }
 
-    if (!page.isDone) {
-      await ctx.scheduler.runAfter(0, internal.retention.purgeExpiredExportJobs, {
+    // ASC by createdAt: if this page had nothing to delete and every row is still
+    // within its retention window, newer pages cannot contain expired jobs.
+    const hitRetentionHorizon = deleted === 0 && page.page.length > 0 && keptWithinHorizon === page.page.length
+    const done = page.isDone || hitRetentionHorizon
+
+    if (!done) {
+      await ctx.scheduler.runAfter(BATCH_DELAY_MS, internal.retention.purgeExpiredExportJobs, {
         cursor: page.continueCursor,
       })
+      return { deleted, done: false }
     }
 
-    return { deleted, done: page.isDone }
+    // Serialize: start notification purge only after export-job sweep finishes.
+    await ctx.scheduler.runAfter(BATCH_DELAY_MS, internal.retention.purgeOldReadNotifications, {})
+    return { deleted, done: true }
   },
 })
 
 /**
  * Delete one batch of old read notifications (unread are kept).
  *
- * Before: full-table paginate with no early exit → scanned every notification every sweep.
- * After: creation-time ascending + stop once past retention cutoff (never touches recent rows).
+ * Creation-time ascending + stop once past retention cutoff (never touches recent rows).
  */
 export const purgeOldReadNotifications = internalMutation({
   args: {
@@ -115,7 +142,7 @@ export const purgeOldReadNotifications = internalMutation({
 
     const done = page.isDone || hitRetentionHorizon
     if (!done) {
-      await ctx.scheduler.runAfter(0, internal.retention.purgeOldReadNotifications, {
+      await ctx.scheduler.runAfter(BATCH_DELAY_MS, internal.retention.purgeOldReadNotifications, {
         cursor: page.continueCursor,
       })
     }
@@ -124,13 +151,16 @@ export const purgeOldReadNotifications = internalMutation({
   },
 })
 
-/** Cron entrypoint — kicks both app-table retention sweeps (not platform exports). */
+/**
+ * Cron entrypoint — starts export-job purge only.
+ * Notification purge is chained when export-job sweep completes (serialized).
+ * Does not touch platform snapshot exports.
+ */
 export const runRetentionSweep = internalMutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
     await ctx.scheduler.runAfter(0, internal.retention.purgeExpiredExportJobs, {})
-    await ctx.scheduler.runAfter(0, internal.retention.purgeOldReadNotifications, {})
     return null
   },
 })

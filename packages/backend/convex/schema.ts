@@ -226,6 +226,8 @@ export default defineSchema({
     .index("by_district", ["districtId"])
     .index("by_district_status", ["districtId", "status"])
     .index("by_municipality_ward", ["municipalityId", "wardNo"])
+    .index("by_municipality_ward_status", ["municipalityId", "wardNo", "status"])
+    .index("by_municipality_ward_parcel", ["municipalityId", "wardNo", "parcelNo"])
     .index("by_municipality_status", ["municipalityId", "status"])
     .index("by_municipality_localId", ["municipalityId", "localId"])
     .index("by_municipality_qc_status", ["municipalityId", "qcStatus"])
@@ -445,7 +447,8 @@ export default defineSchema({
     errorMessage: v.optional(v.string()),
     createdAt: v.number(),
     completedAt: v.optional(v.number()),
-  }).index("by_user_created", ["requestedBy", "createdAt"])
+  })
+    .index("by_user_created", ["requestedBy", "createdAt"])
     .index("by_status_created", ["status", "createdAt"])
     .index("by_createdAt", ["createdAt"]),
 
@@ -521,11 +524,7 @@ export default defineSchema({
     .index("by_municipality", ["municipalityId"])
     .index("by_surveyor_municipality", ["surveyorId", "municipalityId"])
     .index("by_generation_and_municipalityId", ["generation", "municipalityId"])
-    .index("by_generation_and_surveyorId_and_municipalityId", [
-      "generation",
-      "surveyorId",
-      "municipalityId",
-    ]),
+    .index("by_generation_and_surveyorId_and_municipalityId", ["generation", "surveyorId", "municipalityId"]),
 
   /** All-time district counters for analytics breakdown. */
   surveyDistrictStats: defineTable({
@@ -549,11 +548,7 @@ export default defineSchema({
     total: v.number(),
   })
     .index("by_generation_and_municipalityId", ["generation", "municipalityId"])
-    .index("by_generation_and_reviewerId_and_municipalityId", [
-      "generation",
-      "reviewerId",
-      "municipalityId",
-    ]),
+    .index("by_generation_and_reviewerId_and_municipalityId", ["generation", "reviewerId", "municipalityId"]),
 
   /** Idempotent survey contribution snapshot per generation (backfill + live writes). */
   surveyAnalyticsContributions: defineTable({
