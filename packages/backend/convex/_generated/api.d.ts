@@ -35,6 +35,7 @@ import type * as lib_budgetLimits from "../lib/budgetLimits.js";
 import type * as lib_customFunctions from "../lib/customFunctions.js";
 import type * as lib_gpsAccuracy from "../lib/gpsAccuracy.js";
 import type * as lib_gpsValidation from "../lib/gpsValidation.js";
+import type * as lib_mapPool from "../lib/mapPool.js";
 import type * as lib_mastersLoad from "../lib/mastersLoad.js";
 import type * as lib_masters_areaMasters from "../lib/masters/areaMasters.js";
 import type * as lib_masters_ownerConstants from "../lib/masters/ownerConstants.js";
@@ -135,6 +136,7 @@ declare const fullApi: ApiFromModules<{
   "lib/customFunctions": typeof lib_customFunctions;
   "lib/gpsAccuracy": typeof lib_gpsAccuracy;
   "lib/gpsValidation": typeof lib_gpsValidation;
+  "lib/mapPool": typeof lib_mapPool;
   "lib/mastersLoad": typeof lib_mastersLoad;
   "lib/masters/areaMasters": typeof lib_masters_areaMasters;
   "lib/masters/ownerConstants": typeof lib_masters_ownerConstants;
