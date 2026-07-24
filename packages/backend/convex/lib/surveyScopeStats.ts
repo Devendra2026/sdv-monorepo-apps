@@ -214,8 +214,8 @@ export async function loadLiveScopedSurveyRows(ctx: QueryCtx, me: Doc<"users">):
   return loadBoundedScopedSurveyRows(ctx, me)
 }
 
-/** True when KPIs must be computed from ward-filtered live rows (stats tables are municipality-wide). */
-function userRequiresWardScopedSurveyCounts(me: Doc<"users">): boolean {
+/** True when KPIs must be computed from ward-filtered rows (stats tables are municipality-wide). */
+export function userRequiresWardScopedSurveyCounts(me: Doc<"users">): boolean {
   if (me.role === "admin" || me.role === "supervisor") return false
   return me.wardAssignments.length > 0
 }
@@ -398,13 +398,18 @@ async function loadSurveyorDashboardCounts(ctx: QueryCtx, me: Doc<"users">, toda
     approved += row.qcApproved
     rejected += row.qcRejected
   }
-  const pending = pendingQcCount(submitted, approved)
 
   const dayEnd = dayEndMs(todayMs)
   const recent = await loadSurveysBySurveyor(ctx, me._id, DASHBOARD_SURVEYOR_TODAY_CAP)
   const scopedRecent = recent.filter(
     (r) => muniIds.has(r.municipalityId) && canReadWard(me, r.municipalityId, r.wardNo)
   )
+
+  // surveySurveyorStats has no qcPending field — count from the capped recent slice.
+  let pending = 0
+  for (const row of scopedRecent) {
+    if (row.qcStatus === "pending" && row.status === "submitted") pending += 1
+  }
 
   // Cold rollups: derive all KPIs from the capped recent slice (degraded but fast).
   if (statsRows.length === 0) {

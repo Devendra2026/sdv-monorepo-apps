@@ -39,6 +39,73 @@ export type WardStatsRollup = {
   firstPendingSurveyId?: Id<"surveys">
 }
 
+/** Sum ward rollup counters — used when KPI must match visible ward cards. */
+export function sumWardStatsRollups(rows: WardStatsRollup[]): {
+  total: number
+  drafts: number
+  submitted: number
+  qcApproved: number
+  qcRejected: number
+  qcPending: number
+} {
+  const totals = {
+    total: 0,
+    drafts: 0,
+    submitted: 0,
+    qcApproved: 0,
+    qcRejected: 0,
+    qcPending: 0,
+  }
+  for (const row of rows) {
+    totals.total += row.total
+    totals.drafts += row.drafts
+    totals.submitted += row.submitted
+    totals.qcApproved += row.qcApproved
+    totals.qcRejected += row.qcRejected
+    totals.qcPending += row.qcPending
+  }
+  return totals
+}
+
+/**
+ * When municipality totals exceed sum(ward) (blank wardNo surveys), append an Unassigned row
+ * so KPI and ward cards reconcile.
+ */
+export function unassignedWardGap(
+  municipalityId: Id<"municipalities">,
+  municipality: {
+    total: number
+    drafts: number
+    submitted: number
+    qcApproved: number
+    qcRejected: number
+    qcPending: number
+  },
+  wardSum: ReturnType<typeof sumWardStatsRollups>
+): WardStatsRollup | null {
+  const total = Math.max(0, municipality.total - wardSum.total)
+  const drafts = Math.max(0, municipality.drafts - wardSum.drafts)
+  const submitted = Math.max(0, municipality.submitted - wardSum.submitted)
+  const qcApproved = Math.max(0, municipality.qcApproved - wardSum.qcApproved)
+  const qcRejected = Math.max(0, municipality.qcRejected - wardSum.qcRejected)
+  const qcPending = Math.max(0, municipality.qcPending - wardSum.qcPending)
+  if (total === 0 && drafts === 0 && submitted === 0 && qcApproved === 0 && qcRejected === 0 && qcPending === 0) {
+    return null
+  }
+  return {
+    municipalityId,
+    wardNo: "Unassigned",
+    city: "",
+    total,
+    drafts,
+    submitted,
+    qcApproved,
+    qcRejected,
+    qcPending,
+    activeSurveyorIds: [],
+  }
+}
+
 export type SurveyorStatsRollup = {
   surveyorId: Id<"users">
   municipalityId: Id<"municipalities">
@@ -416,9 +483,9 @@ export async function loadWardStatsForScope(
   const muniIds = tenantMunicipalityIds(scope)
   const muniMap = new Map(scope.municipalities.map((m) => [m._id, m]))
 
+  // Same municipality set as loadScopeStatsSummary (no ULB slice) so KPI totals match ward cards.
   let targetMunis = scopedMuniIds
   if (filters.municipalityId) targetMunis = [filters.municipalityId]
-  else if (!filters.wardNo) targetMunis = scopedMuniIds.slice(0, ROLLUP_ULB_CAP)
 
   const batchResults = await Promise.all(
     targetMunis.map(async (municipalityId) => {

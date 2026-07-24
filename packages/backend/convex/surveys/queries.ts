@@ -6,12 +6,18 @@ import { presentFloorRow } from "../lib/masters/areaMasters"
 import { normalizeParcelKey, resolvePropertyId } from "../lib/propertyId"
 import { normalizeWardNo } from "../lib/qcWardStats"
 import { getLegacyWardStatsRow } from "../lib/surveyAnalyticsLookups"
-import { loadWardStatsForScope } from "../lib/surveyRollupStats"
+import {
+  loadWardStatsForScope,
+  sumWardStatsRollups,
+  unassignedWardGap,
+  type WardStatsRollup,
+} from "../lib/surveyRollupStats"
 import {
   loadScopeCompletionPct,
   loadScopeStatsSummary,
   resolveListTotalFromStats,
   scopeStatsFastPathEligible,
+  userRequiresWardScopedSurveyCounts,
 } from "../lib/surveyScopeStats"
 import { pendingQcCount } from "../lib/surveyStatsAggregate"
 import { computeSurveyWardAggregates } from "../lib/surveyWardStats"
@@ -342,12 +348,15 @@ export const commandCenterStats = query({
       !args.wardNo && args.fromMs === undefined && args.toMs === undefined && !args.status && !args.qcStatus
     const useWardRollup = args.fromMs === undefined && args.toMs === undefined && !args.status && !args.qcStatus
 
-    async function buildWardStatsFromRollup() {
-      const wardRows = await loadWardStatsForScope(ctx, me, {
+    async function loadWardRollups(): Promise<WardStatsRollup[]> {
+      return loadWardStatsForScope(ctx, me, {
         districtId: args.districtId,
         municipalityId: args.municipalityId,
         wardNo: args.wardNo,
       })
+    }
+
+    async function mapWardStatsForClient(wardRows: WardStatsRollup[]) {
       const allSurveyorIds = [...new Set(wardRows.flatMap((w) => w.activeSurveyorIds))]
       const surveyors = await Promise.all(allSurveyorIds.map((id) => ctx.db.get("users", id)))
       const nameById = new Map<Id<"users">, string>()
@@ -414,19 +423,43 @@ export const commandCenterStats = query({
       return true
     }
 
+    const wardScoped = userRequiresWardScopedSurveyCounts(me)
+
     if (useStatsFastPath && useWardRollup) {
-      const [summary, wardStats, surveyCompletionPct] = await Promise.all([
+      const [summary, wardRollups, surveyCompletionPct] = await Promise.all([
         loadScopeStatsSummary(ctx, me, todayMs, {
           districtId: args.districtId,
           municipalityId: args.municipalityId,
         }),
-        buildWardStatsFromRollup(),
+        loadWardRollups(),
         loadScopeCompletionPct(ctx, me, {
           districtId: args.districtId,
           municipalityId: args.municipalityId,
         }),
       ])
       if (summary) {
+        const wardSum = sumWardStatsRollups(wardRollups)
+        const withGap =
+          !wardScoped && !args.wardNo
+            ? (() => {
+                const gap = unassignedWardGap(summary.municipalityId, summary, wardSum)
+                return gap ? [...wardRollups, gap] : wardRollups
+              })()
+            : wardRollups
+        const wardStats = await mapWardStatsForClient(withGap)
+        if (wardScoped) {
+          return {
+            total: wardSum.total,
+            drafts: wardSum.drafts,
+            submitted: wardSum.submitted,
+            submittedToday: 0,
+            qcApproved: wardSum.qcApproved,
+            qcPending: wardSum.qcPending,
+            qcRejected: wardSum.qcRejected,
+            surveyCompletionPct: surveyCompletionPct ?? 0,
+            wardStats,
+          }
+        }
         return {
           total: summary.total,
           drafts: summary.drafts,
@@ -444,7 +477,23 @@ export const commandCenterStats = query({
     let wardStats
     let filtered: Doc<"surveys">[] = []
     if (useWardRollup) {
-      wardStats = await buildWardStatsFromRollup()
+      const wardRollups = await loadWardRollups()
+      if (wardScoped && useStatsFastPath) {
+        const wardSum = sumWardStatsRollups(wardRollups)
+        wardStats = await mapWardStatsForClient(wardRollups)
+        return {
+          total: wardSum.total,
+          drafts: wardSum.drafts,
+          submitted: wardSum.submitted,
+          submittedToday: 0,
+          qcApproved: wardSum.qcApproved,
+          qcPending: wardSum.qcPending,
+          qcRejected: wardSum.qcRejected,
+          surveyCompletionPct: 0,
+          wardStats,
+        }
+      }
+      wardStats = await mapWardStatsForClient(wardRollups)
     } else {
       const live = await buildWardStatsFromLiveScan()
       wardStats = live.wardStats

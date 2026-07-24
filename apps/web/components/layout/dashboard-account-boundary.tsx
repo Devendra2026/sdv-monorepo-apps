@@ -36,6 +36,8 @@ export function DashboardAccountBoundary({ children }: { children: React.ReactNo
   const {
     user,
     isLoading,
+    authTimedOut,
+    authFailed,
     isPending,
     isDisabled,
     isProvisioning,
@@ -43,6 +45,26 @@ export function DashboardAccountBoundary({ children }: { children: React.ReactNo
     provisionFailureCode,
     retryProvision,
   } = useCurrentUser()
+
+  if (authTimedOut || (authFailed && !user && !isLoading)) {
+    return (
+      <StatusScreen
+        icon={ShieldAlert}
+        tone="text-destructive"
+        title="Authentication not ready"
+        body={
+          authFailed
+            ? "Your Clerk session could not be connected to Convex. Sign in again, or disable Brave Shields / privacy blockers for survey.sdvedutech.in and allow accounts.sdvedutech.in and api.sdvedutech.in."
+            : "Convex auth is taking too long. Disable Brave Shields for this site, allow accounts.sdvedutech.in and api.sdvedutech.in (including WebSockets), then reload."
+        }
+        action={
+          <Button type="button" variant="default" className="mt-4" onClick={() => window.location.reload()}>
+            Reload
+          </Button>
+        }
+      />
+    )
+  }
 
   if (isLoading) {
     return <DashboardMainSkeleton />
@@ -58,7 +80,7 @@ export function DashboardAccountBoundary({ children }: { children: React.ReactNo
           title={authNotReady ? "Authentication not ready" : "Account setup delayed"}
           body={
             authNotReady
-              ? 'Convex could not verify your Clerk session. Confirm the Clerk Convex integration is enabled (JWT template named "convex") and that CLERK_JWT_ISSUER_DOMAIN on your Convex deployment matches your Clerk Frontend API URL.'
+              ? 'Convex could not verify your Clerk session. Confirm the Clerk Convex integration is enabled (JWT template named "convex") and that CLERK_JWT_ISSUER_DOMAIN on your Convex deployment matches your Clerk Frontend API URL. On Brave/Chrome, also disable Shields for this site.'
               : "We couldn't finish setting up your account. This usually resolves when the Clerk webhook completes. Try again or contact your administrator."
           }
           action={

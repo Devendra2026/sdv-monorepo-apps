@@ -1,11 +1,14 @@
 "use client"
 
-import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
+import { useConvexAuthReady, useConvexAuthState } from "@/hooks/use-convex-auth-ready"
 import { parseConvexError } from "@/lib/errors"
 import type { Role } from "@/lib/permissions"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import { useMutation, usePreloadedQuery, useQuery, type Preloaded } from "convex/react"
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+
+/** How long to wait for Convex auth before surfacing an error instead of an infinite skeleton. */
+const AUTH_HANG_TIMEOUT_MS = 15_000
 
 export type CurrentUser = {
   _id: string
@@ -28,6 +31,10 @@ type CurrentUserContextValue = {
   capabilities: string[] | undefined
   roleName: string | undefined
   isLoading: boolean
+  /** Convex auth still loading past AUTH_HANG_TIMEOUT_MS */
+  authTimedOut: boolean
+  /** Auth finished but user is not authenticated */
+  authFailed: boolean
   isProvisioning: boolean
   provisionFailed: boolean
   provisionFailureCode: string | null
@@ -38,6 +45,21 @@ type CurrentUserContextValue = {
 }
 
 const CurrentUserContext = createContext<CurrentUserContextValue | null>(null)
+
+function useAuthHangTimeout(authLoading: boolean): boolean {
+  const [timedOut, setTimedOut] = useState(false)
+
+  useEffect(() => {
+    if (!authLoading) {
+      setTimedOut(false)
+      return
+    }
+    const id = window.setTimeout(() => setTimedOut(true), AUTH_HANG_TIMEOUT_MS)
+    return () => window.clearTimeout(id)
+  }, [authLoading])
+
+  return timedOut
+}
 
 function useProvisionFlow(user: CurrentUser | null | undefined) {
   const ready = useConvexAuthReady()
@@ -57,7 +79,6 @@ function useProvisionFlow(user: CurrentUser | null | undefined) {
       const { code } = parseConvexError(error)
       setProvisionFailed(true)
       setProvisionFailureCode(code)
-      provisioned.current = false
     } finally {
       setIsProvisioning(false)
     }
@@ -93,14 +114,20 @@ function useProvisionFlow(user: CurrentUser | null | undefined) {
 
 function buildContextValue(
   user: CurrentUser | null | undefined,
-  provision: ReturnType<typeof useProvisionFlow>
+  provision: ReturnType<typeof useProvisionFlow>,
+  auth: { authLoading: boolean; isAuthenticated: boolean; authTimedOut: boolean }
 ): CurrentUserContextValue {
+  const authFailed = !auth.authLoading && !auth.isAuthenticated
+  const waitingOnAuth = !authFailed && user === null && !provision.ready
+  const isLoading = !authFailed && (user === undefined || waitingOnAuth)
   return {
     user: user ?? null,
     role: (user?.role ?? undefined) as Role | undefined,
     capabilities: user?.capabilities,
     roleName: user?.roleName,
-    isLoading: user === undefined || (user === null && !provision.ready),
+    isLoading,
+    authTimedOut: auth.authTimedOut && isLoading,
+    authFailed,
     isProvisioning: provision.isProvisioning,
     provisionFailed: provision.provisionFailed,
     provisionFailureCode: provision.provisionFailureCode,
@@ -120,15 +147,25 @@ function CurrentUserProviderPreloaded({
 }) {
   const user = usePreloadedQuery(preloadedUser) as CurrentUser | null | undefined
   const provision = useProvisionFlow(user)
-  const value = useMemo(() => buildContextValue(user, provision), [user, provision])
+  const authState = useConvexAuthState()
+  const authTimedOut = useAuthHangTimeout(authState.authLoading)
+  const value = useMemo(
+    () => buildContextValue(user, provision, { ...authState, authTimedOut }),
+    [user, provision, authState, authTimedOut]
+  )
   return <CurrentUserContext.Provider value={value}>{children}</CurrentUserContext.Provider>
 }
 
 function CurrentUserProviderClient({ children }: { children: ReactNode }) {
-  const ready = useConvexAuthReady()
-  const user = useQuery(api.users.queries.currentUser, ready ? {} : "skip") as CurrentUser | null | undefined
+  const authState = useConvexAuthState()
+  const authTimedOut = useAuthHangTimeout(authState.authLoading)
+  const user = useQuery(api.users.queries.currentUser, authState.authReady ? {} : "skip") as
+    CurrentUser | null | undefined
   const provision = useProvisionFlow(user)
-  const value = useMemo(() => buildContextValue(user, provision), [user, provision])
+  const value = useMemo(
+    () => buildContextValue(user, provision, { ...authState, authTimedOut }),
+    [user, provision, authState, authTimedOut]
+  )
   return <CurrentUserContext.Provider value={value}>{children}</CurrentUserContext.Provider>
 }
 

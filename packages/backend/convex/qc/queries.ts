@@ -6,8 +6,8 @@ import type { Doc } from "../_generated/dataModel"
 import { query } from "../_generated/server"
 import { normalizeParcelKey, resolvePropertyId } from "../lib/propertyId"
 import { computeQcWardAggregates } from "../lib/qcWardStats"
-import { loadWardStatsForScope } from "../lib/surveyRollupStats"
-import { loadScopeStatsSummary } from "../lib/surveyScopeStats"
+import { loadWardStatsForScope, sumWardStatsRollups, unassignedWardGap } from "../lib/surveyRollupStats"
+import { loadScopeStatsSummary, userRequiresWardScopedSurveyCounts } from "../lib/surveyScopeStats"
 import { requireCapability } from "../shared/capabilities"
 import { assertCanAccessSurvey, fieldSurveyAccess } from "../shared/fieldAccess"
 import { assertCanReadWard, clientError, mapTruthyById, requireUser } from "../shared/helpers"
@@ -61,37 +61,62 @@ export const commandCenterStats = query({
 
     const useStatsFastPath = !args.wardNo && args.fromMs === undefined && args.toMs === undefined
     const useWardRollup = args.fromMs === undefined && args.toMs === undefined
+    const wardScoped = userRequiresWardScopedSurveyCounts(me)
 
-    const wardStatsFromRollup = useWardRollup
-      ? (
-          await loadWardStatsForScope(ctx, me, {
-            districtId: args.districtId,
-            municipalityId: args.municipalityId,
-            wardNo: args.wardNo,
-          })
-        ).map((w) => {
-          const decided = w.qcPending + w.qcApproved + w.qcRejected
-          return {
-            wardNo: w.wardNo,
-            municipalityId: w.municipalityId,
-            city: w.city,
-            pending: w.qcPending,
-            approved: w.qcApproved,
-            rejected: w.qcRejected,
-            drafts: w.drafts,
-            total: w.total,
-            qcCompletionPct: decided > 0 ? Math.round((w.qcApproved / decided) * 100) : 0,
-            firstPendingId: w.firstPendingSurveyId,
-          }
+    function mapQcWardStats(wardRollups: Awaited<ReturnType<typeof loadWardStatsForScope>>) {
+      return wardRollups.map((w) => {
+        const decided = w.qcPending + w.qcApproved + w.qcRejected
+        return {
+          wardNo: w.wardNo,
+          municipalityId: w.municipalityId,
+          city: w.city,
+          pending: w.qcPending,
+          approved: w.qcApproved,
+          rejected: w.qcRejected,
+          drafts: w.drafts,
+          total: w.total,
+          qcCompletionPct: decided > 0 ? Math.round((w.qcApproved / decided) * 100) : 0,
+          firstPendingId: w.firstPendingSurveyId,
+        }
+      })
+    }
+
+    const wardRollups = useWardRollup
+      ? await loadWardStatsForScope(ctx, me, {
+          districtId: args.districtId,
+          municipalityId: args.municipalityId,
+          wardNo: args.wardNo,
         })
       : null
 
-    if (useStatsFastPath) {
+    if (useStatsFastPath && wardRollups) {
       const summary = await loadScopeStatsSummary(ctx, me, todayMs, {
         districtId: args.districtId,
         municipalityId: args.municipalityId,
       })
-      if (summary && wardStatsFromRollup) {
+      if (summary) {
+        const wardSum = sumWardStatsRollups(wardRollups)
+        const withGap =
+          !wardScoped && !args.wardNo
+            ? (() => {
+                const gap = unassignedWardGap(summary.municipalityId, summary, wardSum)
+                return gap ? [...wardRollups, gap] : wardRollups
+              })()
+            : wardRollups
+        const wardStats = mapQcWardStats(withGap)
+        if (wardScoped) {
+          const decided = wardSum.qcPending + wardSum.qcApproved + wardSum.qcRejected
+          return {
+            pending: wardSum.qcPending,
+            approved: wardSum.qcApproved,
+            rejected: wardSum.qcRejected,
+            drafts: wardSum.drafts,
+            submittedToday: 0,
+            submitted: wardSum.submitted,
+            qcCompletionPct: decided > 0 ? Math.round((wardSum.qcApproved / decided) * 100) : 0,
+            wardStats,
+          }
+        }
         const decided = summary.qcPending + summary.qcApproved + summary.qcRejected
         return {
           pending: summary.qcPending,
@@ -101,10 +126,12 @@ export const commandCenterStats = query({
           submittedToday: summary.submittedToday,
           submitted: summary.submitted,
           qcCompletionPct: decided > 0 ? Math.round((summary.qcApproved / decided) * 100) : 0,
-          wardStats: wardStatsFromRollup,
+          wardStats,
         }
       }
     }
+
+    const wardStatsFromRollup = wardRollups ? mapQcWardStats(wardRollups) : null
 
     const rows = await collectSurveysForListPaginated(
       ctx,

@@ -39,6 +39,12 @@ const muniAuditValidator = v.object({
   surveyTotal: v.number(),
   rollupTotal: v.union(v.number(), v.null()),
   rollupMatchesSurvey: v.boolean(),
+  wardRollupTotal: v.number(),
+  wardRollupPending: v.number(),
+  muniRollupPending: v.union(v.number(), v.null()),
+  wardSumMatchesMuniTotal: v.boolean(),
+  wardPendingMatchesMuniPending: v.boolean(),
+  unassignedSurveyCount: v.number(),
   missingFromMasters: v.array(v.string()),
 })
 
@@ -101,6 +107,12 @@ export const auditDistrictWards = internalQuery({
       surveyTotal: number
       rollupTotal: number | null
       rollupMatchesSurvey: boolean
+      wardRollupTotal: number
+      wardRollupPending: number
+      muniRollupPending: number | null
+      wardSumMatchesMuniTotal: boolean
+      wardPendingMatchesMuniPending: boolean
+      unassignedSurveyCount: number
       missingFromMasters: string[]
     }> = []
     const gaps: Array<{
@@ -120,7 +132,7 @@ export const auditDistrictWards = internalQuery({
         .collect()
 
       for (const muni of munis) {
-        const [wardRows, surveys, rollupRows] = await Promise.all([
+        const [wardRows, surveys, rollupRows, wardStatsRows] = await Promise.all([
           ctx.db
             .query("wards")
             .withIndex("by_municipality", (q) => q.eq("municipalityId", muni._id))
@@ -128,6 +140,10 @@ export const auditDistrictWards = internalQuery({
           loadSurveysForMunicipality(ctx, muni._id),
           ctx.db
             .query("surveyMunicipalityStats")
+            .withIndex("by_municipality", (q) => q.eq("municipalityId", muni._id))
+            .collect(),
+          ctx.db
+            .query("surveyWardStats")
             .withIndex("by_municipality", (q) => q.eq("municipalityId", muni._id))
             .collect(),
         ])
@@ -140,9 +156,13 @@ export const auditDistrictWards = internalQuery({
         const masterWardNos = [...new Set(wardRows.map((w) => w.wardNo.trim()).filter(Boolean))].sort()
 
         const spellingCounts = new Map<string, number>()
+        let unassignedSurveyCount = 0
         for (const s of surveys) {
           const w = s.wardNo?.trim()
-          if (!w) continue
+          if (!w) {
+            unassignedSurveyCount += 1
+            continue
+          }
           spellingCounts.set(w, (spellingCounts.get(w) ?? 0) + 1)
         }
         const surveyWardSpellings = [...spellingCounts.keys()].sort()
@@ -163,8 +183,23 @@ export const auditDistrictWards = internalQuery({
           }
         }
 
+        let wardRollupTotal = 0
+        let wardRollupPending = 0
+        for (const row of wardStatsRows) {
+          wardRollupTotal += row.total
+          wardRollupPending += row.qcPending
+        }
+
         const surveyTotal = surveys.length
         const rollupTotal = rollup?.total ?? null
+        const muniRollupPending = rollup?.qcPending ?? null
+        const wardSumMatchesMuniTotal =
+          rollupTotal === null
+            ? wardRollupTotal === surveyTotal - unassignedSurveyCount
+            : wardRollupTotal === rollupTotal
+        const wardPendingMatchesMuniPending =
+          muniRollupPending === null ? true : wardRollupPending === muniRollupPending
+
         municipalities.push({
           municipalityId: muni._id,
           municipalityCode: muni.code,
@@ -175,6 +210,12 @@ export const auditDistrictWards = internalQuery({
           surveyTotal,
           rollupTotal,
           rollupMatchesSurvey: rollupTotal === null ? false : rollupTotal === surveyTotal,
+          wardRollupTotal,
+          wardRollupPending,
+          muniRollupPending,
+          wardSumMatchesMuniTotal,
+          wardPendingMatchesMuniPending,
+          unassignedSurveyCount,
           missingFromMasters: [...new Set(missingFromMasters)].sort(),
         })
       }

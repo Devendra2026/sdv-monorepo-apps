@@ -62,14 +62,12 @@ function emptyDashboardCounts(): MutableDashboardCounts {
 }
 
 /**
- * Pending QC when reject is unused.
- * User formula: submitted − approved, where "submitted" means the non-draft pool
- * (status submitted + approved). That equals the current `status === "submitted"` queue.
- * Prefer the larger of status-derived and stored qcPending so stale rollups do not undercount.
+ * Pending QC count from stored rollup / live scan.
+ * Matches ward cards and live filters: qcStatus === "pending" && status === "submitted".
+ * Does not inflate to municipality `submitted` (that broke KPI vs ward-sum matching).
  */
-export function pendingQcCount(submitted: number, approved: number, qcPending = 0): number {
-  const fromNonDraftPool = Math.max(0, submitted + approved - approved)
-  return Math.max(fromNonDraftPool, Math.max(0, qcPending))
+export function pendingQcCount(_submitted: number, _approved: number, qcPending = 0): number {
+  return Math.max(0, qcPending)
 }
 
 function addRowToSurveyCounts(bucket: MutableSurveyCounts, row: SurveyStatsSlice, window: DayWindow | null) {

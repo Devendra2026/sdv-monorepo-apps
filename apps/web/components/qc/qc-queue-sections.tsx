@@ -14,7 +14,6 @@ import type { QcQueueStats } from "@/hooks/qc/useQcQueue"
 import type { ParcelSiblingIndex } from "@/lib/qc/parcel-siblings"
 import type { QcWardRow } from "@/lib/qc/ward-stats"
 import { isQcScopeComplete, type QcWorkScope } from "@/lib/qc/work-scope"
-import { estimateQcPendingCount } from "@/lib/surveys/survey-list-filters"
 import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import { CheckCircle2, Clock3, FileEdit, Filter, MapPin, Percent, ShieldCheck, Table2 } from "lucide-react"
 import Link from "next/link"
@@ -73,11 +72,7 @@ export function QcRegistryHero() {
 }
 
 export function QcMetricsSection({ stats, isLoading }: { stats: QcQueueStats; isLoading: boolean }) {
-  const remaining = estimateQcPendingCount({
-    submitted: stats.submitted,
-    approved: stats.approved,
-    rejected: stats.rejected,
-  })
+  const remaining = stats.pending
 
   return (
     <section aria-labelledby="qc-kpi-heading">
@@ -313,7 +308,7 @@ export function QcReviewRegistry({
         <div className="sticky top-0 z-20 border-b border-border/60 bg-muted/15 px-4 py-3 backdrop-blur-md supports-backdrop-filter:bg-muted/80">
           <QcRegistrySearchBar value={registrySearch} onChange={onRegistrySearchChange} />
         </div>
-        <div className="sticky top-[3.25rem] z-10 border-b border-border/60 bg-muted/15 px-4 py-2.5 backdrop-blur-md supports-backdrop-filter:bg-muted/80">
+        <div className="sticky top-13 z-10 border-b border-border/60 bg-muted/15 px-4 py-2.5 backdrop-blur-md supports-backdrop-filter:bg-muted/80">
           <Tabs value={activeTab} onValueChange={onTabChange}>
             <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1.5 bg-transparent p-0">
               <TabPill

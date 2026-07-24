@@ -4,13 +4,14 @@ import { municipalityStatsRowLooksConsistent } from "./surveyScopeStats"
 import { computeDashboardCountsFromSlice, pendingQcCount } from "./surveyStatsAggregate"
 
 describe("pendingQcCount", () => {
-  it("equals submitted when reject unused (non-draft pool minus approved)", () => {
-    expect(pendingQcCount(120, 40)).toBe(120)
-    expect(pendingQcCount(0, 10)).toBe(0)
+  it("uses stored qcPending only (matches ward rollups)", () => {
+    expect(pendingQcCount(120, 40)).toBe(0)
+    expect(pendingQcCount(120, 40, 55)).toBe(55)
+    expect(pendingQcCount(0, 10, 0)).toBe(0)
   })
 
-  it("prefers stored qcPending when higher than submitted (stale submitted)", () => {
-    expect(pendingQcCount(80, 40, 100)).toBe(100)
+  it("floors negative stored pending at 0", () => {
+    expect(pendingQcCount(80, 40, -5)).toBe(0)
   })
 })
 
