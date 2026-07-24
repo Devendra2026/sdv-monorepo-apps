@@ -41,6 +41,8 @@ export type QcFinalReportExcelRow = {
   "Total Annual Demand": number
   "Survey Status": string
   "QC Status": string
+  "QC Approved By": string
+  "QC Decided At": string
   "Submitted At": string
   Surveyor: string
 }
@@ -79,6 +81,8 @@ export function bundleToQcFinalReportRow(
     "Total Annual Demand": demand.total,
     "Survey Status": SURVEY_STATUS_LABEL[bundle.status as keyof typeof SURVEY_STATUS_LABEL] ?? bundle.status,
     "QC Status": QC_STATUS_LABEL[bundle.qcStatus as keyof typeof QC_STATUS_LABEL] ?? bundle.qcStatus,
+    "QC Approved By": bundle.qcApprovedByName || "—",
+    "QC Decided At": bundle.qcDecidedAt ? fmtDate(bundle.qcDecidedAt) : "—",
     "Submitted At": bundle.submittedAt ? fmtDate(bundle.submittedAt) : "—",
     Surveyor: bundle.surveyorName || bundle.surveyorEmail || "—",
   }

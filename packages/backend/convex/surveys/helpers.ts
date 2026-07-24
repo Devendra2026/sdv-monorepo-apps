@@ -762,6 +762,22 @@ export function wardNoSpellingVariants(wardNo: string): string[] {
   return [...wardSet].filter((w) => w.length > 0)
 }
 
+/** Resolve a ward master row allowing numeric spelling variants ("1" ↔ "01"). */
+export async function findWardForMunicipality(
+  ctx: QueryCtx | MutationCtx,
+  municipalityId: Id<"municipalities">,
+  wardNo: string
+): Promise<Doc<"wards"> | null> {
+  for (const variant of wardNoSpellingVariants(wardNo)) {
+    const rows = await ctx.db
+      .query("wards")
+      .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", municipalityId).eq("wardNo", variant))
+      .take(1)
+    if (rows[0]) return rows[0]
+  }
+  return null
+}
+
 type WardIndexedCursor = { w: number; c: string | null }
 
 function encodeWardIndexedCursor(state: WardIndexedCursor): string {

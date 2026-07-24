@@ -156,6 +156,8 @@ bash infra/convex-self-hosted/verify-convex-traefik-routing.sh
 bash packages/backend/scripts/diagnose-convex-export-404.sh
 ```
 
+Isolate logs naming `UDF: testQuery.js:default` are from one-off Convex CLI `--inline-query` / dashboard scratch queries — not app code. Do not add a `testQuery` module. Prefer `internal.tenants.wardAudit.auditDistrictWards` for district audits; never chain multiple `.paginate()` calls in one UDF (use `.collect()` per index or a single paginated stream).
+
 **Backups** (volume-primary DR; logical ZIP is documents-only by default):
 
 | Purpose                          | Command                                                 | When                                                                                                |

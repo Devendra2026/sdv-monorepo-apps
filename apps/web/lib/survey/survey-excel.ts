@@ -26,6 +26,9 @@ export type SurveyExportBundle = {
   municipalityCode?: string
   surveyorName?: string
   surveyorEmail?: string
+  /** Latest QC approve reviewer display name (empty if never approved). */
+  qcApprovedByName?: string
+  qcDecidedAt?: number
   wardNo: string
   sectorNo?: string
   oldPropertyNo?: string
@@ -163,6 +166,8 @@ function surveyMainRow(s: SurveyExportBundle) {
     "GPS Mock Location": s.gps?.isMockLocation ? "Yes" : s.gps ? "No" : "",
     "Survey Status": SURVEY_STATUS_LABEL[s.status as keyof typeof SURVEY_STATUS_LABEL] ?? s.status,
     "QC Status": QC_STATUS_LABEL[s.qcStatus as keyof typeof QC_STATUS_LABEL] ?? s.qcStatus,
+    "QC Approved By": s.qcApprovedByName ?? "",
+    "QC Decided At": s.qcDecidedAt ? fmtDate(s.qcDecidedAt) : "",
     Surveyor: s.surveyorName ?? "",
     "Surveyor Email": s.surveyorEmail ?? "",
     "Server Version": s.serverVersion,

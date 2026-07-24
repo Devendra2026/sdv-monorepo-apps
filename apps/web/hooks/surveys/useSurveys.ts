@@ -5,7 +5,7 @@
  * supports is applied client-side over the already tenant-scoped result.
  */
 import { useClientNowMs } from "@/hooks/use-client-now"
-import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
+import { useConvexAuthReady, useConvexAuthState } from "@/hooks/use-convex-auth-ready"
 import { useCursorPagination } from "@/hooks/use-cursor-pagination"
 import type { QcStatus, SurveyStatus } from "@/lib/domain"
 import { formatRegistryParcelNo, formatRegistryWardNo } from "@/lib/survey/format-registry-parcel"
@@ -94,6 +94,7 @@ export function useSurveyListPaginated(
   } = useCursorPagination(resetKey, pageSize)
 
   const ready = useConvexAuthReady()
+  const { authLoading, isAuthenticated } = useConvexAuthState()
   const result = useConvexQuery(
     api.surveys.queries.listPaginated,
     ready && enabled && Number.isFinite(nowMs)
@@ -119,13 +120,18 @@ export function useSurveyListPaginated(
   const totalCount = result?.totalCount
   const scopeTruncated = result?.scopeTruncated ?? false
   const canGoNext = result ? !result.isDone : false
+  const queryEnabled = ready && enabled && Number.isFinite(nowMs)
+  // Auth still resolving or query in flight — not "empty" and not perpetual skip-as-loading.
+  const isLoading = queryEnabled ? result === undefined : authLoading
 
   return useMemo(
     () => ({
       surveys,
       totalCount,
       scopeTruncated,
-      isLoading: result === undefined,
+      isLoading,
+      /** Auth finished but user is not signed in — show sign-in, not a spinner. */
+      authFailed: !authLoading && !isAuthenticated,
       pageNumber,
       pageIndex,
       pageSize: size,
@@ -136,7 +142,22 @@ export function useSurveyListPaginated(
       },
       goPrev,
     }),
-    [surveys, totalCount, scopeTruncated, result, pageNumber, pageIndex, size, canGoPrev, canGoNext, goNext, goPrev]
+    [
+      surveys,
+      totalCount,
+      scopeTruncated,
+      isLoading,
+      authLoading,
+      isAuthenticated,
+      result,
+      pageNumber,
+      pageIndex,
+      size,
+      canGoPrev,
+      canGoNext,
+      goNext,
+      goPrev,
+    ]
   )
 }
 

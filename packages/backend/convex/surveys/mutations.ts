@@ -1,4 +1,4 @@
-import { v } from "convex/values"
+import { ConvexError, v } from "convex/values"
 import type { Doc } from "../_generated/dataModel"
 import { mutation, type MutationCtx } from "../_generated/server"
 import { validateGps } from "../lib/gpsValidation"
@@ -30,6 +30,7 @@ import {
   assertSurveyWritable,
   auditActionForSave,
   buildSurveyPartialPatch,
+  findWardForMunicipality,
   mergeDraftArgs,
   normalizeOwnerFields,
   normalizePropertyFields,
@@ -42,6 +43,16 @@ import {
   type SurveyUpsertArgs,
 } from "./helpers"
 import { draftSurveyInput, submitFloorRow, surveyInput } from "./validators"
+
+type DraftSurveyArgs = {
+  id?: Doc<"surveys">["_id"]
+  localId: string
+  municipalityId: Doc<"municipalities">["_id"]
+  clientUpdatedAt: number
+  wardNo?: string
+  [key: string]: unknown
+}
+
 /**
  * Save in-progress survey data without requiring every step to be complete.
  * Full business rules (PIN vs ULB, owner mobile, taxation, etc.) run on
@@ -52,6 +63,7 @@ import { draftSurveyInput, submitFloorRow, surveyInput } from "./validators"
  * - Draft completion churn skips shared rollup writes inside recordSurveyAnalyticsUpdate
  * - Cheap completion % (presence-only floor/photo reads)
  * - Partial patch only — no full document replace
+ * - Outer try/catch: ConvexError rethrows; unexpected errors log + INTERNAL (no floating UPR)
  */
 export const saveDraft = mutation({
   args: draftSurveyInput,
@@ -59,210 +71,235 @@ export const saveDraft = mutation({
   handler: async (ctx, args) => {
     const startedAt = Date.now()
     const requestId = createRequestId()
-    const me = await requireUser(ctx)
-    // Sequential gates — Promise.all sibling rejections become UnhandledPromiseRejection
-    // and restart the isolate when auth/scope checks fail in parallel.
-    await requireSurveyDraftEdit(ctx, me)
-    const muni = await assertMunicipalityInScope(ctx, me, args.municipalityId)
-    const ownScope = await isOwnScopeSurveyor(ctx, me)
-    const canInsert = await canInsertSurveyDraft(ctx, me)
-    const existing = await resolveExistingSurveyForSave(ctx, me, {
-      id: args.id,
-      localId: args.localId,
-      municipalityId: args.municipalityId,
-    })
-    if (existing) await assertSurveyWritable(ctx, me, existing)
-    if (!existing && !canInsert) {
-      clientError("BAD_REQUEST", "No survey found to update — open the record from QC review and try saving again")
-    }
-
-    const wardNo = args.wardNo?.trim() ?? existing?.wardNo ?? ""
-    if (wardNo) {
-      assertCanReadWard(me, args.municipalityId, wardNo)
-      // Never .unique() — duplicate ward rows throw → isolate restart.
-      const wards = await ctx.db
-        .query("wards")
-        .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", args.municipalityId).eq("wardNo", wardNo))
-        .take(2)
-      if (wards.length === 0) clientError("BAD_REQUEST", "Unknown ward", { wardNo: ["unknown ward"] })
-    }
-
-    const district = await ctx.db.get(muni.districtId)
-    const addressCtx = {
-      ...addressTenantContext(muni, district),
-      configuredPostalCode: muni.postalCode,
-    }
-
-    const merged = mergeDraftArgs(existing, args, muni)
-    // Skip tax-zone master collect when draft has no zone set / unchanged.
-    const taxZoneEmpty = !(merged.taxRateZone as string | undefined)?.trim() && !(existing?.taxRateZone ?? "").trim()
-    const allowedTaxZones = taxZoneEmpty ? new Set<string>() : await loadAllowedTaxZoneSet(ctx)
-    const normalized = normalizeAddressFields(
-      normalizeOwnerFields(normalizeTaxationFields(withResolvedPropertyId(normalizePropertyFields(merged), muni.code))),
-      muni
-    )
-    validateBusinessRules(normalized, addressCtx, "draft", { allowedTaxZones })
-
-    if (existing && existing.status === "submitted") {
-      const isQcEditor = await hasCapability(ctx, me, "qc.review")
-      if (isQcEditor && surveyIdentifyingSlotChanged(existing, normalized, muni.code)) {
-        await assertUniqueSurveySlot(ctx, {
-          municipalityId: args.municipalityId,
-          wardNo: (normalized.wardNo as string) ?? existing.wardNo,
-          parcelNo: normalized.parcelNo as string,
-          propertyUse: normalized.propertyUse as string | undefined,
-          unitNo: normalized.unitNo as string | undefined,
-          propertyId: normalized.propertyId as string | undefined,
-          excludeId: existing._id,
-        })
-      }
-    }
-
-    const writable = { ...stripLocalId(normalized as SurveyUpsertArgs), districtId: muni.districtId }
-
-    if (existing) {
-      const { status, qcStatus } = resolvePostSaveStatuses(existing)
-      const completionPct = await completionPctForSurvey(ctx, { ...existing, ...writable } as Doc<"surveys">)
-
-      const patch = buildSurveyPartialPatch(existing, writable as Record<string, unknown>, {
-        status,
-        qcStatus,
-        clientUpdatedAt: args.clientUpdatedAt,
-        completionPct,
-      })
-
-      if (Object.keys(patch).length === 0) {
-        logMutationTiming("surveys.saveDraft", startedAt, {
-          requestId,
-          userId: me._id,
-          surveyId: existing._id,
-          mode: "update_noop",
-        })
-        return existing._id
-      }
-
-      await ctx.db.patch(existing._id, patch)
-
-      const updated: Doc<"surveys"> = {
-        ...existing,
-        ...patch,
-      } as Doc<"surveys">
-
-      await recordSurveyStatsUpdate(ctx, existing, updated)
-
-      const staysDraft = existing.status === "draft" && updated.status === "draft"
-      if (!staysDraft) {
-        await writeAudit(ctx, {
-          actorId: me._id,
-          action: auditActionForSave(existing, ownScope, false),
-          entity: "survey",
-          entityId: existing._id,
-        })
-      }
-
-      logMutationTiming("surveys.saveDraft", startedAt, {
+    try {
+      return await saveDraftInner(ctx, args as DraftSurveyArgs, startedAt, requestId)
+    } catch (err) {
+      // Intentional client/auth errors must reach the client unchanged.
+      if (err instanceof ConvexError) throw err
+      console.error("[surveys.saveDraft] unexpected failure", {
         requestId,
-        userId: me._id,
-        surveyId: existing._id,
-        mode: "update",
-        staysDraft,
+        localId: args.localId,
+        municipalityId: args.municipalityId,
+        err: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : err,
       })
-      return existing._id
+      throw new ConvexError({
+        code: "INTERNAL",
+        message: "Draft save failed. Please retry.",
+      })
     }
+  },
+})
 
-    // Insert once — re-check for concurrent first-insert race on localId.
-    const raced = await resolveExistingSurveyForSave(ctx, me, {
-      id: args.id,
-      localId: args.localId,
-      municipalityId: args.municipalityId,
-    })
-    if (raced) {
-      const { status, qcStatus } = resolvePostSaveStatuses(raced)
-      const completionPct = await completionPctForSurvey(ctx, { ...raced, ...writable } as Doc<"surveys">)
-      const patch = buildSurveyPartialPatch(raced, writable as Record<string, unknown>, {
-        status,
-        qcStatus,
-        clientUpdatedAt: args.clientUpdatedAt,
-        completionPct,
+async function saveDraftInner(
+  ctx: MutationCtx,
+  args: DraftSurveyArgs,
+  startedAt: number,
+  requestId: string
+): Promise<Doc<"surveys">["_id"]> {
+  const me = await requireUser(ctx)
+  // Sequential gates — Promise.all sibling rejections become UnhandledPromiseRejection
+  // and restart the isolate when auth/scope checks fail in parallel.
+  await requireSurveyDraftEdit(ctx, me)
+  const muni = await assertMunicipalityInScope(ctx, me, args.municipalityId)
+  const ownScope = await isOwnScopeSurveyor(ctx, me)
+  const canInsert = await canInsertSurveyDraft(ctx, me)
+  const existing = await resolveExistingSurveyForSave(ctx, me, {
+    id: args.id,
+    localId: args.localId,
+    municipalityId: args.municipalityId,
+  })
+  if (existing) await assertSurveyWritable(ctx, me, existing)
+  if (!existing && !canInsert) {
+    clientError("BAD_REQUEST", "No survey found to update — open the record from QC review and try saving again")
+  }
+
+  const wardNo = args.wardNo?.trim() ?? existing?.wardNo ?? ""
+  if (wardNo) {
+    assertCanReadWard(me, args.municipalityId, wardNo)
+    // Never .unique() — duplicate ward rows throw → isolate restart.
+    const ward = await findWardForMunicipality(ctx, args.municipalityId, wardNo)
+    if (!ward) clientError("BAD_REQUEST", "Unknown ward", { wardNo: ["unknown ward"] })
+  }
+
+  const district = await ctx.db.get(muni.districtId)
+  const addressCtx = {
+    ...addressTenantContext(muni, district),
+    configuredPostalCode: muni.postalCode,
+  }
+
+  const merged = mergeDraftArgs(existing, args, muni)
+  // Skip tax-zone master collect when draft has no zone set / unchanged.
+  const taxZoneEmpty = !(merged.taxRateZone as string | undefined)?.trim() && !(existing?.taxRateZone ?? "").trim()
+  const allowedTaxZones = taxZoneEmpty ? new Set<string>() : await loadAllowedTaxZoneSet(ctx)
+  const normalized = normalizeAddressFields(
+    normalizeOwnerFields(normalizeTaxationFields(withResolvedPropertyId(normalizePropertyFields(merged), muni.code))),
+    muni
+  )
+  validateBusinessRules(normalized, addressCtx, "draft", { allowedTaxZones })
+
+  if (existing && existing.status === "submitted") {
+    const isQcEditor = await hasCapability(ctx, me, "qc.review")
+    if (isQcEditor && surveyIdentifyingSlotChanged(existing, normalized, muni.code)) {
+      await assertUniqueSurveySlot(ctx, {
+        municipalityId: args.municipalityId,
+        wardNo: (normalized.wardNo as string) ?? existing.wardNo,
+        parcelNo: normalized.parcelNo as string,
+        propertyUse: normalized.propertyUse as string | undefined,
+        unitNo: normalized.unitNo as string | undefined,
+        propertyId: normalized.propertyId as string | undefined,
+        excludeId: existing._id,
       })
-      if (Object.keys(patch).length > 0) {
-        await ctx.db.patch(raced._id, patch)
-        const updated: Doc<"surveys"> = { ...raced, ...patch } as Doc<"surveys">
-        await recordSurveyStatsUpdate(ctx, raced, updated)
-      }
-      logMutationTiming("surveys.saveDraft", startedAt, {
-        requestId,
-        userId: me._id,
-        surveyId: raced._id,
-        mode: "insert_race_update",
-      })
-      return raced._id
     }
+  }
 
-    const completionPct = computeSurveyCompletionPercent({ ...writable, floors: [], photos: [] })
-    const newId = await ctx.db.insert("surveys", {
-      ...writable,
-      surveyorId: me._id,
-      localId: args.localId,
-      status: "draft",
-      qcStatus: "pending",
-      serverVersion: 1,
+  const writable = { ...stripLocalId(normalized as SurveyUpsertArgs), districtId: muni.districtId }
+
+  if (existing) {
+    const { status, qcStatus } = resolvePostSaveStatuses(existing)
+    const completionPct = await completionPctForSurvey(ctx, { ...existing, ...writable } as Doc<"surveys">)
+
+    const patch = buildSurveyPartialPatch(existing, writable as Record<string, unknown>, {
+      status,
+      qcStatus,
       clientUpdatedAt: args.clientUpdatedAt,
       completionPct,
     })
 
-    // Post-insert dedupe: if another row won the race, delete ours and update the keeper.
-    if (ownScope) {
-      const siblings = await ctx.db
-        .query("surveys")
-        .withIndex("by_surveyor_localId", (q) => q.eq("surveyorId", me._id).eq("localId", args.localId))
-        .take(3)
-      if (siblings.length > 1) {
-        const keeper = siblings.reduce((a, b) => (a._creationTime <= b._creationTime ? a : b))
-        if (keeper._id !== newId) {
-          await ctx.db.delete(newId)
-          const { status, qcStatus } = resolvePostSaveStatuses(keeper)
-          const pct = await completionPctForSurvey(ctx, { ...keeper, ...writable } as Doc<"surveys">)
-          const patch = buildSurveyPartialPatch(keeper, writable as Record<string, unknown>, {
-            status,
-            qcStatus,
-            clientUpdatedAt: args.clientUpdatedAt,
-            completionPct: pct,
-          })
-          if (Object.keys(patch).length > 0) {
-            await ctx.db.patch(keeper._id, patch)
-            const updated: Doc<"surveys"> = { ...keeper, ...patch } as Doc<"surveys">
-            await recordSurveyStatsUpdate(ctx, keeper, updated)
-          }
-          logMutationTiming("surveys.saveDraft", startedAt, {
-            requestId,
-            userId: me._id,
-            surveyId: keeper._id,
-            mode: "insert_dedupe",
-          })
-          return keeper._id
-        }
-      }
+    if (Object.keys(patch).length === 0) {
+      logMutationTiming("surveys.saveDraft", startedAt, {
+        requestId,
+        userId: me._id,
+        surveyId: existing._id,
+        mode: "update_noop",
+      })
+      return existing._id
     }
 
-    const created = await ctx.db.get(newId)
-    if (created) await recordSurveyStatsInsert(ctx, created)
-    await writeAudit(ctx, {
-      actorId: me._id,
-      action: auditActionForSave(null, ownScope, true),
-      entity: "survey",
-      entityId: newId,
-      metadata: { localId: args.localId, draft: true },
-    })
+    await ctx.db.patch(existing._id, patch)
+
+    const updated: Doc<"surveys"> = {
+      ...existing,
+      ...patch,
+    } as Doc<"surveys">
+
+    await recordSurveyStatsUpdate(ctx, existing, updated)
+
+    const staysDraft = existing.status === "draft" && updated.status === "draft"
+    if (!staysDraft) {
+      await writeAudit(ctx, {
+        actorId: me._id,
+        action: auditActionForSave(existing, ownScope, false),
+        entity: "survey",
+        entityId: existing._id,
+      })
+    }
+
     logMutationTiming("surveys.saveDraft", startedAt, {
       requestId,
       userId: me._id,
-      surveyId: newId,
-      mode: "insert",
+      surveyId: existing._id,
+      mode: "update",
+      staysDraft,
     })
-    return newId
-  },
-})
+    return existing._id
+  }
+
+  // Insert once — re-check for concurrent first-insert race on localId.
+  const raced = await resolveExistingSurveyForSave(ctx, me, {
+    id: args.id,
+    localId: args.localId,
+    municipalityId: args.municipalityId,
+  })
+  if (raced) {
+    const { status, qcStatus } = resolvePostSaveStatuses(raced)
+    const completionPct = await completionPctForSurvey(ctx, { ...raced, ...writable } as Doc<"surveys">)
+    const patch = buildSurveyPartialPatch(raced, writable as Record<string, unknown>, {
+      status,
+      qcStatus,
+      clientUpdatedAt: args.clientUpdatedAt,
+      completionPct,
+    })
+    if (Object.keys(patch).length > 0) {
+      await ctx.db.patch(raced._id, patch)
+      const updated: Doc<"surveys"> = { ...raced, ...patch } as Doc<"surveys">
+      await recordSurveyStatsUpdate(ctx, raced, updated)
+    }
+    logMutationTiming("surveys.saveDraft", startedAt, {
+      requestId,
+      userId: me._id,
+      surveyId: raced._id,
+      mode: "insert_race_update",
+    })
+    return raced._id
+  }
+
+  const completionPct = computeSurveyCompletionPercent({ ...writable, floors: [], photos: [] })
+  const newId = await ctx.db.insert("surveys", {
+    ...writable,
+    surveyorId: me._id,
+    localId: args.localId,
+    status: "draft",
+    qcStatus: "pending",
+    serverVersion: 1,
+    clientUpdatedAt: args.clientUpdatedAt,
+    completionPct,
+  })
+
+  // Post-insert dedupe: if another row won the race, delete ours and update the keeper.
+  if (ownScope) {
+    const siblings = await ctx.db
+      .query("surveys")
+      .withIndex("by_surveyor_localId", (q) => q.eq("surveyorId", me._id).eq("localId", args.localId))
+      .take(3)
+    if (siblings.length > 1) {
+      const keeper = siblings.reduce((a, b) => (a._creationTime <= b._creationTime ? a : b))
+      if (keeper._id !== newId) {
+        await ctx.db.delete(newId)
+        const { status, qcStatus } = resolvePostSaveStatuses(keeper)
+        const pct = await completionPctForSurvey(ctx, { ...keeper, ...writable } as Doc<"surveys">)
+        const patch = buildSurveyPartialPatch(keeper, writable as Record<string, unknown>, {
+          status,
+          qcStatus,
+          clientUpdatedAt: args.clientUpdatedAt,
+          completionPct: pct,
+        })
+        if (Object.keys(patch).length > 0) {
+          await ctx.db.patch(keeper._id, patch)
+          const updated: Doc<"surveys"> = { ...keeper, ...patch } as Doc<"surveys">
+          await recordSurveyStatsUpdate(ctx, keeper, updated)
+        }
+        logMutationTiming("surveys.saveDraft", startedAt, {
+          requestId,
+          userId: me._id,
+          surveyId: keeper._id,
+          mode: "insert_dedupe",
+        })
+        return keeper._id
+      }
+    }
+  }
+
+  const created = await ctx.db.get(newId)
+  if (!created) {
+    console.error("[surveys.saveDraft] insert returned id but row missing", { requestId, newId })
+    clientError("INTERNAL", "Draft save failed. Please retry.")
+  }
+  await recordSurveyStatsInsert(ctx, created)
+  await writeAudit(ctx, {
+    actorId: me._id,
+    action: auditActionForSave(null, ownScope, true),
+    entity: "survey",
+    entityId: newId,
+    metadata: { localId: args.localId, draft: true },
+  })
+  logMutationTiming("surveys.saveDraft", startedAt, {
+    requestId,
+    userId: me._id,
+    surveyId: newId,
+    mode: "insert",
+  })
+  return newId
+}
 
 /**
  * Idempotent upsert with full validation. Prefer `saveDraft` while filling
@@ -296,12 +333,9 @@ export const upsert = mutation({
     )
     validateBusinessRules(normalized, addressCtx, "submit", { allowedTaxZones })
 
-    // Confirm ward exists within the municipality — never .unique() (duplicate ward rows).
-    const wards = await ctx.db
-      .query("wards")
-      .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", args.municipalityId).eq("wardNo", args.wardNo))
-      .take(2)
-    if (wards.length === 0) clientError("BAD_REQUEST", "Unknown ward", { wardNo: ["unknown ward"] })
+    // Confirm ward exists within the municipality (numeric spelling variants allowed).
+    const ward = await findWardForMunicipality(ctx, args.municipalityId, args.wardNo)
+    if (!ward) clientError("BAD_REQUEST", "Unknown ward", { wardNo: ["unknown ward"] })
 
     const existing = await resolveExistingSurveyForSave(ctx, me, {
       id: args.id,

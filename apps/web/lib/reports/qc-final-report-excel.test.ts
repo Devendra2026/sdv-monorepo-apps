@@ -1,12 +1,12 @@
-import type { SurveyExportBundle } from "@/lib/survey/survey-excel";
-import { describe, expect, it } from "vitest";
+import type { SurveyExportBundle } from "@/lib/survey/survey-excel"
+import { describe, expect, it } from "vitest"
 import {
   buildQcFinalReportExcelFilename,
   bundlesToQcFinalReportRows,
   bundleToQcFinalReportRow,
   QC_FINAL_REPORT_SHEET,
   qcFinalReportWorkbookSheetNames,
-} from "./qc-final-report-excel";
+} from "./qc-final-report-excel"
 
 function sampleBundle(overrides: Partial<SurveyExportBundle> = {}): SurveyExportBundle {
   return {
@@ -60,38 +60,48 @@ function sampleBundle(overrides: Partial<SurveyExportBundle> = {}): SurveyExport
       },
     ],
     ...overrides,
-  };
+  }
 }
 
 describe("qc-final-report-excel", () => {
   it("produces exactly one worksheet", () => {
-    const rows = bundlesToQcFinalReportRows([sampleBundle()], new Map([["muni1", "AGR"]]));
-    expect(qcFinalReportWorkbookSheetNames(rows)).toEqual([QC_FINAL_REPORT_SHEET]);
-  });
+    const rows = bundlesToQcFinalReportRows([sampleBundle()], new Map([["muni1", "AGR"]]))
+    expect(qcFinalReportWorkbookSheetNames(rows)).toEqual([QC_FINAL_REPORT_SHEET])
+  })
 
   it("filters out non-approved surveys", () => {
     const rows = bundlesToQcFinalReportRows(
       [sampleBundle(), sampleBundle({ _id: "survey2", qcStatus: "pending" })],
-      new Map([["muni1", "AGR"]]),
-    );
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.["QC Status"]).toBe("Approved");
-  });
+      new Map([["muni1", "AGR"]])
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.["QC Status"]).toBe("Approved")
+  })
 
   it("maps register and tax summary columns", () => {
-    const row = bundleToQcFinalReportRow(sampleBundle(), new Map([["muni1", "AGR"]]));
-    expect(row["Property ID"]).toBeTruthy();
-    expect(row.Owner).toBe("Ramesh Kumar");
-    expect(row.Ward).toBe("01");
-    expect(row.Parcel).toBe("P001");
-    expect(row["Assessable sqft"]).toBeGreaterThan(0);
-    expect(row["Total Annual Demand"]).toBeGreaterThanOrEqual(0);
-    expect(row.Surveyor).toBe("Test Surveyor");
-  });
+    const row = bundleToQcFinalReportRow(sampleBundle(), new Map([["muni1", "AGR"]]))
+    expect(row["Property ID"]).toBeTruthy()
+    expect(row.Owner).toBe("Ramesh Kumar")
+    expect(row.Ward).toBe("01")
+    expect(row.Parcel).toBe("P001")
+    expect(row["Assessable sqft"]).toBeGreaterThan(0)
+    expect(row["Total Annual Demand"]).toBeGreaterThanOrEqual(0)
+    expect(row.Surveyor).toBe("Test Surveyor")
+    expect(row["QC Approved By"]).toBe("—")
+  })
+
+  it("includes QC approved-by name when present on the bundle", () => {
+    const row = bundleToQcFinalReportRow(
+      sampleBundle({ qcApprovedByName: "Priya Supervisor", qcDecidedAt: 1_700_000_200_000 }),
+      new Map([["muni1", "AGR"]])
+    )
+    expect(row["QC Approved By"]).toBe("Priya Supervisor")
+    expect(row["QC Decided At"]).not.toBe("—")
+  })
 
   it("builds a scoped filename", () => {
     expect(buildQcFinalReportExcelFilename({ municipalityLabel: "Agra MC", wardNo: "3", date: "2026-06-23" })).toBe(
-      "qc_final_report_Agra_MC_ward-3_2026-06-23.xlsx",
-    );
-  });
-});
+      "qc_final_report_Agra_MC_ward-3_2026-06-23.xlsx"
+    )
+  })
+})

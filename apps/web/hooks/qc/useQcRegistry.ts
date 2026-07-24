@@ -14,6 +14,7 @@ import { qcTabToListFilters } from "@/lib/surveys/survey-list-filters"
 import { api } from "@workspace/backend/convex/_generated/api.js"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { toast } from "sonner"
 
 import type { ParcelSiblingIndex } from "@/lib/qc/parcel-siblings"
 import { qcPerfMark, qcPerfMeasure, qcPerfNowLabel } from "@/lib/qc/qc-perf"
@@ -131,6 +132,23 @@ export function useQcRegistry(options: UseQcRegistryOptions = {}) {
   )
 
   const isLoading = paginated.isLoading
+  const authFailed = paginated.authFailed === true
+
+  const stuckToastShown = useRef(false)
+  useEffect(() => {
+    if (!scopeReady || !canReview || !isLoading || authFailed) {
+      stuckToastShown.current = false
+      return
+    }
+    const timer = window.setTimeout(() => {
+      if (stuckToastShown.current) return
+      stuckToastShown.current = true
+      toast.error(
+        "Still loading QC registry. Check your connection to the API, or disable Brave Shields for this site."
+      )
+    }, 15_000)
+    return () => window.clearTimeout(timer)
+  }, [scopeReady, canReview, isLoading, authFailed])
 
   useEffect(() => {
     const startMark = tabSwitchStartMarkRef.current
@@ -190,6 +208,7 @@ export function useQcRegistry(options: UseQcRegistryOptions = {}) {
     pageSize,
     pageStart,
     isLoading,
+    authFailed,
     stats,
     rejectedCount,
     parcelSharedCount,

@@ -14,6 +14,7 @@ import { ConvexError, v } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server"
 import { mergeActorSnapshotIntoMetadata } from "../lib/auditActor"
+import { pickOldest } from "../lib/safeUnique"
 import { canReadWard as canReadWardPure } from "../lib/wardAccess"
 import { resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from "./tenancy"
 
@@ -57,10 +58,18 @@ export async function requireUser(
   opts: { allowPending?: boolean } = {}
 ): Promise<Doc<"users">> {
   const ident = await requireIdentity(ctx)
-  const user = await ctx.db
+  // Never .unique() — duplicate clerkId rows throw UnhandledPromiseRejection → isolate restart.
+  const rows = await ctx.db
     .query("users")
     .withIndex("by_clerkId", (q) => q.eq("clerkId", ident.subject))
-    .unique()
+    .take(2)
+  if (rows.length > 1) {
+    console.error("[requireUser] duplicate users.by_clerkId rows", {
+      clerkId: ident.subject,
+      ids: rows.map((r) => r._id),
+    })
+  }
+  const user = pickOldest(rows)
 
   if (!user) {
     // Webhook hasn't landed yet OR was missed. The client should retry shortly.

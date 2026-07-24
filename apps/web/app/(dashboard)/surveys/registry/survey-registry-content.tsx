@@ -40,6 +40,7 @@ export function SurveyRegistryContent({
     pageSize,
     pageStart,
     isLoading,
+    authFailed,
     stats,
     filteredCount,
     scopeTruncated,
@@ -91,8 +92,15 @@ export function SurveyRegistryContent({
       <SurveyRegistryHero />
       <SurveyScopeBanner scope={scope} />
 
+      {authFailed ? (
+        <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+          Sign in to load field survey data. If you are already signed in, refresh the page or check that the site can
+          reach the API.
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-2">
-        <SurveyExcelActions filters={listFilters} disabled={isLoading} canImport={canViewAll} />
+        <SurveyExcelActions filters={listFilters} disabled={isLoading || authFailed} canImport={canViewAll} />
         {canReassign && (
           <Button
             type="button"

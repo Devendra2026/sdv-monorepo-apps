@@ -26,6 +26,7 @@ function QcRegistryFallbackContent() {
     pageSize,
     pageStart,
     isLoading,
+    authFailed,
     stats,
     rejectedCount,
     parcelSharedCount,
@@ -74,6 +75,12 @@ function QcRegistryFallbackContent() {
     <PageTransition className="space-y-6 lg:space-y-8">
       <QcRegistryHero />
       <QcScopeBanner scope={scope} />
+      {authFailed ? (
+        <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+          Sign in to load QC registry data. If you are already signed in, refresh the page or check that the site can
+          reach the API.
+        </p>
+      ) : null}
       <QcReviewRegistry
         stats={stats}
         rejectedCount={rejectedCount}

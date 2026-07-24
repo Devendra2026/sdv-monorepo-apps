@@ -98,6 +98,7 @@ import type * as taxation_queries from "../taxation/queries.js";
 import type * as tenants_adminTree from "../tenants/adminTree.js";
 import type * as tenants_mutations from "../tenants/mutations.js";
 import type * as tenants_queries from "../tenants/queries.js";
+import type * as tenants_wardAudit from "../tenants/wardAudit.js";
 import type * as users_helpers from "../users/helpers.js";
 import type * as users_internal from "../users/internal.js";
 import type * as users_mutations from "../users/mutations.js";
@@ -200,6 +201,7 @@ declare const fullApi: ApiFromModules<{
   "tenants/adminTree": typeof tenants_adminTree;
   "tenants/mutations": typeof tenants_mutations;
   "tenants/queries": typeof tenants_queries;
+  "tenants/wardAudit": typeof tenants_wardAudit;
   "users/helpers": typeof users_helpers;
   "users/internal": typeof users_internal;
   "users/mutations": typeof users_mutations;

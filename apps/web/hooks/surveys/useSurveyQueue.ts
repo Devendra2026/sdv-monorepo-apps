@@ -7,7 +7,7 @@ import { useSurveyWorkScope } from "@/hooks/surveys/useSurveyWorkScope"
 import { useSurveyListPaginated } from "@/hooks/surveys/useSurveys"
 import { useHasCapability } from "@/hooks/use-capability"
 import { useClientNowMs } from "@/hooks/use-client-now"
-import { useConvexAuthReady } from "@/hooks/use-convex-auth-ready"
+import { useConvexAuthReady, useConvexAuthState } from "@/hooks/use-convex-auth-ready"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import type { QcStatus, SurveyStatus } from "@/lib/domain"
 import { sanitizeSurveyWorkScope, type SurveyWorkScope } from "@/lib/survey/work-scope"
@@ -17,7 +17,8 @@ import { api } from "@workspace/backend/convex/_generated/api.js"
 import type { Id } from "@workspace/backend/convex/_generated/dataModel.js"
 import { useQuery as useConvexQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { toast } from "sonner"
 
 type CommandCenterStats = FunctionReturnType<typeof api.surveys.queries.commandCenterStats>
 type RegistryPage = FunctionReturnType<typeof api.surveys.queries.listPaginated>
@@ -61,6 +62,7 @@ export function useSurveyQueue(options: UseSurveyQueueOptions = {}) {
   const { scope, setScope, patchScope, scopeReady } = useSurveyWorkScope()
   const { masters } = useMasters()
   const authReady = useConvexAuthReady()
+  const { authLoading, isAuthenticated } = useConvexAuthState()
   const nowMs = useClientNowMs(options.seedNowMs)
 
   const queryScope = useMemo(() => {
@@ -169,8 +171,27 @@ export function useSurveyQueue(options: UseSurveyQueueOptions = {}) {
     mode === "registry"
       ? paginated.isLoading && options.seedRegistryPage === undefined
       : scopeReady
-        ? resolvedStats === undefined
-        : false
+        ? resolvedStats === undefined && authReady
+        : authLoading
+
+  const authFailed = !authLoading && !isAuthenticated
+
+  // Surface self-hosted / Brave-shield hangs instead of an endless skeleton.
+  const stuckToastShown = useRef(false)
+  useEffect(() => {
+    if (mode !== "registry" || !authReady || !scopeReady || !isLoading) {
+      stuckToastShown.current = false
+      return
+    }
+    const timer = window.setTimeout(() => {
+      if (stuckToastShown.current) return
+      stuckToastShown.current = true
+      toast.error(
+        "Still loading survey data. Check your connection to the API, or disable Brave Shields for this site."
+      )
+    }, 15_000)
+    return () => window.clearTimeout(timer)
+  }, [mode, authReady, scopeReady, isLoading])
 
   const filteredByTab = useMemo((): SurveyDataTableRow[] => {
     if (mode === "registry") {
@@ -215,6 +236,7 @@ export function useSurveyQueue(options: UseSurveyQueueOptions = {}) {
     pageSize,
     pageStart: mode === "registry" ? (paginated.pageNumber - 1) * pageSize : 0,
     isLoading,
+    authFailed,
     stats,
     wardStats,
     filteredByTab,

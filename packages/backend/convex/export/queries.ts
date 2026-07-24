@@ -126,6 +126,8 @@ const exportBundleValidator = v.object({
   municipalityCode: v.string(),
   surveyorName: v.string(),
   surveyorEmail: v.string(),
+  qcApprovedByName: v.string(),
+  qcDecidedAt: v.optional(v.number()),
   floors: v.array(exportFloorValidator),
   photos: v.array(exportPhotoValidator),
 })
