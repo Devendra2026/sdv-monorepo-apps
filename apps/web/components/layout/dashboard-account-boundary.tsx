@@ -3,6 +3,7 @@
 import { MotionProvider, PageTransition } from "@/components/design-system/motion"
 import { DashboardMainSkeleton } from "@/components/layout/dashboard-main-skeleton"
 import { ModuleGuard } from "@/components/layout/module-guard"
+import type { AuthHangReason } from "@/hooks/use-convex-auth-ready"
 import { useCurrentUser } from "@/lib/current-user-context"
 import { Button } from "@workspace/ui/components/button"
 import { Clock, RefreshCw, ShieldAlert, ShieldX } from "lucide-react"
@@ -32,11 +33,19 @@ function StatusScreen({
   )
 }
 
+function authTimeoutBody(reason: AuthHangReason | null): string {
+  if (reason === "clerk") {
+    return "Clerk did not finish loading. Hard-reload this page, or sign out and sign in again. In DevTools → Console, look for CSP blocks on accounts.sdvedutech.in or protect.clerk.com. Privacy extensions can also interfere."
+  }
+  return "Connected to Clerk, but Convex auth over the API WebSocket did not complete. Hard-reload, then check DevTools → Network for a failed or stuck wss://api.sdvedutech.in connection. Privacy extensions can also block WebSockets."
+}
+
 export function DashboardAccountBoundary({ children }: { children: React.ReactNode }) {
   const {
     user,
     isLoading,
     authTimedOut,
+    authHangReason,
     authFailed,
     isPending,
     isDisabled,
@@ -54,8 +63,8 @@ export function DashboardAccountBoundary({ children }: { children: React.ReactNo
         title="Authentication not ready"
         body={
           authFailed
-            ? "Your Clerk session could not be connected to Convex. Sign in again, or disable Brave Shields / privacy blockers for survey.sdvedutech.in and allow accounts.sdvedutech.in and api.sdvedutech.in."
-            : "Convex auth is taking too long. Disable Brave Shields for this site, allow accounts.sdvedutech.in and api.sdvedutech.in (including WebSockets), then reload."
+            ? "Your Clerk session could not be connected to Convex. Sign out and sign in again. If it persists, check DevTools → Console for CSP blocks on accounts.sdvedutech.in / protect.clerk.com, and Network for wss://api.sdvedutech.in."
+            : authTimeoutBody(authHangReason)
         }
         action={
           <Button type="button" variant="default" className="mt-4" onClick={() => window.location.reload()}>
@@ -80,7 +89,7 @@ export function DashboardAccountBoundary({ children }: { children: React.ReactNo
           title={authNotReady ? "Authentication not ready" : "Account setup delayed"}
           body={
             authNotReady
-              ? 'Convex could not verify your Clerk session. Confirm the Clerk Convex integration is enabled (JWT template named "convex") and that CLERK_JWT_ISSUER_DOMAIN on your Convex deployment matches your Clerk Frontend API URL. On Brave/Chrome, also disable Shields for this site.'
+              ? 'Convex could not verify your Clerk session. Confirm the Clerk Convex integration is enabled (JWT template named "convex") and that CLERK_JWT_ISSUER_DOMAIN on your Convex deployment matches your Clerk Frontend API URL.'
               : "We couldn't finish setting up your account. This usually resolves when the Clerk webhook completes. Try again or contact your administrator."
           }
           action={

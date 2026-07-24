@@ -1,6 +1,11 @@
 "use client"
 
-import { useConvexAuthReady, useConvexAuthState } from "@/hooks/use-convex-auth-ready"
+import {
+  classifyAuthHang,
+  useConvexAuthReady,
+  useConvexAuthState,
+  type AuthHangReason,
+} from "@/hooks/use-convex-auth-ready"
 import { parseConvexError } from "@/lib/errors"
 import type { Role } from "@/lib/permissions"
 import { api } from "@workspace/backend/convex/_generated/api.js"
@@ -33,6 +38,8 @@ type CurrentUserContextValue = {
   isLoading: boolean
   /** Convex auth still loading past AUTH_HANG_TIMEOUT_MS */
   authTimedOut: boolean
+  /** When timed out: Clerk never loaded vs Convex WS auth never confirmed */
+  authHangReason: AuthHangReason | null
   /** Auth finished but user is not authenticated */
   authFailed: boolean
   isProvisioning: boolean
@@ -115,18 +122,25 @@ function useProvisionFlow(user: CurrentUser | null | undefined) {
 function buildContextValue(
   user: CurrentUser | null | undefined,
   provision: ReturnType<typeof useProvisionFlow>,
-  auth: { authLoading: boolean; isAuthenticated: boolean; authTimedOut: boolean }
+  auth: {
+    authLoading: boolean
+    isAuthenticated: boolean
+    authTimedOut: boolean
+    clerkLoaded: boolean
+  }
 ): CurrentUserContextValue {
   const authFailed = !auth.authLoading && !auth.isAuthenticated
   const waitingOnAuth = !authFailed && user === null && !provision.ready
   const isLoading = !authFailed && (user === undefined || waitingOnAuth)
+  const authTimedOut = auth.authTimedOut && isLoading
   return {
     user: user ?? null,
     role: (user?.role ?? undefined) as Role | undefined,
     capabilities: user?.capabilities,
     roleName: user?.roleName,
     isLoading,
-    authTimedOut: auth.authTimedOut && isLoading,
+    authTimedOut,
+    authHangReason: authTimedOut ? classifyAuthHang(auth.clerkLoaded) : null,
     authFailed,
     isProvisioning: provision.isProvisioning,
     provisionFailed: provision.provisionFailed,
