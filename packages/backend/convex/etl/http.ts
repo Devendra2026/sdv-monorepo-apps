@@ -3,24 +3,77 @@
  */
 import { internal } from "../_generated/api"
 import { httpAction } from "../_generated/server"
-import type { Id } from "../_generated/dataModel"
 import { DEFAULT_ETL_PAGE, MAX_ETL_BUNDLE_IDS, MAX_ETL_PAGE } from "./queries"
 
-function assertEtlSecret(request: Request): Response | null {
-  const expected = process.env.ETL_SECRET
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+}
+
+/**
+ * Short, non-reversible label for a secret, safe to log and to return to the
+ * caller. 48 bits identifies a mismatch while revealing nothing usable; the
+ * comparison itself always uses the full digest.
+ */
+function fingerprintOf(digestHex: string, value: string): string {
+  return value === "" ? "empty" : digestHex.slice(0, 12)
+}
+
+/** Compares equal-length hex digests without leaking match position via timing. */
+function constantTimeEquals(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i += 1) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  }
+  return diff === 0
+}
+
+/**
+ * Both sides trim: `ETL_SECRET` is often set by pasting or piping a value, which
+ * silently appends a newline that would otherwise cause a permanent 401 between
+ * two secrets that look identical in every dashboard.
+ */
+async function assertEtlSecret(request: Request): Promise<Response | null> {
+  const expected = process.env.ETL_SECRET?.trim() ?? ""
   if (!expected) {
     console.error("ETL_SECRET not configured")
-    return new Response(JSON.stringify({ error: "Server misconfigured" }), {
+    return new Response(JSON.stringify({ error: "Server misconfigured", reason: "secret_not_configured" }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     })
   }
-  const provided = request.headers.get("X-ETL-Secret") ?? ""
-  if (provided !== expected) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    })
+
+  const provided = (request.headers.get("X-ETL-Secret") ?? "").trim()
+  const [expectedDigest, providedDigest] = await Promise.all([sha256Hex(expected), sha256Hex(provided)])
+
+  if (!constantTimeEquals(expectedDigest, providedDigest)) {
+    const expectedFingerprint = fingerprintOf(expectedDigest, expected)
+    const providedFingerprint = fingerprintOf(providedDigest, provided)
+    console.error(
+      JSON.stringify({
+        msg: "etl_auth_rejected",
+        reason: provided === "" ? "secret_missing" : "secret_mismatch",
+        expectedFingerprint,
+        providedFingerprint,
+      })
+    )
+    // The caller only learns a hash of what it already sent, so echoing the
+    // fingerprint back lets the ETL preflight distinguish a genuine mismatch
+    // from a proxy that stripped or rewrote the header.
+    return new Response(
+      JSON.stringify({
+        error: "Unauthorized",
+        reason: provided === "" ? "secret_missing" : "secret_mismatch",
+        providedFingerprint,
+      }),
+      {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }
+    )
   }
   return null
 }
@@ -41,7 +94,7 @@ function json(data: unknown, status = 200): Response {
 }
 
 export const listSurveyIdsHttp = httpAction(async (ctx, request) => {
-  const denied = assertEtlSecret(request)
+  const denied = await assertEtlSecret(request)
   if (denied) return denied
 
   const body = (await readJsonBody(request)) as {
@@ -62,7 +115,7 @@ export const listSurveyIdsHttp = httpAction(async (ctx, request) => {
 })
 
 export const getSurveyBundlesHttp = httpAction(async (ctx, request) => {
-  const denied = assertEtlSecret(request)
+  const denied = await assertEtlSecret(request)
   if (denied) return denied
 
   const body = (await readJsonBody(request)) as { ids?: string[] }
@@ -79,7 +132,7 @@ export const getSurveyBundlesHttp = httpAction(async (ctx, request) => {
 })
 
 export const countSurveysHttp = httpAction(async (ctx, request) => {
-  const denied = assertEtlSecret(request)
+  const denied = await assertEtlSecret(request)
   if (denied) return denied
 
   let count = 0
