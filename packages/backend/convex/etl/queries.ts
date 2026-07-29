@@ -38,12 +38,11 @@ void _everyStatusListed
 /**
  * Statuses the downstream ETL imports into Postgres.
  *
- * Only `draft` is withheld: a draft has not captured ward or assessment-year
- * yet, so it cannot be mapped. Every later status is a finished survey and must
- * reach Postgres — including ones QC has already approved or rejected, which an
- * earlier `status: "submitted"` filter silently left behind.
+ * Includes drafts: Nest stores them as DRAFT and fills missing ward /
+ * assessment-year with placeholders so incomplete field captures still land.
  */
 export const ETL_MIGRATABLE_STATUSES = [
+  "draft",
   "submitted",
   "approved",
   "rejected",
