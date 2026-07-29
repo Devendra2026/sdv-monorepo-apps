@@ -3,7 +3,7 @@
  * Do not expose these as public client APIs.
  */
 import { paginationOptsValidator } from "convex/server"
-import { v } from "convex/values"
+import { v, type Infer } from "convex/values"
 import type { Id } from "../_generated/dataModel"
 import { internalQuery } from "../_generated/server"
 import {
@@ -18,6 +18,45 @@ import { gpsCapture, photoSlot, qcStatus, surveyOwnerEntry, surveyStatus } from 
 const MAX_ETL_BUNDLE_IDS = 50
 const DEFAULT_ETL_PAGE = 100
 const MAX_ETL_PAGE = 200
+
+type EtlSurveyStatus = Infer<typeof surveyStatus>
+
+const SURVEY_STATUS_VALUES = [
+  "draft",
+  "submitted",
+  "approved",
+  "rejected",
+] as const satisfies readonly EtlSurveyStatus[]
+
+/** Fails to compile if `surveyStatus` gains a literal that is not listed above. */
+type _EveryStatusListed = Exclude<EtlSurveyStatus, (typeof SURVEY_STATUS_VALUES)[number]> extends never
+  ? true
+  : never
+const _everyStatusListed: _EveryStatusListed = true
+void _everyStatusListed
+
+/**
+ * Statuses the downstream ETL imports into Postgres.
+ *
+ * Only `draft` is withheld: a draft has not captured ward or assessment-year
+ * yet, so it cannot be mapped. Every later status is a finished survey and must
+ * reach Postgres — including ones QC has already approved or rejected, which an
+ * earlier `status: "submitted"` filter silently left behind.
+ */
+export const ETL_MIGRATABLE_STATUSES = [
+  "submitted",
+  "approved",
+  "rejected",
+] as const satisfies readonly EtlSurveyStatus[]
+
+/** Drops unknown values so a stale caller cannot trip ArgumentValidationError. */
+export function sanitizeStatuses(raw: unknown): EtlSurveyStatus[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const known = raw.filter((value): value is EtlSurveyStatus =>
+    (SURVEY_STATUS_VALUES as readonly string[]).includes(value as string)
+  )
+  return known.length > 0 ? [...new Set(known)] : undefined
+}
 
 const etlPhotoValidator = v.object({
   slot: photoSlot,
@@ -102,7 +141,9 @@ const etlBundleValidator = v.object({
 export const listSurveyIds = internalQuery({
   args: {
     paginationOpts: paginationOptsValidator,
+    /** Retained so a not-yet-redeployed caller keeps working. */
     status: v.optional(surveyStatus),
+    statuses: v.optional(v.array(surveyStatus)),
   },
   returns: v.object({
     ids: v.array(v.id("surveys")),
@@ -119,8 +160,16 @@ export const listSurveyIds = internalQuery({
       .order("asc")
       .paginate({ ...args.paginationOpts, numItems })
 
-    const ids = args.status
-      ? page.page.filter((s) => s.status === args.status).map((s) => s._id)
+    // Filtering after the page is drawn keeps the cursor contract intact: a page
+    // may come back empty while `isDone` is false, and the caller must keep going.
+    const wanted = args.statuses?.length
+      ? new Set<EtlSurveyStatus>(args.statuses)
+      : args.status
+        ? new Set<EtlSurveyStatus>([args.status])
+        : null
+
+    const ids = wanted
+      ? page.page.filter((s) => wanted.has(s.status)).map((s) => s._id)
       : page.page.map((s) => s._id)
 
     return {

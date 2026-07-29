@@ -3,7 +3,7 @@
  */
 import { internal } from "../_generated/api"
 import { httpAction } from "../_generated/server"
-import { DEFAULT_ETL_PAGE, MAX_ETL_BUNDLE_IDS, MAX_ETL_PAGE } from "./queries"
+import { DEFAULT_ETL_PAGE, MAX_ETL_BUNDLE_IDS, MAX_ETL_PAGE, sanitizeStatuses } from "./queries"
 
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))
@@ -101,6 +101,7 @@ export const listSurveyIdsHttp = httpAction(async (ctx, request) => {
     cursor?: string | null
     numItems?: number
     status?: "draft" | "submitted" | "approved" | "rejected"
+    statuses?: unknown
   }
 
   const numItems = Math.min(Math.max(1, body.numItems ?? DEFAULT_ETL_PAGE), MAX_ETL_PAGE)
@@ -110,6 +111,7 @@ export const listSurveyIdsHttp = httpAction(async (ctx, request) => {
       cursor: body.cursor ?? null,
     },
     status: body.status,
+    statuses: sanitizeStatuses(body.statuses),
   })
   return json(result)
 })
@@ -135,6 +137,12 @@ export const countSurveysHttp = httpAction(async (ctx, request) => {
   const denied = await assertEtlSecret(request)
   if (denied) return denied
 
+  // Counting the same statuses the caller imports is what makes the ETL
+  // validation delta meaningful; an unfiltered total always looks short by the
+  // number of drafts and reads as permanent data loss.
+  const body = (await readJsonBody(request)) as { statuses?: unknown }
+  const statuses = sanitizeStatuses(body.statuses)
+
   let count = 0
   let cursor: string | null = null
   let isDone = false
@@ -146,11 +154,12 @@ export const countSurveysHttp = httpAction(async (ctx, request) => {
           numItems: MAX_ETL_PAGE,
           cursor,
         },
+        statuses,
       }
     )
     count += page.ids.length
     cursor = page.continueCursor
     isDone = page.isDone
   }
-  return json({ count })
+  return json({ count, statuses: statuses ?? null })
 })
