@@ -9,7 +9,7 @@
  *   4. ETL: `npx convex env set ETL_SECRET <shared-secret>`
  */
 import { httpRouter } from "convex/server"
-import { countSurveysHttp, getSurveyBundlesHttp, listSurveyIdsHttp } from "./etl/http"
+import { countSurveysHttp, getSurveyBundlesHttp, listSurveyIdsHttp, listWardCatalogHttp } from "./etl/http"
 import { clerkWebhook } from "./http/clerkWebhook"
 
 const http = httpRouter()
@@ -36,6 +36,12 @@ http.route({
   path: "/etl/count-surveys",
   method: "POST",
   handler: countSurveysHttp,
+})
+
+http.route({
+  path: "/etl/list-ward-catalog",
+  method: "POST",
+  handler: listWardCatalogHttp,
 })
 
 export default http

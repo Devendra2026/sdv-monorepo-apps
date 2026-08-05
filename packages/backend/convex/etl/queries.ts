@@ -29,9 +29,7 @@ const SURVEY_STATUS_VALUES = [
 ] as const satisfies readonly EtlSurveyStatus[]
 
 /** Fails to compile if `surveyStatus` gains a literal that is not listed above. */
-type _EveryStatusListed = Exclude<EtlSurveyStatus, (typeof SURVEY_STATUS_VALUES)[number]> extends never
-  ? true
-  : never
+type _EveryStatusListed = Exclude<EtlSurveyStatus, (typeof SURVEY_STATUS_VALUES)[number]> extends never ? true : never
 const _everyStatusListed: _EveryStatusListed = true
 void _everyStatusListed
 
@@ -150,10 +148,7 @@ export const listSurveyIds = internalQuery({
     isDone: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    const numItems = Math.min(
-      Math.max(1, args.paginationOpts.numItems || DEFAULT_ETL_PAGE),
-      MAX_ETL_PAGE
-    )
+    const numItems = Math.min(Math.max(1, args.paginationOpts.numItems || DEFAULT_ETL_PAGE), MAX_ETL_PAGE)
     const page = await ctx.db
       .query("surveys")
       .order("asc")
@@ -167,9 +162,7 @@ export const listSurveyIds = internalQuery({
         ? new Set<EtlSurveyStatus>([args.status])
         : null
 
-    const ids = wanted
-      ? page.page.filter((s) => wanted.has(s.status)).map((s) => s._id)
-      : page.page.map((s) => s._id)
+    const ids = wanted ? page.page.filter((s) => wanted.has(s.status)).map((s) => s._id) : page.page.map((s) => s._id)
 
     return {
       ids,
@@ -195,7 +188,6 @@ export const countSurveys = internalQuery({
     return { count: -1 }
   },
 })
-
 
 export const getSurveyBundles = internalQuery({
   args: {
@@ -235,15 +227,9 @@ export const getSurveyBundles = internalQuery({
       mapPool(surveyorIds, EXPORT_ENRICH_CONCURRENCY, (id) => ctx.db.get(id)),
     ])
 
-    const districtMap = new Map(
-      districts.filter((d): d is NonNullable<typeof d> => d != null).map((d) => [d._id, d])
-    )
-    const muniMap = new Map(
-      munis.filter((m): m is NonNullable<typeof m> => m != null).map((m) => [m._id, m])
-    )
-    const surveyorMap = new Map(
-      surveyors.filter((u): u is NonNullable<typeof u> => u != null).map((u) => [u._id, u])
-    )
+    const districtMap = new Map(districts.filter((d): d is NonNullable<typeof d> => d != null).map((d) => [d._id, d]))
+    const muniMap = new Map(munis.filter((m): m is NonNullable<typeof m> => m != null).map((m) => [m._id, m]))
+    const surveyorMap = new Map(surveyors.filter((u): u is NonNullable<typeof u> => u != null).map((u) => [u._id, u]))
 
     const bundles = await mapPool(present, EXPORT_ENRICH_CONCURRENCY, async (survey) => {
       const [floorRows, photoRows] = await Promise.all([
@@ -349,4 +335,47 @@ export const getSurveyBundles = internalQuery({
   },
 })
 
-export { MAX_ETL_BUNDLE_IDS, DEFAULT_ETL_PAGE, MAX_ETL_PAGE }
+/** Full ward catalog for Nest sync (Convex is canonical). */
+export const listWardCatalog = internalQuery({
+  args: {},
+  returns: v.array(
+    v.object({
+      municipalityCode: v.string(),
+      municipalityName: v.string(),
+      wardNo: v.string(),
+      wardCode: v.string(),
+      wardName: v.string(),
+    })
+  ),
+  handler: async (ctx) => {
+    const municipalities = await ctx.db.query("municipalities").collect()
+    const wards = await ctx.db.query("wards").collect()
+    const byMuni = new Map(municipalities.map((m) => [m._id, m]))
+    const rows: Array<{
+      municipalityCode: string
+      municipalityName: string
+      wardNo: string
+      wardCode: string
+      wardName: string
+    }> = []
+    for (const ward of wards) {
+      const muni = byMuni.get(ward.municipalityId)
+      if (!muni) continue
+      rows.push({
+        municipalityCode: muni.code,
+        municipalityName: muni.name,
+        wardNo: ward.wardNo,
+        wardCode: ward.wardCode,
+        wardName: ward.name,
+      })
+    }
+    rows.sort((a, b) => {
+      const c = a.municipalityCode.localeCompare(b.municipalityCode)
+      if (c !== 0) return c
+      return a.wardNo.localeCompare(b.wardNo, undefined, { numeric: true })
+    })
+    return rows
+  },
+})
+
+export { DEFAULT_ETL_PAGE, MAX_ETL_BUNDLE_IDS, MAX_ETL_PAGE }

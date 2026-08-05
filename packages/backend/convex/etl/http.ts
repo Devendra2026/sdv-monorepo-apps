@@ -163,3 +163,10 @@ export const countSurveysHttp = httpAction(async (ctx, request) => {
   }
   return json({ count, statuses: statuses ?? null })
 })
+
+export const listWardCatalogHttp = httpAction(async (ctx, request) => {
+  const denied = await assertEtlSecret(request)
+  if (denied) return denied
+  const wards = await ctx.runQuery(internal.etl.queries.listWardCatalog, {})
+  return json({ wards })
+})
