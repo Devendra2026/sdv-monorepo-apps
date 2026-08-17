@@ -3,7 +3,14 @@
  */
 import { internal } from "../_generated/api"
 import { httpAction } from "../_generated/server"
-import { DEFAULT_ETL_PAGE, MAX_ETL_BUNDLE_IDS, MAX_ETL_PAGE, sanitizeStatuses } from "./queries"
+import {
+  DEFAULT_AUDIT_ETL_PAGE,
+  DEFAULT_ETL_PAGE,
+  MAX_AUDIT_ETL_PAGE,
+  MAX_ETL_BUNDLE_IDS,
+  MAX_ETL_PAGE,
+  sanitizeStatuses,
+} from "./queries"
 
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))
@@ -169,4 +176,92 @@ export const listWardCatalogHttp = httpAction(async (ctx, request) => {
   if (denied) return denied
   const wards = await ctx.runQuery(internal.etl.queries.listWardCatalog, {})
   return json({ wards })
+})
+
+export const listAuditLogsHttp = httpAction(async (ctx, request) => {
+  const denied = await assertEtlSecret(request)
+  if (denied) return denied
+
+  const body = (await readJsonBody(request)) as {
+    lastCreationTime?: number
+    lastId?: string
+    limit?: number
+  }
+
+  const lastCreationTime =
+    typeof body.lastCreationTime === "number" && Number.isFinite(body.lastCreationTime)
+      ? body.lastCreationTime
+      : 0
+  const lastId = typeof body.lastId === "string" ? body.lastId : ""
+  const limit = Math.min(
+    Math.max(1, body.limit ?? DEFAULT_AUDIT_ETL_PAGE),
+    MAX_AUDIT_ETL_PAGE
+  )
+
+  const result = await ctx.runQuery(internal.etl.queries.listAuditLogs, {
+    lastCreationTime,
+    lastId,
+    limit,
+  })
+  return json(result)
+})
+
+export const verifyAuditWindowHttp = httpAction(async (ctx, request) => {
+  const denied = await assertEtlSecret(request)
+  if (denied) return denied
+
+  const body = (await readJsonBody(request)) as {
+    windowStartMs?: number
+    windowEndMs?: number
+  }
+
+  if (
+    typeof body.windowStartMs !== "number" ||
+    typeof body.windowEndMs !== "number" ||
+    !Number.isFinite(body.windowStartMs) ||
+    !Number.isFinite(body.windowEndMs) ||
+    body.windowEndMs <= body.windowStartMs
+  ) {
+    return json({ error: "windowStartMs and windowEndMs required (end > start)" }, 400)
+  }
+
+  const ids: string[] = []
+  let lastCreationTime = body.windowStartMs
+  let lastId = ""
+  let isDone = false
+
+  while (!isDone) {
+    const page: {
+      ids: string[]
+      isDone: boolean
+      nextCreationTime: number | null
+      nextId: string | null
+    } = await ctx.runQuery(internal.etl.queries.listAuditIdsInWindow, {
+      windowStartMs: body.windowStartMs,
+      windowEndMs: body.windowEndMs,
+      lastCreationTime,
+      lastId,
+      limit: MAX_AUDIT_ETL_PAGE,
+    })
+    ids.push(...page.ids)
+    if (page.isDone || page.ids.length === 0 || page.nextCreationTime === null || page.nextId === null) {
+      isDone = true
+    } else {
+      lastCreationTime = page.nextCreationTime
+      lastId = page.nextId
+    }
+  }
+
+  ids.sort()
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ids.join("\n")))
+  const checksum = Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+
+  return json({
+    windowStartMs: body.windowStartMs,
+    windowEndMs: body.windowEndMs,
+    count: ids.length,
+    checksum,
+  })
 })

@@ -378,4 +378,166 @@ export const listWardCatalog = internalQuery({
   },
 })
 
-export { DEFAULT_ETL_PAGE, MAX_ETL_BUNDLE_IDS, MAX_ETL_PAGE }
+const DEFAULT_AUDIT_ETL_PAGE = 5_000
+const MAX_AUDIT_ETL_PAGE = 5_000
+
+const etlAuditRecordValidator = v.object({
+  _id: v.id("auditLogs"),
+  _creationTime: v.number(),
+  actorId: v.union(v.id("users"), v.null()),
+  action: v.string(),
+  entity: v.string(),
+  entityId: v.union(v.string(), v.null()),
+  metadata: v.any(),
+  /** Clerk subject for Nest User.clerkUserId join (null when actor missing/deleted). */
+  actorClerkId: v.union(v.string(), v.null()),
+  actorName: v.union(v.string(), v.null()),
+  actorEmail: v.union(v.string(), v.null()),
+})
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function readMetaString(meta: unknown, key: string): string | null {
+  if (!isPlainObject(meta)) return null
+  const v = meta[key]
+  return typeof v === "string" && v.trim() ? v.trim() : null
+}
+
+/**
+ * Cursor page of audit logs ordered by (_creationTime ASC, _id ASC).
+ * Composite cursor: rows with creationTime > last, or same time and _id > lastId.
+ * Enriches each row with live Convex user clerkId/name/email when actorId is set
+ * (fills gaps for older logs that lack metadata.actorName snapshots).
+ */
+export const listAuditLogs = internalQuery({
+  args: {
+    lastCreationTime: v.number(),
+    lastId: v.string(),
+    limit: v.number(),
+  },
+  returns: v.object({
+    records: v.array(etlAuditRecordValidator),
+    isDone: v.boolean(),
+    nextCreationTime: v.union(v.number(), v.null()),
+    nextId: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(1, Math.floor(args.limit)), MAX_AUDIT_ETL_PAGE)
+    // Over-fetch so same-timestamp skips after lastId still fill a full page.
+    const fetchSize = Math.min(limit * 2 + 64, MAX_AUDIT_ETL_PAGE + 64)
+
+    const raw = await ctx.db
+      .query("auditLogs")
+      .withIndex("by_creation_time", (q) => q.gte("_creationTime", args.lastCreationTime))
+      .order("asc")
+      .take(fetchSize)
+
+    const filtered = raw.filter((row) => {
+      if (row._creationTime > args.lastCreationTime) return true
+      return row._creationTime === args.lastCreationTime && String(row._id) > args.lastId
+    })
+
+    const page = filtered.slice(0, limit)
+    const exhaustedSource = raw.length < fetchSize
+    const isDone = page.length < limit || (exhaustedSource && filtered.length <= limit)
+    const last = page[page.length - 1]
+
+    const records = await Promise.all(
+      page.map(async (row) => {
+        const metaBase = isPlainObject(row.metadata) ? { ...row.metadata } : {}
+        let actorClerkId: string | null = readMetaString(metaBase, "actorClerkId")
+        let actorName: string | null = readMetaString(metaBase, "actorName")
+        let actorEmail: string | null = readMetaString(metaBase, "actorEmail")
+
+        if (row.actorId) {
+          const actor = await ctx.db.get("users", row.actorId)
+          if (actor) {
+            if (!actorClerkId && actor.clerkId) actorClerkId = actor.clerkId
+            if (!actorName && actor.name?.trim()) actorName = actor.name.trim()
+            if (!actorEmail && actor.email?.trim()) actorEmail = actor.email.trim()
+          }
+        }
+
+        if (actorClerkId) metaBase.actorClerkId = actorClerkId
+        if (actorName) metaBase.actorName = actorName
+        if (actorEmail) metaBase.actorEmail = actorEmail
+
+        return {
+          _id: row._id,
+          _creationTime: row._creationTime,
+          actorId: row.actorId ?? null,
+          action: row.action,
+          entity: row.entity,
+          entityId: row.entityId ?? null,
+          metadata: Object.keys(metaBase).length > 0 ? metaBase : (row.metadata ?? null),
+          actorClerkId,
+          actorName,
+          actorEmail,
+        }
+      }),
+    )
+
+    return {
+      records,
+      isDone,
+      nextCreationTime: last ? last._creationTime : null,
+      nextId: last ? String(last._id) : null,
+    }
+  },
+})
+
+/**
+ * One page of audit log ids in [windowStartMs, windowEndMs) for verify checksums.
+ */
+export const listAuditIdsInWindow = internalQuery({
+  args: {
+    windowStartMs: v.number(),
+    windowEndMs: v.number(),
+    lastCreationTime: v.number(),
+    lastId: v.string(),
+    limit: v.number(),
+  },
+  returns: v.object({
+    ids: v.array(v.string()),
+    isDone: v.boolean(),
+    nextCreationTime: v.union(v.number(), v.null()),
+    nextId: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(1, Math.floor(args.limit)), MAX_AUDIT_ETL_PAGE)
+    const startFrom = Math.max(args.windowStartMs, args.lastCreationTime)
+    const fetchSize = Math.min(limit * 2 + 64, MAX_AUDIT_ETL_PAGE + 64)
+
+    const raw = await ctx.db
+      .query("auditLogs")
+      .withIndex("by_creation_time", (q) =>
+        q.gte("_creationTime", startFrom).lt("_creationTime", args.windowEndMs)
+      )
+      .order("asc")
+      .take(fetchSize)
+
+    const afterCursor = raw.filter((row) => {
+      if (row._creationTime < args.windowStartMs || row._creationTime >= args.windowEndMs) {
+        return false
+      }
+      if (row._creationTime > args.lastCreationTime) return true
+      return row._creationTime === args.lastCreationTime && String(row._id) > args.lastId
+    })
+
+    const page = afterCursor.slice(0, limit)
+    const exhaustedSource = raw.length < fetchSize
+    const isDone = page.length < limit || (exhaustedSource && afterCursor.length <= limit)
+    const last = page[page.length - 1]
+
+    return {
+      ids: page.map((row) => String(row._id)),
+      isDone,
+      nextCreationTime: last ? last._creationTime : null,
+      nextId: last ? String(last._id) : null,
+    }
+  },
+})
+
+export { DEFAULT_ETL_PAGE, MAX_ETL_BUNDLE_IDS, MAX_ETL_PAGE, DEFAULT_AUDIT_ETL_PAGE, MAX_AUDIT_ETL_PAGE }
