@@ -35,8 +35,12 @@ export const DASHBOARD_BOUNDED_ROW_CAP = 800
  */
 export const DASHBOARD_LIVE_FALLBACK_ROW_CAP = 400
 
-/** Cap for surveyor "today" metrics only (lifetime KPIs come from surveySurveyorStats). */
-export const DASHBOARD_SURVEYOR_TODAY_CAP = 200
+/**
+ * Cap for surveyor "today" metrics only (lifetime KPIs come from surveySurveyorStats).
+ * Descending by_surveyor index puts today's rows first; 32/day is a safe field-work bound
+ * and keeps the 1s query budget on self-hosted SQLite.
+ */
+export const DASHBOARD_SURVEYOR_TODAY_CAP = 32
 
 /**
  * Max municipalities that may use live survey scans when rollups are cold/missing.
@@ -372,9 +376,17 @@ async function loadWardScopedMunicipalityDashboardCounts(
   return part
 }
 
+/** Pending QC from surveyor rollups (table has no qcPending field). */
+function pendingFromSurveyorStatsRow(
+  row: Pick<Doc<"surveySurveyorStats">, "submitted" | "qcApproved" | "qcRejected">
+): number {
+  return Math.max(0, row.submitted - row.qcApproved - row.qcRejected)
+}
+
 /**
  * Surveyor home KPIs from surveySurveyorStats + capped today scan.
- * Before: always take(2500) full survey docs → UserTimeout under load.
+ * Before: take(200) full survey docs for pending + today → UserTimeout under 1s query budget.
+ * After: lifetime KPIs (including pending) from denormalized stats; today scan is 32 docs.
  */
 async function loadSurveyorDashboardCounts(ctx: QueryCtx, me: Doc<"users">, todayMs: number): Promise<DashboardCounts> {
   const muniIds = tenantMunicipalityIds(await resolveDashboardTenantScope(ctx, me))
@@ -390,6 +402,7 @@ async function loadSurveyorDashboardCounts(ctx: QueryCtx, me: Doc<"users">, toda
   let submitted = 0
   let approved = 0
   let rejected = 0
+  let pending = 0
   for (const row of statsRows) {
     if (!muniIds.has(row.municipalityId)) continue
     total += row.total
@@ -397,25 +410,20 @@ async function loadSurveyorDashboardCounts(ctx: QueryCtx, me: Doc<"users">, toda
     submitted += row.submitted
     approved += row.qcApproved
     rejected += row.qcRejected
+    pending += pendingFromSurveyorStatsRow(row)
   }
 
-  const dayEnd = dayEndMs(todayMs)
   const recent = await loadSurveysBySurveyor(ctx, me._id, DASHBOARD_SURVEYOR_TODAY_CAP)
   const scopedRecent = recent.filter(
     (r) => muniIds.has(r.municipalityId) && canReadWard(me, r.municipalityId, r.wardNo)
   )
-
-  // surveySurveyorStats has no qcPending field — count from the capped recent slice.
-  let pending = 0
-  for (const row of scopedRecent) {
-    if (row.qcStatus === "pending" && row.status === "submitted") pending += 1
-  }
 
   // Cold rollups: derive all KPIs from the capped recent slice (degraded but fast).
   if (statsRows.length === 0) {
     return computeDashboardCountsFromSlice(scopedRecent.map(toStatsSlice), todayMs)
   }
 
+  const dayEnd = dayEndMs(todayMs)
   let today = 0
   let submittedToday = 0
   for (const row of scopedRecent) {
@@ -459,17 +467,33 @@ export async function loadDashboardCountsForHome(
   }
 
   const wardScoped = userRequiresWardScopedSurveyCounts(me)
-  const allowLiveFallback = mayUseLiveMunicipalityFallback(me, scopedMuniIds.length, wardScoped)
 
-  // Large scopes: batch municipality + today daily stats (avoid N×2 point lookups).
-  if (!wardScoped && scopedMuniIds.length > STATS_BATCH_SCOPE_THRESHOLD) {
+  // Non-ward scopes: denormalized municipality + daily stats only (no live survey scans).
+  // Before: scopes ≤ STATS_BATCH_SCOPE_THRESHOLD fell through to sequential live fallback
+  // (take(400) surveys per ULB) and timed out the 1s query budget.
+  if (!wardScoped) {
     const dateKey = formatDateKey(todayMs)
-    const [rollups, todayByMuni] = await Promise.all([
-      loadMunicipalityStatsRollupsResilient(ctx, me, scopedMuniIds, todayMs),
+    const scopedSet = new Set(scopedMuniIds)
+    const [allRows, todayByMuni] = await Promise.all([
+      loadLegacyMunicipalityStatsForMunicipalities(ctx, scopedMuniIds),
       loadTodayCreatedByMunicipality(ctx, scopedMuniIds, dateKey),
     ])
-    const parts = rollups.map((row) => {
-      const daily = todayByMuni.get(row.municipalityId)
+    const byMuni = new Map<Id<"municipalities">, MunicipalityStatsRollup>()
+    for (const row of allRows) {
+      if (!scopedSet.has(row.municipalityId)) continue
+      byMuni.set(row.municipalityId, {
+        municipalityId: row.municipalityId,
+        total: row.total,
+        drafts: row.drafts,
+        submitted: row.submitted,
+        qcApproved: row.qcApproved,
+        qcRejected: row.qcRejected,
+        qcPending: row.qcPending,
+      })
+    }
+    const parts = scopedMuniIds.map((municipalityId) => {
+      const row = byMuni.get(municipalityId) ?? emptyMunicipalityRollup(municipalityId)
+      const daily = todayByMuni.get(municipalityId)
       return {
         total: row.total,
         today: daily?.created ?? 0,
@@ -484,10 +508,10 @@ export async function loadDashboardCountsForHome(
     return mergeDashboardCountParts(parts)
   }
 
-  // Sequential ULB reads — parallel fan-out contended with SQLite on self-hosted.
+  // Ward-scoped: ward rollups only — never live-scan surveys on the home KPI path.
   const parts: DashboardCountPart[] = []
   for (const municipalityId of scopedMuniIds) {
-    parts.push(await loadMunicipalityDashboardCounts(ctx, me, municipalityId, todayMs, wardScoped, allowLiveFallback))
+    parts.push(await loadMunicipalityDashboardCounts(ctx, me, municipalityId, todayMs, true, false))
   }
 
   return mergeDashboardCountParts(parts)

@@ -3,7 +3,7 @@ import { convexTest } from "convex-test"
 import { describe, expect, it } from "vitest"
 import schema from "../schema"
 import { formatDateKey, startOfDayMs } from "../shared/calendar"
-import { loadDailyTrendFromDailyStats } from "./surveyScopeStats"
+import { loadDailyTrendFromDailyStats, loadDashboardCountsForHome } from "./surveyScopeStats"
 
 const modules = import.meta.glob("../**/*.ts")
 
@@ -132,6 +132,99 @@ describe("loadDailyTrendFromDailyStats", () => {
       expect(trend).toHaveLength(days)
       expect(trend.every((point) => point.created === ulbCount * 2)).toBe(true)
       expect(trend.every((point) => point.submitted === ulbCount)).toBe(true)
+    })
+  })
+})
+
+describe("loadDashboardCountsForHome", () => {
+  it("derives surveyor pending from surveySurveyorStats, not the recent survey slice", async () => {
+    const t = convexTest(schema, modules)
+
+    const { surveyorId } = await t.run(async (ctx) => {
+      const districtId = await ctx.db.insert("districts", {
+        code: "D-SURVEYOR",
+        name: "District Surveyor",
+        stateName: "Maharashtra",
+        isActive: true,
+      })
+      const municipalityId = await ctx.db.insert("municipalities", {
+        districtId,
+        code: "MS1",
+        name: "Municipality Surveyor",
+        bodyType: "municipal_council",
+        isActive: true,
+      })
+      const surveyorId = await ctx.db.insert("users", {
+        clerkId: "surveyor-dashboard-counts",
+        email: "surveyor-dashboard-counts@test.com",
+        name: "Surveyor",
+        role: "surveyor",
+        status: "active",
+        municipalityId,
+        wardAssignments: [],
+      })
+
+      await ctx.db.insert("surveySurveyorStats", {
+        surveyorId,
+        municipalityId,
+        districtId,
+        total: 12,
+        drafts: 2,
+        submitted: 10,
+        qcApproved: 3,
+        qcRejected: 2,
+      })
+
+      // One live pending row — old path counted pending from this slice (1),
+      // not from stats (submitted - approved - rejected = 5).
+      await ctx.db.insert("surveys", {
+        localId: "surveyor-kpi-pending-1",
+        surveyorId,
+        districtId,
+        municipalityId,
+        wardNo: "1",
+        status: "submitted",
+        qcStatus: "pending",
+        serverVersion: 1,
+        clientUpdatedAt: NOW_MS,
+        submittedAt: NOW_MS,
+        parcelNo: "P1",
+        unitNo: "U1",
+        isSlum: false,
+        mobileNo: "9876543210",
+        locality: "Main Street",
+        colonyName: "Colony",
+        city: "City",
+        pinCode: "123456",
+        assessmentYear: "2024-25",
+        ownershipType: "private",
+        propertyType: "residential",
+        propertyUse: "residential",
+        situation: "normal",
+        roadType: "main",
+        taxRateZone: "zone1",
+        plotSqft: 1000,
+        plinthSqft: 0,
+        municipalWaterConnection: true,
+        waterSource: "government_tap",
+        sanitationType: "septic_tank",
+        municipalWasteCollection: true,
+      })
+
+      return { surveyorId }
+    })
+
+    await t.run(async (ctx) => {
+      const surveyor = await ctx.db.get(surveyorId)
+      expect(surveyor).not.toBeNull()
+
+      const counts = await loadDashboardCountsForHome(ctx, surveyor!, startOfDayMs(NOW_MS))
+      expect(counts.total).toBe(12)
+      expect(counts.drafts).toBe(2)
+      expect(counts.submitted).toBe(10)
+      expect(counts.approved).toBe(3)
+      expect(counts.rejected).toBe(2)
+      expect(counts.pending).toBe(5)
     })
   })
 })

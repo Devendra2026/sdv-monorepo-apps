@@ -22,6 +22,8 @@ import type * as crons from "../crons.js";
 import type * as demandNotices_helpers from "../demandNotices/helpers.js";
 import type * as demandNotices_mutations from "../demandNotices/mutations.js";
 import type * as demandNotices_queries from "../demandNotices/queries.js";
+import type * as etl_http from "../etl/http.js";
+import type * as etl_queries from "../etl/queries.js";
 import type * as export_helpers from "../export/helpers.js";
 import type * as export_importExcelSurvey from "../export/importExcelSurvey.js";
 import type * as export_mutations from "../export/mutations.js";
@@ -125,6 +127,8 @@ declare const fullApi: ApiFromModules<{
   "demandNotices/helpers": typeof demandNotices_helpers;
   "demandNotices/mutations": typeof demandNotices_mutations;
   "demandNotices/queries": typeof demandNotices_queries;
+  "etl/http": typeof etl_http;
+  "etl/queries": typeof etl_queries;
   "export/helpers": typeof export_helpers;
   "export/importExcelSurvey": typeof export_importExcelSurvey;
   "export/mutations": typeof export_mutations;

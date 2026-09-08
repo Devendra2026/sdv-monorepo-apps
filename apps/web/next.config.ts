@@ -18,13 +18,13 @@ const securityHeaders = [
     value: [
       "default-src 'self'",
       // Clerk FAPI + abuse protection (*.protect.clerk.com) required per Clerk CSP docs
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.sdvedutech.in https://*.clerk.accounts.dev https://*.clerk.com https://*.protect.clerk.com https://*.client.protect.clerk.com https://challenges.cloudflare.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://clerk.sdvedutech.in https://accounts.sdvedutech.in https://*.clerk.accounts.dev https://*.clerk.com https://*.protect.clerk.com https://*.client.protect.clerk.com https://challenges.cloudflare.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
       "worker-src 'self' blob:",
-      "connect-src 'self' https://*.convex.cloud https://*.convex.site wss://*.convex.cloud https://api.sdvedutech.in wss://api.sdvedutech.in https://site.sdvedutech.in https://accounts.sdvedutech.in https://*.clerk.accounts.dev https://*.clerk.com https://api.clerk.com https://*.protect.clerk.com https://*.client.protect.clerk.com https://clerk-telemetry.com https://challenges.cloudflare.com",
-      "frame-src 'self' https://accounts.sdvedutech.in https://*.clerk.accounts.dev https://*.clerk.com https://*.protect.clerk.com https://*.client.protect.clerk.com https://challenges.cloudflare.com",
+      "connect-src 'self' https://*.convex.cloud https://*.convex.site wss://*.convex.cloud https://api.sdvedutech.in wss://api.sdvedutech.in https://site.sdvedutech.in https://clerk.sdvedutech.in https://accounts.sdvedutech.in https://*.clerk.accounts.dev https://*.clerk.com https://api.clerk.com https://*.protect.clerk.com https://*.client.protect.clerk.com https://clerk-telemetry.com https://challenges.cloudflare.com",
+      "frame-src 'self' https://clerk.sdvedutech.in https://accounts.sdvedutech.in https://*.clerk.accounts.dev https://*.clerk.com https://*.protect.clerk.com https://*.client.protect.clerk.com https://challenges.cloudflare.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
