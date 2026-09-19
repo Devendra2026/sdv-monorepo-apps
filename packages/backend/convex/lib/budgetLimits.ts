@@ -41,6 +41,20 @@ export const DRAFT_LIST_CAP_PER_MUNICIPALITY = 300
 export const MAX_IMPORT_SURVEYS = 40
 export const MAX_IMPORT_FLOORS = 200
 
+/**
+ * ETL audit cursor page size.
+ * Before: 5000 docs + up to 5000 users.get per UDF → SystemTimeout on queryStreamNext
+ * under self-hosted SQLite load. Smaller pages preserve cursor semantics; clients loop.
+ */
+export const DEFAULT_AUDIT_ETL_PAGE = 500
+export const MAX_AUDIT_ETL_PAGE = 500
+
+/**
+ * Audit UI summary / facet scan window (newest-first).
+ * Before: take(1000) competed with dashboard streams during incidents.
+ */
+export const AUDIT_UI_RECENT_WINDOW = 250
+
 /** Child rows loaded per survey during export enrichment. */
 export const MAX_EXPORT_FLOORS_PER_SURVEY = 64
 /** Keep modest — each photo may trigger storage.getUrl when includePhotoUrls is true. */

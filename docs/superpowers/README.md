@@ -2,10 +2,11 @@
 
 Index of design docs that drive production Convex behavior for this monorepo.
 
-| Spec | Status | What it fixes |
-|------|--------|----------------|
-| [2026-09-19-convex-query-timeout-fix-design.md](./specs/2026-09-19-convex-query-timeout-fix-design.md) | **Implemented** | Runtime `queryStreamNext` / SystemTimeout via `mapInChunks` stream budgets |
-| [2026-09-19-convex-backend-unhealthy-startup-design.md](./specs/2026-09-19-convex-backend-unhealthy-startup-design.md) | **Implemented** (repo) | Docker unhealthy during SQLite cold start — compose `start_period: 900s`, pinned image, ops scripts |
+| Spec                                                                                                                   | Status                        | What it fixes                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| [2026-09-19-convex-query-timeout-fix-design.md](./specs/2026-09-19-convex-query-timeout-fix-design.md)                 | **Implemented**               | Runtime `queryStreamNext` / SystemTimeout via `mapInChunks` stream budgets                                       |
+| [2026-09-19-convex-backend-unhealthy-startup-design.md](./specs/2026-09-19-convex-backend-unhealthy-startup-design.md) | **Implemented** (repo)        | Docker unhealthy during SQLite cold start — compose `start_period: 900s`, pinned image, ops scripts              |
+| [2026-09-19-convex-latency-diagnosis-design.md](./specs/2026-09-19-convex-latency-diagnosis-design.md)                 | **Diagnosed + minimal fixes** | Post-mapInChunks timeouts: ETL audit page 500, unique actor hydration, audit UI window 250, serial dashboard SSR |
 
 ## Production apply order
 

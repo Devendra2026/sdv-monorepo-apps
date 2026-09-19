@@ -7,13 +7,16 @@ import { v, type Infer } from "convex/values"
 import type { Id } from "../_generated/dataModel"
 import { internalQuery } from "../_generated/server"
 import {
+  DEFAULT_AUDIT_ETL_PAGE,
   EXPORT_ENRICH_CONCURRENCY,
+  MAX_AUDIT_ETL_PAGE,
   MAX_EXPORT_FLOORS_PER_SURVEY,
   MAX_EXPORT_PHOTOS_PER_SURVEY,
 } from "../lib/budgetLimits"
 import { mapPool } from "../lib/mapPool"
 import { presentFloorRow } from "../lib/masters/areaMasters"
 import { gpsCapture, photoSlot, qcStatus, surveyOwnerEntry, surveyStatus } from "../schema"
+import { mapTruthyById } from "../shared/helpers"
 
 const MAX_ETL_BUNDLE_IDS = 50
 const DEFAULT_ETL_PAGE = 100
@@ -378,9 +381,6 @@ export const listWardCatalog = internalQuery({
   },
 })
 
-const DEFAULT_AUDIT_ETL_PAGE = 5_000
-const MAX_AUDIT_ETL_PAGE = 5_000
-
 const etlAuditRecordValidator = v.object({
   _id: v.id("auditLogs"),
   _creationTime: v.number(),
@@ -444,40 +444,46 @@ export const listAuditLogs = internalQuery({
     const isDone = page.length < limit || (exhaustedSource && filtered.length <= limit)
     const last = page[page.length - 1]
 
-    const records = await Promise.all(
-      page.map(async (row) => {
-        const metaBase = isPlainObject(row.metadata) ? { ...row.metadata } : {}
-        let actorClerkId: string | null = readMetaString(metaBase, "actorClerkId")
-        let actorName: string | null = readMetaString(metaBase, "actorName")
-        let actorEmail: string | null = readMetaString(metaBase, "actorEmail")
+    // Unique actors only — avoid N users.get for repeated actorId on a page.
+    const actorIdSet = new Set<Id<"users">>()
+    for (const row of page) {
+      if (row.actorId) actorIdSet.add(row.actorId)
+    }
+    const actors = await Promise.all([...actorIdSet].map((id) => ctx.db.get("users", id)))
+    const actorsById = mapTruthyById(actors)
 
-        if (row.actorId) {
-          const actor = await ctx.db.get("users", row.actorId)
-          if (actor) {
-            if (!actorClerkId && actor.clerkId) actorClerkId = actor.clerkId
-            if (!actorName && actor.name?.trim()) actorName = actor.name.trim()
-            if (!actorEmail && actor.email?.trim()) actorEmail = actor.email.trim()
-          }
+    const records = page.map((row) => {
+      const metaBase = isPlainObject(row.metadata) ? { ...row.metadata } : {}
+      let actorClerkId: string | null = readMetaString(metaBase, "actorClerkId")
+      let actorName: string | null = readMetaString(metaBase, "actorName")
+      let actorEmail: string | null = readMetaString(metaBase, "actorEmail")
+
+      if (row.actorId) {
+        const actor = actorsById.get(row.actorId)
+        if (actor) {
+          if (!actorClerkId && actor.clerkId) actorClerkId = actor.clerkId
+          if (!actorName && actor.name?.trim()) actorName = actor.name.trim()
+          if (!actorEmail && actor.email?.trim()) actorEmail = actor.email.trim()
         }
+      }
 
-        if (actorClerkId) metaBase.actorClerkId = actorClerkId
-        if (actorName) metaBase.actorName = actorName
-        if (actorEmail) metaBase.actorEmail = actorEmail
+      if (actorClerkId) metaBase.actorClerkId = actorClerkId
+      if (actorName) metaBase.actorName = actorName
+      if (actorEmail) metaBase.actorEmail = actorEmail
 
-        return {
-          _id: row._id,
-          _creationTime: row._creationTime,
-          actorId: row.actorId ?? null,
-          action: row.action,
-          entity: row.entity,
-          entityId: row.entityId ?? null,
-          metadata: Object.keys(metaBase).length > 0 ? metaBase : (row.metadata ?? null),
-          actorClerkId,
-          actorName,
-          actorEmail,
-        }
-      }),
-    )
+      return {
+        _id: row._id,
+        _creationTime: row._creationTime,
+        actorId: row.actorId ?? null,
+        action: row.action,
+        entity: row.entity,
+        entityId: row.entityId ?? null,
+        metadata: Object.keys(metaBase).length > 0 ? metaBase : (row.metadata ?? null),
+        actorClerkId,
+        actorName,
+        actorEmail,
+      }
+    })
 
     return {
       records,

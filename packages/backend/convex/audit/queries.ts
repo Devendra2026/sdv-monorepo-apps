@@ -1,5 +1,6 @@
 import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
+import { AUDIT_UI_RECENT_WINDOW } from "../lib/budgetLimits"
 import { capabilityQuery } from "../lib/customFunctions"
 import { auditQuery, hydrateAuditRows } from "./helpers"
 
@@ -49,12 +50,16 @@ export const listPaginated = auditViewQuery({
 export const summary = auditViewQuery({
   args: { nowMs: v.number() },
   handler: async (ctx, args) => {
-    const recent = await ctx.db.query("auditLogs").withIndex("by_creation_time").order("desc").take(1000)
+    const recent = await ctx.db
+      .query("auditLogs")
+      .withIndex("by_creation_time")
+      .order("desc")
+      .take(AUDIT_UI_RECENT_WINDOW)
     const dayMs = 86_400_000
 
     return {
       total: recent.length,
-      capped: recent.length === 1000,
+      capped: recent.length === AUDIT_UI_RECENT_WINDOW,
       actions: new Set(recent.map((r) => r.action)).size,
       entities: new Set(recent.map((r) => r.entity)).size,
       today: recent.filter((r) => args.nowMs - r._creationTime < dayMs).length,
@@ -66,7 +71,11 @@ export const summary = auditViewQuery({
 export const actionFacets = auditViewQuery({
   args: {},
   handler: async (ctx) => {
-    const rows = await ctx.db.query("auditLogs").withIndex("by_creation_time").order("desc").take(1000)
+    const rows = await ctx.db
+      .query("auditLogs")
+      .withIndex("by_creation_time")
+      .order("desc")
+      .take(AUDIT_UI_RECENT_WINDOW)
     return {
       actions: Array.from(new Set(rows.map((r) => r.action))).sort(),
       entities: Array.from(new Set(rows.map((r) => r.entity))).sort(),

@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest"
 import {
+  AUDIT_UI_RECENT_WINDOW,
+  DEFAULT_AUDIT_ETL_PAGE,
   DEFAULT_EXPORT_PAGE_SIZE,
   DRAFT_LIST_CAP_PER_MUNICIPALITY,
   EXPORT_ID_PAGE_SIZE,
   EXPORT_SCOPE_LIMIT,
+  MAX_AUDIT_ETL_PAGE,
   MAX_DEMAND_NOTICE_JOB_SURVEYS,
   MAX_DEMAND_NOTICE_PAYLOAD_PAGE,
   MAX_EXPORT_ID_PAGE_SIZE,
@@ -43,5 +46,11 @@ describe("budgetLimits", () => {
     expect(EXPORT_SCOPE_LIMIT).toBeLessThanOrEqual(800)
     expect(EXPORT_ID_PAGE_SIZE).toBeLessThanOrEqual(MAX_EXPORT_ID_PAGE_SIZE)
     expect(MAX_EXPORT_ID_PAGE_SIZE).toBeLessThanOrEqual(200)
+  })
+
+  it("keeps ETL audit pages well below the former 5000-doc SystemTimeout path", () => {
+    expect(MAX_AUDIT_ETL_PAGE).toBeLessThanOrEqual(500)
+    expect(DEFAULT_AUDIT_ETL_PAGE).toBeLessThanOrEqual(MAX_AUDIT_ETL_PAGE)
+    expect(AUDIT_UI_RECENT_WINDOW).toBeLessThanOrEqual(250)
   })
 })

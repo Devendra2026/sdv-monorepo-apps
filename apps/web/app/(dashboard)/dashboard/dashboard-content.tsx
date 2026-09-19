@@ -14,32 +14,25 @@ import {
 const SSR_TREND_DAYS = 14
 
 export async function DashboardContent({ nowMs }: { nowMs: number }) {
-  // Counts + activity are lighter; run in parallel with the heavy analytics chain.
-  // Serialize analytics → QC to avoid SQLite queryStreamNext contention / SystemTimeout
-  // from four heavy preloads hitting the self-hosted isolate at once.
-  const [countsResult, activityResult, analyticsThenQc] = await Promise.all([
-    preloadDashboardCounts(nowMs).then(
-      (value) => ({ status: "fulfilled" as const, value }),
-      (reason: unknown) => ({ status: "rejected" as const, reason })
-    ),
-    preloadDashboardActivity().then(
-      (value) => ({ status: "fulfilled" as const, value }),
-      (reason: unknown) => ({ status: "rejected" as const, reason })
-    ),
-    (async () => {
-      const analyticsResult = await preloadDashboardAnalytics(nowMs, SSR_TREND_DAYS).then(
-        (value) => ({ status: "fulfilled" as const, value }),
-        (reason: unknown) => ({ status: "rejected" as const, reason })
-      )
-      const qcResult = await preloadDashboardQcSupervisors(nowMs, SSR_TREND_DAYS).then(
-        (value) => ({ status: "fulfilled" as const, value }),
-        (reason: unknown) => ({ status: "rejected" as const, reason })
-      )
-      return { analyticsResult, qcResult }
-    })(),
-  ])
-
-  const { analyticsResult, qcResult } = analyticsThenQc
+  // Single-flight SSR preloads on self-hosted SQLite: concurrent counts + activity +
+  // analytics still starved queryStreamNext after mapInChunks (SystemTimeout on app
+  // UDFs and _system/frontend/*). Same payloads; sequential order only.
+  const countsResult = await preloadDashboardCounts(nowMs).then(
+    (value) => ({ status: "fulfilled" as const, value }),
+    (reason: unknown) => ({ status: "rejected" as const, reason })
+  )
+  const analyticsResult = await preloadDashboardAnalytics(nowMs, SSR_TREND_DAYS).then(
+    (value) => ({ status: "fulfilled" as const, value }),
+    (reason: unknown) => ({ status: "rejected" as const, reason })
+  )
+  const qcResult = await preloadDashboardQcSupervisors(nowMs, SSR_TREND_DAYS).then(
+    (value) => ({ status: "fulfilled" as const, value }),
+    (reason: unknown) => ({ status: "rejected" as const, reason })
+  )
+  const activityResult = await preloadDashboardActivity().then(
+    (value) => ({ status: "fulfilled" as const, value }),
+    (reason: unknown) => ({ status: "rejected" as const, reason })
+  )
 
   if (countsResult.status === "rejected" && !isPreloadSkippableError(countsResult.reason)) {
     console.error("[dashboard] counts preload failed", countsResult.reason)
