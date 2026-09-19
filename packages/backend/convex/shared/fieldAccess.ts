@@ -266,8 +266,8 @@ export async function querySurveysInFieldScope(
 
   if (scopedMunis.length > 1) {
     const perMuniTake = perMunicipalityTake(args.limit, scopedMunis.length)
-    const batches = await Promise.all(
-      scopedMunis.map((municipalityId) => queryByMunicipality(ctx, municipalityId, args.status, perMuniTake))
+    const batches = await mapInChunks(scopedMunis, STREAM_FANOUT_CHUNK_SIZE, (municipalityId) =>
+      queryByMunicipality(ctx, municipalityId, args.status, perMuniTake)
     )
     const seen = new Set<string>()
     for (const batch of batches) {
