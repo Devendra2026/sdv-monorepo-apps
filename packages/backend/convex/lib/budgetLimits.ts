@@ -3,6 +3,13 @@
  * Keep client chunk sizes ≤ these values — silent truncation is forbidden.
  */
 
+/**
+ * Max concurrent indexed range streams per chunk (multi-ULB fan-out).
+ * Sequential chunks of this size avoid queryStreamNext syscall starvation
+ * while still reading the full scoped result set.
+ */
+export const STREAM_FANOUT_CHUNK_SIZE = 12
+
 /** Excel export: max survey IDs enriched per getExportBundlesByIds call. */
 export const MAX_EXPORT_PAGE_SIZE = 40
 export const DEFAULT_EXPORT_PAGE_SIZE = 30

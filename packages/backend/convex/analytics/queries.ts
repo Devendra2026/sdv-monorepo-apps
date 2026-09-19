@@ -9,6 +9,8 @@
 import { v } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import { query, type QueryCtx } from "../_generated/server"
+import { STREAM_FANOUT_CHUNK_SIZE } from "../lib/budgetLimits"
+import { mapInChunks } from "../lib/mapPool"
 import { createRequestId, logPhaseTiming } from "../lib/observability"
 import {
   loadSurveyorStatsForScope,
@@ -331,13 +333,11 @@ async function loadActiveUsersInScopeByRole(
   // Cap ULB fan-out for huge admin scopes (same budget as QC decisions).
   const targetMunis = scopedMunicipalityIds.slice(0, DASHBOARD_QC_ULB_CAP)
 
-  const batches = await Promise.all(
-    targetMunis.map((municipalityId) =>
-      ctx.db
-        .query("users")
-        .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId).eq("status", "active"))
-        .take(DASHBOARD_USERS_PER_MUNI_CAP)
-    )
+  const batches = await mapInChunks(targetMunis, STREAM_FANOUT_CHUNK_SIZE, (municipalityId) =>
+    ctx.db
+      .query("users")
+      .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId).eq("status", "active"))
+      .take(DASHBOARD_USERS_PER_MUNI_CAP)
   )
 
   const seen = new Set<string>()
@@ -410,8 +410,7 @@ async function loadScopedQcDecisionsByReviewer(
   if (scopedMunicipalityIds.size > 0) {
     // Hard-cap ULBs so multi-district admins cannot exceed syscall budget.
     const muniList = [...scopedMunicipalityIds].slice(0, DASHBOARD_QC_ULB_CAP)
-    const batches = await Promise.all(
-      muniList.map(async (municipalityId) => {
+    const batches = await mapInChunks(muniList, STREAM_FANOUT_CHUNK_SIZE, async (municipalityId) => {
         if (fromMs > 0) {
           return await ctx.db
             .query("qcDecisions")
@@ -426,7 +425,6 @@ async function loadScopedQcDecisionsByReviewer(
           .order("desc")
           .take(perMuniCap)
       })
-    )
 
     for (const decisions of batches) {
       for (const decision of decisions) {
@@ -439,21 +437,19 @@ async function loadScopedQcDecisionsByReviewer(
     return byReviewer
   }
 
-  await Promise.all(
-    activeQcSupervisors.map(async (reviewer) => {
-      const decisions = await ctx.db
-        .query("qcDecisions")
-        .withIndex("by_reviewer", (q) => q.eq("reviewerId", reviewer._id))
-        .order("desc")
-        .take(DASHBOARD_QC_DECISIONS_PER_REVIEWER_CAP)
-      for (const decision of decisions) {
-        if (fromMs > 0 && decision._creationTime < fromMs) continue
-        if (!scopedSurveyIds.has(decision.surveyId)) continue
-        const bucket = byReviewer.get(decision.reviewerId)
-        if (bucket) bucket.push(decision)
-      }
-    })
-  )
+  await mapInChunks(activeQcSupervisors, STREAM_FANOUT_CHUNK_SIZE, async (reviewer) => {
+    const decisions = await ctx.db
+      .query("qcDecisions")
+      .withIndex("by_reviewer", (q) => q.eq("reviewerId", reviewer._id))
+      .order("desc")
+      .take(DASHBOARD_QC_DECISIONS_PER_REVIEWER_CAP)
+    for (const decision of decisions) {
+      if (fromMs > 0 && decision._creationTime < fromMs) continue
+      if (!scopedSurveyIds.has(decision.surveyId)) continue
+      const bucket = byReviewer.get(decision.reviewerId)
+      if (bucket) bucket.push(decision)
+    }
+  })
   return byReviewer
 }
 

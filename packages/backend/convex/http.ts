@@ -7,6 +7,12 @@
  *   2. Clerk dashboard → Webhooks → add endpoint with the URL.
  *   3. `npx convex env set CLERK_WEBHOOK_SECRET whsec_xxx`
  *   4. ETL: `npx convex env set ETL_SECRET <shared-secret>`
+ *
+ * ETL audit (production):
+ *   Correct: POST `{CONVEX_SITE_URL}/etl/audit/list` with header `X-ETL-Secret`
+ *   Wrong:   `/http/etl/audit/list` (not a Convex site path by default)
+ *   Wrong:   API host (e.g. api.sdvedutech.in :3210) — HTTP actions are on the site host (:3211)
+ *   Alias routes under `/http/etl/...` exist only for misconfigured clients; prefer the paths above.
  */
 import { httpRouter } from "convex/server"
 import {
@@ -59,6 +65,19 @@ http.route({
 
 http.route({
   path: "/etl/audit/verify-window",
+  method: "POST",
+  handler: verifyAuditWindowHttp,
+})
+
+/** Compat aliases — same handlers; clients that incorrectly prefix `/http` still resolve. */
+http.route({
+  path: "/http/etl/audit/list",
+  method: "POST",
+  handler: listAuditLogsHttp,
+})
+
+http.route({
+  path: "/http/etl/audit/verify-window",
   method: "POST",
   handler: verifyAuditWindowHttp,
 })

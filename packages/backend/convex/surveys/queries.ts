@@ -2,6 +2,8 @@ import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import { query } from "../_generated/server"
+import { NOTICE_PHOTO_URL_CONCURRENCY } from "../lib/budgetLimits"
+import { mapPool } from "../lib/mapPool"
 import { presentFloorRow } from "../lib/masters/areaMasters"
 import { normalizeParcelKey, resolvePropertyId } from "../lib/propertyId"
 import { normalizeWardNo } from "../lib/qcWardStats"
@@ -598,12 +600,11 @@ export const get = query({
     ])
 
     // Hydrate photo URLs from Convex storage so the client can display them directly.
-    const hydratedPhotos = await Promise.all(
-      photos.map(async (p) => ({
-        ...p,
-        url: await ctx.storage.getUrl(p.storageId),
-      }))
-    )
+    // Bound concurrency — photo-heavy surveys must not stampede storage.getUrl syscalls.
+    const hydratedPhotos = await mapPool(photos, NOTICE_PHOTO_URL_CONCURRENCY, async (p) => ({
+      ...p,
+      url: await ctx.storage.getUrl(p.storageId),
+    }))
     const propertyId = resolvePropertyId(survey, muni?.code ?? "") ?? survey.propertyId
 
     return {

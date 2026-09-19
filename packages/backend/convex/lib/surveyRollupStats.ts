@@ -1,5 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "../_generated/server"
+import { STREAM_FANOUT_CHUNK_SIZE } from "./budgetLimits"
+import { mapInChunks } from "./mapPool"
 import { fieldSurveyAccess, type PrecomputedFieldContext } from "../shared/fieldAccess"
 import { canReadWard } from "../shared/helpers"
 import { resolveTenantScope, tenantMunicipalityIds } from "../shared/tenancy"
@@ -487,8 +489,7 @@ export async function loadWardStatsForScope(
   let targetMunis = scopedMuniIds
   if (filters.municipalityId) targetMunis = [filters.municipalityId]
 
-  const batchResults = await Promise.all(
-    targetMunis.map(async (municipalityId) => {
+  const batchResults = await mapInChunks(targetMunis, STREAM_FANOUT_CHUNK_SIZE, async (municipalityId) => {
       if (filters.wardNo) {
         const normalized = normalizeWardNo(filters.wardNo)
         const row = await getLegacyWardStatsRow(ctx, municipalityId, normalized)
@@ -543,7 +544,6 @@ export async function loadWardStatsForScope(
       }
       return rows
     })
-  )
 
   const rows = batchResults.flat()
 
@@ -566,8 +566,7 @@ export async function loadSurveyorStatsForScope(
 
   const targetMunis = filters.municipalityId ? [filters.municipalityId] : scopedMuniIds.slice(0, ROLLUP_ULB_CAP)
 
-  const batchResults = await Promise.all(
-    targetMunis.map(async (municipalityId) => {
+  const batchResults = await mapInChunks(targetMunis, STREAM_FANOUT_CHUNK_SIZE, async (municipalityId) => {
       const muniRows = filterLegacyAnalyticsRows(
         await ctx.db
           .query("surveySurveyorStats")
@@ -591,7 +590,6 @@ export async function loadSurveyorStatsForScope(
       }
       return rows
     })
-  )
 
   return batchResults.flat()
 }

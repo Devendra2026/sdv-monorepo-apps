@@ -3,6 +3,8 @@
  */
 import type { Doc, Id } from "../_generated/dataModel"
 import type { QueryCtx } from "../_generated/server"
+import { STREAM_FANOUT_CHUNK_SIZE } from "../lib/budgetLimits"
+import { mapInChunks } from "../lib/mapPool"
 import { loadActiveMastersByCategories } from "../lib/mastersLoad"
 import { MAX_SURVEY_OWNERS, RESPONDENT_RELATIONSHIP_VALUES } from "../lib/masters/ownerConstants"
 import {
@@ -78,13 +80,11 @@ export async function loadWardsForMunicipalities(
   }>
 > {
   const muniById = new Map(municipalities.map((m) => [m._id, m]))
-  const wardRows = await Promise.all(
-    municipalities.map((muni) =>
-      ctx.db
-        .query("wards")
-        .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", muni._id))
-        .collect()
-    )
+  const wardRows = await mapInChunks(municipalities, STREAM_FANOUT_CHUNK_SIZE, (muni) =>
+    ctx.db
+      .query("wards")
+      .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", muni._id))
+      .collect()
   )
 
   const wardOut: Array<{

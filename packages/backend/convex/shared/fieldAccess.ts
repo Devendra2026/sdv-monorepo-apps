@@ -5,6 +5,8 @@
 import { ConvexError } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "../_generated/server"
+import { STREAM_FANOUT_CHUNK_SIZE } from "../lib/budgetLimits"
+import { mapInChunks } from "../lib/mapPool"
 import { hasCapability } from "./capabilities"
 import { assertCanReadWard, canReadWard } from "./helpers"
 import { assertMunicipalityInScope, resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from "./tenancy"
@@ -158,8 +160,10 @@ async function queryAdminScopeSurveys(
   if (scopedMunis.length === 0) return []
 
   const perMuniTake = perMunicipalityTake(limit, scopedMunis.length)
-  const batches = await Promise.all(
-    scopedMunis.map((municipalityId) => queryByMunicipality(ctx, municipalityId, status, perMuniTake))
+  // Chunked fan-out: admin scopes can include dozens of ULBs; unbounded Promise.all
+  // saturates queryStreamNext and times out list / recentActivity under load.
+  const batches = await mapInChunks(scopedMunis, STREAM_FANOUT_CHUNK_SIZE, (municipalityId) =>
+    queryByMunicipality(ctx, municipalityId, status, perMuniTake)
   )
   const seen = new Set<string>()
   const rows: Doc<"surveys">[] = []

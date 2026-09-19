@@ -16,6 +16,8 @@ import type { MutationCtx, QueryCtx } from "../_generated/server"
 import { validateGps } from "../lib/gpsValidation"
 import { validateServicesSection } from "../lib/masters/serviceMasters"
 import { validateTaxationSection } from "../lib/masters/taxationMasters"
+import { STREAM_FANOUT_CHUNK_SIZE } from "../lib/budgetLimits"
+import { mapInChunks } from "../lib/mapPool"
 import { comparePropertyIds, compareWardThenParcel, resolvePropertyId } from "../lib/propertyId"
 import { matchesSurveySearch } from "../lib/surveySearch"
 import {
@@ -1005,15 +1007,13 @@ export async function collectSurveysForListPaginated(
       if (scopedMunis.length > 0) {
         const targetMunis = scopedMunis.slice(0, LIST_FANOUT_ULB_CAP)
         const perMuniCap = Math.max(50, Math.ceil(maxRows / targetMunis.length))
-        const batches = await Promise.all(
-          targetMunis.map((municipalityId) =>
-            ctx.db
-              .query("surveys")
-              .withIndex("by_municipality_qc_status", (q) =>
-                q.eq("municipalityId", municipalityId).eq("qcStatus", args.qcStatus!)
-              )
-              .take(perMuniCap)
-          )
+        const batches = await mapInChunks(targetMunis, STREAM_FANOUT_CHUNK_SIZE, (municipalityId) =>
+          ctx.db
+            .query("surveys")
+            .withIndex("by_municipality_qc_status", (q) =>
+              q.eq("municipalityId", municipalityId).eq("qcStatus", args.qcStatus!)
+            )
+            .take(perMuniCap)
         )
         const seen = new Set<string>()
         for (const batch of batches) {
@@ -1045,20 +1045,18 @@ export async function collectSurveysForListPaginated(
     }
     const wardList = [...wardSet].filter((w) => w.length > 0)
     const perWardCap = Math.max(50, Math.ceil(maxRows / Math.max(wardList.length, 1)))
-    const batches = await Promise.all(
-      wardList.map((ward) =>
-        args.status
-          ? ctx.db
-              .query("surveys")
-              .withIndex("by_municipality_ward_status", (q) =>
-                q.eq("municipalityId", args.municipalityId!).eq("wardNo", ward).eq("status", args.status!)
-              )
-              .take(perWardCap)
-          : ctx.db
-              .query("surveys")
-              .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", args.municipalityId!).eq("wardNo", ward))
-              .take(perWardCap)
-      )
+    const batches = await mapInChunks(wardList, STREAM_FANOUT_CHUNK_SIZE, (ward) =>
+      args.status
+        ? ctx.db
+            .query("surveys")
+            .withIndex("by_municipality_ward_status", (q) =>
+              q.eq("municipalityId", args.municipalityId!).eq("wardNo", ward).eq("status", args.status!)
+            )
+            .take(perWardCap)
+        : ctx.db
+            .query("surveys")
+            .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", args.municipalityId!).eq("wardNo", ward))
+            .take(perWardCap)
     )
     const seen = new Set<string>()
     for (const batch of batches) {
@@ -1084,8 +1082,8 @@ export async function collectSurveysForListPaginated(
     const scopedMunis = scope.municipalities.map((m) => m._id).slice(0, LIST_FANOUT_ULB_CAP)
     if (scopedMunis.length > 1) {
       const perMuniCap = Math.max(50, Math.ceil(maxRows / scopedMunis.length))
-      const batches = await Promise.all(
-        scopedMunis.map((municipalityId) => querySurveysByMunicipality(ctx, municipalityId, args.status, perMuniCap))
+      const batches = await mapInChunks(scopedMunis, STREAM_FANOUT_CHUNK_SIZE, (municipalityId) =>
+        querySurveysByMunicipality(ctx, municipalityId, args.status, perMuniCap)
       )
       const seen = new Set<string>()
       for (const batch of batches) {
@@ -1112,8 +1110,8 @@ export async function collectSurveysForListPaginated(
     ).slice(0, LIST_FANOUT_ULB_CAP)
     if (scopedMunis.length > 0) {
       const perMuniCap = Math.max(50, Math.ceil(maxRows / scopedMunis.length))
-      const batches = await Promise.all(
-        scopedMunis.map((municipalityId) => querySurveysByMunicipality(ctx, municipalityId, args.status, perMuniCap))
+      const batches = await mapInChunks(scopedMunis, STREAM_FANOUT_CHUNK_SIZE, (municipalityId) =>
+        querySurveysByMunicipality(ctx, municipalityId, args.status, perMuniCap)
       )
       const seen = new Set<string>()
       for (const batch of batches) {

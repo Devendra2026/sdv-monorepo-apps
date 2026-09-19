@@ -11,9 +11,13 @@ import {
   MAX_IMPORT_FLOORS,
   MAX_IMPORT_SURVEYS,
   MAX_REASSIGN_PER_MUTATION,
+  STREAM_FANOUT_CHUNK_SIZE,
 } from "./budgetLimits"
 
 describe("budgetLimits", () => {
+  it("keeps multi-ULB stream fan-out chunked to the dashboard ULB budget", () => {
+    expect(STREAM_FANOUT_CHUNK_SIZE).toBe(12)
+  })
   it("keeps export page size below the former silent-truncation client chunk of 50", () => {
     expect(MAX_EXPORT_PAGE_SIZE).toBe(40)
     expect(DEFAULT_EXPORT_PAGE_SIZE).toBeLessThanOrEqual(MAX_EXPORT_PAGE_SIZE)
