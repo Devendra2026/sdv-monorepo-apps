@@ -4,6 +4,8 @@
 **Status:** Implemented  
 **Scope:** Self-hosted Convex production SystemTimeout / queryStreamNext starvation
 
+See also: [docs/superpowers/README.md](../README.md) · [unhealthy startup](./2026-09-19-convex-backend-unhealthy-startup-design.md)
+
 ## Problem
 
 Production logs showed multi-second to 200s+ timeouts on surveys, analytics, and masters queries, collateral timeouts on currentUser, WebSocket resets (symptom), and ETL audit HTTP 404s.
@@ -18,6 +20,7 @@ Primary amplifiers:
 2. `loadWardStatsForScope` — uncapped parallel ward-stats reads (full scope for KPI parity)
 3. Concurrent home dashboard subscriptions competing for the same syscall budget
 4. `masters.bundle` with includeWards — uncapped parallel ward collects
+5. (follow-up) `loadActiveMunicipalitiesForDistricts` — unbounded Promise.all over districts
 
 ## Approach
 
@@ -30,6 +33,7 @@ Stream budget control via sequential chunking (`mapInChunks`, chunk size 12). Sa
 | lib/mapPool.ts | Added mapInChunks |
 | lib/budgetLimits.ts | STREAM_FANOUT_CHUNK_SIZE = 12 |
 | shared/fieldAccess.ts | Chunk admin survey fan-out |
+| shared/tenancy.ts | Chunk district→municipality active catalog loads |
 | surveys/helpers.ts | Chunk multi-ULB listPaginated collects |
 | surveys/queries.ts | Bound storage.getUrl via mapPool |
 | lib/surveyRollupStats.ts | Chunk ward + surveyor stats loads |
@@ -61,3 +65,13 @@ DashboardContent alone mounts; DashboardHomeSection unused. No UI change.
 | masters.bundle | 5 |
 
 Production before: 47s–200s+ class failures from logs only.
+
+## Production deploy
+
+After Docker backend is healthy (`GET /version` 200):
+
+```bash
+pnpm convex:deploy:production
+pnpm --filter @workspace/backend test
+bash infra/convex-self-hosted/verify-production-health.sh
+```

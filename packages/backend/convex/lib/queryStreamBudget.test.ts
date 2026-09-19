@@ -1,4 +1,3 @@
-/// <reference types="vite/client" />
 /**
  * Large-scope regression for production SystemTimeout / queryStreamNext paths.
  * Seeds many ULBs so admin fan-out exercises mapInChunks stream budgeting.

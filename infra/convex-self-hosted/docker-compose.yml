@@ -22,8 +22,10 @@
 
 services:
   backend:
-    # Pin CONVEX_BACKEND_TAG in .env for production (avoid floating :latest).
-    image: ghcr.io/get-convex/convex-backend:${CONVEX_BACKEND_TAG:-latest}
+    # Pin CONVEX_BACKEND_TAG in host .env (see compose.env.example).
+    # Default digest matches the image observed in production deploy logs
+    # (2026-02-24). Avoid floating :latest on Dokploy.
+    image: ghcr.io/get-convex/convex-backend:${CONVEX_BACKEND_TAG:-5cdea511cd6527a95dd24152ea0d3c3bb2ab379f}
     stop_grace_period: 30s
     stop_signal: SIGINT
     # Non-Swarm / local compose. Dokploy Swarm uses deploy.restart_policy below.
@@ -82,13 +84,18 @@ services:
       - CONVEX_RELEASE_VERSION_DEV
       - RUST_BACKTRACE
     # Liveness only: cheap, unauthenticated. Not a readiness probe for sync/auth.
-    # Conservative timing avoids Swarm restart storms on brief load spikes.
+    # Production evidence 2026-09-19: SQLite cold start can take ~5–10+ minutes
+    # (Searchlight → Bootstrapping indexes) before GET /version answers.
+    # Old start_period=40s → unhealthy at ~3.2 min → deploy dependency failure /
+    # mid-bootstrap restarts. 900s covers measured cold start with margin.
+    # Do NOT disable this probe. Do NOT treat longer start_period as a substitute
+    # for fixing SQLite size pressure (Postgres migration / upstream #495).
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:3210/version" ]
       interval: 30s
       timeout: 5s
       retries: 5
-      start_period: 40s
+      start_period: 900s
     logging:
       driver: json-file
       options:

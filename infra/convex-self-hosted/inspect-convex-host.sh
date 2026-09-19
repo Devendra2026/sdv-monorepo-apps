@@ -78,11 +78,26 @@ docker exec "$CONTAINER" sh -c '
 ' || echo "WARN: docker exec failed (container not running?)"
 echo
 
+echo "=== Healthcheck log (last entries) ==="
+docker inspect "$CONTAINER" --format '{{if .State.Health}}{{range .State.Health.Log}}{{.Start}} exit={{.ExitCode}} out={{printf "%.200s" .Output}}{{println}}{{end}}{{else}}(no Health config){{end}}' 2>/dev/null | tail -10 || echo "(health log unavailable)"
+echo
+
+echo "=== In-container GET /version (liveness) ==="
+if docker exec "$CONTAINER" sh -c 'command -v curl >/dev/null && curl -sf -o /tmp/convex-version-body -w "http=%{http_code} time_total=%{time_total}\n" --max-time 10 http://127.0.0.1:3210/version && head -c 120 /tmp/convex-version-body && echo' 2>/dev/null; then
+  :
+else
+  echo "WARN: in-container /version probe failed (process still booting, curl missing, or HTTP down)"
+fi
+echo
+
 echo "=== Recent logs: isolate vs process signals ==="
-docker logs --tail 200 "$CONTAINER" 2>&1 | grep -E 'Restarting Isolate|UnhandledPromiseRejection|UserTimeout|SystemTimeout|OOM|panic|out of memory|no space left|Health check' || echo "(no matching lines in last 200 log lines)"
+docker logs --tail 200 "$CONTAINER" 2>&1 | grep -E 'Restarting Isolate|UnhandledPromiseRejection|UserTimeout|SystemTimeout|OOM|panic|out of memory|no space left|Health check|Bootstrapping indexes|Starting a Convex backend|Connected to SQLite' || echo "(no matching lines in last 200 log lines)"
 echo
 
 echo "=== Interpretation hints ==="
 echo "- RestartCount/OOMKilled rising => container/process layer (limits, disk, panic)."
 echo "- 'Restarting Isolate' with RestartCount stable => application isolate (Convex functions)."
+echo "- Searchlight then multi-minute gap before Bootstrapping indexes => SQLite cold start (raise start_period only after measuring; prefer Postgres for large DBs)."
+echo "- Health exit!=0 while bootstrapping => start_period too short vs cold start (see compose start_period: 900s)."
 echo "- Do NOT run VACUUM/PRAGMA on live db.sqlite3; use logical export + maintenance window."
+echo "- Full diagnosis: docs/superpowers/specs/2026-09-19-convex-backend-unhealthy-startup-design.md"

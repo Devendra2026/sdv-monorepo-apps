@@ -2,10 +2,13 @@
   "extends": "@workspace/typescript-config/base.json",
   "compilerOptions": {
     "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2023"]
+    "lib": ["ES2023"],
+    "types": ["node", "vitest/importMeta"]
   },
-  "include": ["convex/**/*.ts"],
-  "exclude": ["convex/_generated", "convex/**/*.test.ts"]
+  "include": ["convex/**/*.ts", "vitest.config.ts"],
+  "exclude": ["convex/_generated"]
 }

@@ -1,0 +1,16 @@
+{
+  "extends": "./convex/tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "vitest/importMeta"],
+    "noEmit": true
+  },
+  "include": [
+    "./convex/**/*.test.ts",
+    "./convex/importMetaGlob.d.ts",
+    "./convex/schema.ts",
+    "./convex/_generated/api.d.ts",
+    "./convex/_generated/dataModel.d.ts",
+    "./convex/_generated/server.d.ts"
+  ],
+  "exclude": []
+}

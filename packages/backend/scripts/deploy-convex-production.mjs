@@ -92,6 +92,30 @@ async function preflightSelfHostedUrl(baseUrl) {
       "Convex backend may be down — check Dokploy container logs.",
     );
   }
+
+  // Liveness must match Docker healthcheck (GET /version). Cold start can take
+  // minutes; if / is up but /version is not, deploy will still fail mid-flight.
+  let versionResponse;
+  try {
+    versionResponse = await fetch(`${url}/version`, {
+      method: "GET",
+      redirect: "manual",
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `CONVEX_SELF_HOSTED_URL (${url}/version) unreachable: ${message}\n` +
+        "Backend may still be in SQLite cold start — wait until Docker health is healthy " +
+        "(compose start_period is 900s). See docs/superpowers/specs/2026-09-19-convex-backend-unhealthy-startup-design.md",
+    );
+  }
+  if (versionResponse.status !== 200) {
+    throw new Error(
+      `CONVEX_SELF_HOSTED_URL (${url}/version) returned HTTP ${versionResponse.status}. ` +
+        "Compose liveness uses the same probe — do not deploy until the backend is healthy.",
+    );
+  }
 }
 
 function runConvexDeploy() {

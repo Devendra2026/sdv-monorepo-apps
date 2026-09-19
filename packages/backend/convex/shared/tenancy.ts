@@ -4,6 +4,8 @@
 import { ConvexError } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "../_generated/server"
+import { STREAM_FANOUT_CHUNK_SIZE } from "../lib/budgetLimits"
+import { mapInChunks } from "../lib/mapPool"
 import { roleRequiresTenancy } from "./capabilities"
 
 function isActive<T extends { isActive?: boolean }>(row: T): boolean {
@@ -22,13 +24,13 @@ async function loadActiveMunicipalitiesForDistricts(
   districtIds: Id<"districts">[]
 ): Promise<Doc<"municipalities">[]> {
   if (districtIds.length === 0) return []
-  const batches = await Promise.all(
-    districtIds.map((districtId) =>
-      ctx.db
-        .query("municipalities")
-        .withIndex("by_district_active", (q) => q.eq("districtId", districtId).eq("isActive", true))
-        .collect()
-    )
+  // Chunk district fan-out — unbounded Promise.all starved SQLite queryStreamNext
+  // under multi-district catalogs (same class of failure as admin survey fan-out).
+  const batches = await mapInChunks(districtIds, STREAM_FANOUT_CHUNK_SIZE, (districtId) =>
+    ctx.db
+      .query("municipalities")
+      .withIndex("by_district_active", (q) => q.eq("districtId", districtId).eq("isActive", true))
+      .collect()
   )
   return batches.flat()
 }

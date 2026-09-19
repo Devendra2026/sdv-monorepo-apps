@@ -1,8 +1,6 @@
-/// <reference types="vite/client" />
 import { convexTest } from "convex-test"
 import { describe, expect, it } from "vitest"
 import { api } from "../_generated/api"
-import type { Id } from "../_generated/dataModel"
 import schema from "../schema"
 
 const modules = import.meta.glob("../**/*.ts")
@@ -207,7 +205,7 @@ describe("photos.linkPhoto", () => {
         .withIndex("by_survey", (q) => q.eq("surveyId", ownerSurveyId))
         .take(4)
       expect(photos).toHaveLength(0)
-      void storageId as Id<"_storage">
+      expect(storageId).toBeTruthy()
     })
   })
 })

@@ -1,6 +1,6 @@
-/// <reference types="vite/client" />
 import { convexTest } from "convex-test"
 import { describe, expect, it } from "vitest"
+import type { Id } from "../_generated/dataModel"
 import schema from "../schema"
 import { formatDateKey, startOfDayMs } from "../shared/calendar"
 import { loadDailyTrendFromDailyStats, loadDashboardCountsForHome } from "./surveyScopeStats"
@@ -87,7 +87,7 @@ describe("loadDailyTrendFromDailyStats", () => {
         stateName: "Maharashtra",
         isActive: true,
       })
-      const municipalityIds: Array<string> = []
+      const municipalityIds: Array<Id<"municipalities">> = []
       for (let i = 0; i < ulbCount; i++) {
         municipalityIds.push(
           await ctx.db.insert("municipalities", {

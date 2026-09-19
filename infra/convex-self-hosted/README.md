@@ -16,6 +16,17 @@
 
 # measurements. Apply config carefully; do not delete production volumes.
 
+## Dokploy apply checklist (production)
+
+1. **Backup first** — `bash packages/backend/scripts/backup-convex-volume.sh` (or verified logical export). Copy artifacts off the host.
+2. **Do not** recreate volume `sdv-convex-data` or run `docker compose down -v`.
+3. Set host `.env` from [`compose.env.example`](./compose.env.example): pin `CONVEX_BACKEND_TAG`, set `INSTANCE_SECRET` (unchanged from existing instance).
+4. Apply this compose (or paste equivalent into Dokploy). Confirm health **start period = 900s** if Dokploy UI overrides compose.
+5. Wait until backend is **healthy** (`GET /version` inside container or public `https://api.sdvedutech.in/version`).
+6. Verify routing: `bash infra/convex-self-hosted/verify-production-health.sh`
+7. Deploy functions from laptop: `pnpm convex:deploy:production`
+8. Specs: [`docs/superpowers/README.md`](../../docs/superpowers/README.md)
+
 ## Ports
 
 | Port     | Purpose                                            |
@@ -45,6 +56,22 @@ be a version string or `unknown` depending on image build — status code matter
 
 Do not treat isolate restarts as proof of Docker misconfiguration without
 container restart evidence (`docker inspect` RestartCount, OOMKilled, State).
+
+### Multi-minute SQLite cold start → Docker unhealthy (production evidence 2026-09-19)
+
+Observed backend log timeline:
+
+1. `Starting a Convex backend` + `Connected to SQLite at /convex/data/db.sqlite3`
+2. `Searchlight starting`
+3. ~5 minutes later: `Bootstrapping indexes…` / `Loading 8 tables with 21 indexes`
+4. ~10 minutes from start: process restarts (`Starting a Convex backend` again)
+
+Notes:
+
+- `Loading 8 tables with 21 indexes` is **system** bootstrap (normal on healthy boots). App schema is larger (27 tables / 78 indexes in `packages/backend/convex/schema.ts`).
+- Compose healthcheck with `start_period: 40s` becomes unhealthy after ~3.2 minutes if `/version` is not up yet → Dokploy `dependency failed to start` for dashboard.
+- Compose now uses `start_period: 900s` so cold start can finish before health failures count. This does **not** shrink SQLite; for large tenants prefer Postgres (upstream advanced docs) once backups are verified.
+- Full write-up: `docs/superpowers/specs/2026-09-19-convex-backend-unhealthy-startup-design.md`
 
 ### Stuck snapshot export → process restart loop (production evidence 2026-07-21)
 
@@ -113,7 +140,7 @@ upstream `run_backend.sh`).
 Configure in Dokploy UI if not using this compose file as the sole service def:
 
 1. **Volume mount:** named volume or bind → `/convex/data` (required for persistence across redeploys).
-2. **Health check (liveness):** `CMD-SHELL curl -f http://127.0.0.1:3210/version` — interval ≥ 30s, start period ≥ 40s, retries ≥ 5. Do **not** probe authenticated export URLs.
+2. **Health check (liveness):** `CMD-SHELL curl -f http://127.0.0.1:3210/version` — interval ≥ 30s, **start period ≥ 900s** (15 min) for production SQLite cold starts, retries ≥ 5. Do **not** probe authenticated export URLs. A 40s start period marks the container unhealthy during multi-minute index bootstrap (see diagnosis spec 2026-09-19).
 3. **Restart policy:** `on-failure` with delay ≥ 10s and capped `max_attempts` (avoid tight restart loops). Prefer not `always` on a permanently misconfigured service.
 4. **Resources:** set **reservation** and **limit**. Too-low memory limit → OOMKilled (container restart). Example starting point: reserve 2G / limit 4G for backend (tune from `docker stats`).
 5. **Log rotation:** json-file `max-size` / `max-file` (compose includes this; also set daemon defaults).

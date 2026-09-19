@@ -1,34 +1,39 @@
-/// <reference types="vite/client" />
-import { convexTest } from "convex-test";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { api } from "../_generated/api";
-import schema from "../schema";
-import * as surveyScopeStats from "./surveyScopeStats";
+/**
+ * Excel import atomicity — survey rows must roll back when stats rollup fails.
+ *
+ * Do not use `/// <reference types="vite/client" />` (vite is not a dependency;
+ * see importMetaGlob.d.ts). Typecheck tests with: tsc -p tsconfig.test.json
+ */
+import { convexTest } from "convex-test"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { api } from "../_generated/api"
+import schema from "../schema"
+import * as surveyScopeStats from "./surveyScopeStats"
 
-const modules = import.meta.glob("../**/*.ts");
+const modules = import.meta.glob("../**/*.ts")
 
 async function seedImportTenant(t: ReturnType<typeof convexTest>) {
-  const clerkId = "supervisor-import-atomicity";
+  const clerkId = "supervisor-import-atomicity"
   const municipalityId = await t.run(async (ctx) => {
     const districtId = await ctx.db.insert("districts", {
       code: "D1",
       name: "District 1",
       stateName: "Maharashtra",
       isActive: true,
-    });
+    })
     const municipalityId = await ctx.db.insert("municipalities", {
       districtId,
       code: "M1",
       name: "Municipality 1",
       bodyType: "municipal_council",
       isActive: true,
-    });
+    })
     await ctx.db.insert("wards", {
       municipalityId,
       wardNo: "1",
       wardCode: "M1-W01",
       name: "Ward 1",
-    });
+    })
     await ctx.db.insert("users", {
       clerkId,
       email: "supervisor-import-atomicity@test.com",
@@ -37,27 +42,25 @@ async function seedImportTenant(t: ReturnType<typeof convexTest>) {
       status: "active",
       municipalityId,
       wardAssignments: ["1"],
-    });
-    return municipalityId;
-  });
-  return { clerkId, municipalityId };
+    })
+    return municipalityId
+  })
+  return { clerkId, municipalityId }
 }
 
 describe("excel import atomicity", () => {
   afterEach(() => {
-    vi.restoreAllMocks();
-  });
+    vi.restoreAllMocks()
+  })
 
   it("importExcelSurveyRow rolls back the survey when stats insert throws", async () => {
-    const t = convexTest(schema, modules);
-    const { clerkId, municipalityId } = await seedImportTenant(t);
-    const localId = "atomic-create-local";
+    const t = convexTest(schema, modules)
+    const { clerkId, municipalityId } = await seedImportTenant(t)
+    const localId = "atomic-create-local"
 
-    vi.spyOn(surveyScopeStats, "recordSurveyStatsInsert").mockRejectedValue(
-      new Error("stats rollup failed"),
-    );
+    vi.spyOn(surveyScopeStats, "recordSurveyStatsInsert").mockRejectedValue(new Error("stats rollup failed"))
 
-    const asSupervisor = t.withIdentity({ subject: clerkId });
+    const asSupervisor = t.withIdentity({ subject: clerkId })
     await expect(
       asSupervisor.mutation(api.export.mutations.importExcelSurveyRow, {
         survey: {
@@ -67,34 +70,30 @@ describe("excel import atomicity", () => {
           parcelNo: "P1",
           unitNo: "U1",
         },
-      }),
-    ).rejects.toThrow(/stats rollup failed/i);
+      })
+    ).rejects.toThrow(/stats rollup failed/i)
 
     await t.run(async (ctx) => {
       const supervisor = await ctx.db
         .query("users")
         .withIndex("by_clerkId", (q) => q.eq("clerkId", clerkId))
-        .unique();
-      expect(supervisor).not.toBeNull();
+        .unique()
+      expect(supervisor).not.toBeNull()
       const row = await ctx.db
         .query("surveys")
-        .withIndex("by_surveyor_localId", (q) =>
-          q.eq("surveyorId", supervisor!._id).eq("localId", localId),
-        )
-        .unique();
-      expect(row).toBeNull();
-    });
-  });
+        .withIndex("by_surveyor_localId", (q) => q.eq("surveyorId", supervisor!._id).eq("localId", localId))
+        .unique()
+      expect(row).toBeNull()
+    })
+  })
 
   it("importExcelBundle does not commit a survey when stats insert throws mid-batch", async () => {
-    const t = convexTest(schema, modules);
-    const { clerkId, municipalityId } = await seedImportTenant(t);
+    const t = convexTest(schema, modules)
+    const { clerkId, municipalityId } = await seedImportTenant(t)
 
-    vi.spyOn(surveyScopeStats, "recordSurveyStatsInsert").mockRejectedValue(
-      new Error("stats rollup failed"),
-    );
+    vi.spyOn(surveyScopeStats, "recordSurveyStatsInsert").mockRejectedValue(new Error("stats rollup failed"))
 
-    const asSupervisor = t.withIdentity({ subject: clerkId });
+    const asSupervisor = t.withIdentity({ subject: clerkId })
     await expect(
       asSupervisor.mutation(api.export.mutations.importExcelBundle, {
         surveys: [
@@ -106,19 +105,37 @@ describe("excel import atomicity", () => {
             unitNo: "U1",
           },
         ],
-      }),
-    ).rejects.toThrow(/stats rollup failed/i);
+      })
+    ).rejects.toThrow(/stats rollup failed/i)
 
     await t.run(async (ctx) => {
-      const surveys = await ctx.db.query("surveys").collect();
-      expect(surveys).toHaveLength(0);
-    });
-  });
+      const surveys = await ctx.db.query("surveys").collect()
+      expect(surveys).toHaveLength(0)
+    })
+  })
 
   it("importExcelBundle still records validation errors without touching surveys", async () => {
-    const t = convexTest(schema, modules);
-    const { clerkId, municipalityId } = await seedImportTenant(t);
-    const asSupervisor = t.withIdentity({ subject: clerkId });
+    const t = convexTest(schema, modules)
+    const { clerkId, municipalityId } = await seedImportTenant(t)
+    const unknownMunicipalityId = await t.run(async (ctx) => {
+      const districtId = await ctx.db.insert("districts", {
+        code: "D-GONE",
+        name: "Gone District",
+        stateName: "Maharashtra",
+        isActive: true,
+      })
+      const id = await ctx.db.insert("municipalities", {
+        districtId,
+        code: "M-GONE",
+        name: "Gone Municipality",
+        bodyType: "municipal_council",
+        isActive: true,
+      })
+      await ctx.db.delete(id)
+      await ctx.db.delete(districtId)
+      return id
+    })
+    const asSupervisor = t.withIdentity({ subject: clerkId })
 
     const result = await asSupervisor.mutation(api.export.mutations.importExcelBundle, {
       surveys: [
@@ -131,18 +148,18 @@ describe("excel import atomicity", () => {
         },
         {
           localId: "missing-muni",
-          municipalityId: "000000000000000000000000" as typeof municipalityId,
+          municipalityId: unknownMunicipalityId,
           wardNo: "1",
           parcelNo: "P2",
           unitNo: "U2",
         },
       ],
-    });
+    })
 
-    expect(result.created).toBe(1);
-    expect(result.updated).toBe(0);
+    expect(result.created).toBe(1)
+    expect(result.updated).toBe(0)
     expect(result.errors).toEqual([
       expect.objectContaining({ localId: "missing-muni", message: "Unknown municipality" }),
-    ]);
-  });
-});
+    ])
+  })
+})

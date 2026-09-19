@@ -10,6 +10,7 @@
     "deploy:production": "node ./scripts/deploy-convex-production.mjs",
     "codegen": "convex codegen",
     "typecheck": "tsc --noEmit -p convex/tsconfig.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.test.json",
     "convex:backup": "node ./scripts/backup-convex.mjs",
     "test": "vitest run --config vitest.config.ts",
     "lint": "eslint convex --max-warnings=0"
